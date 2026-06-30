@@ -2,6 +2,16 @@ package color
 
 import "math"
 
+// RGB representa uma cor no espaço RGB (0-255)
+type RGB struct {
+	R, G, B uint8
+}
+
+// Lab representa uma cor no espaço CIELAB
+type Lab struct {
+	L, A, B float64
+}
+
 // RGBToHSV converte RGB (0-255) para HSV (h: 0-360, s: 0-1, v: 0-1)
 func RGBToHSV(r, g, b uint8) (h, s, v float64) {
 	rf := float64(r) / 255

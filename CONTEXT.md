@@ -18,6 +18,7 @@
 - Implementado RF-006 (Color Converter) com conversões RGB/HSV/HSL/XYZ/LAB/LCH e DeltaE
 - Implementado RF-007 (Mix Engine) com motor de mistura de 2-4 tintas
 - Implementado RF-008 (Similarity Engine) com busca por Delta E 2000
+- Implementado RF-009 (AI Retrieval) com pipeline de recuperação de conhecimento
 
 ---
 
@@ -29,6 +30,8 @@
 - **Estrutura de cores:** tabela separada `paint_colors` (1:1 com `paints`)
 - **Lookup tables:** normalizadas para tipos, acabamentos, cobertura, opacidade
 - **Mistura:** aditiva RGB, proporções normalizadas, busca exaustiva para 3-4 tintas
+- **AI Retrieval:** orquestra color/mix/similarity engines em pipeline unificada
+- **Tipos RGB/Lab:** adicionados ao pacote `color` para uso como structs
 
 ---
 
@@ -43,7 +46,9 @@ paint-match-ai/
 │   ├── rf-004-paint-importer.md
 │   ├── rf-005-swatch-generator.md
 │   ├── rf-006-color-converter.md
-│   └── rf-007-mix-engine.md
+│   ├── rf-007-mix-engine.md
+│   ├── rf-008-similarity-engine.md
+│   └── rf-009-ai-retrieval.md
 ├── db/
 │   ├── migrations/
 │   │   └── 001_initial_schema.sql
@@ -54,14 +59,22 @@ paint-match-ai/
 │       ├── 004_paint_importer.go   # Importar tintas
 │       └── 005_swatch_generator.go # Gerar swatches
 ├── pkg/
+│   ├── ai/
+│   │   ├── context.go              # Estruturas Query/Response/PaintInfo
+│   │   ├── retrieval.go            # Engine de recuperação de conhecimento
+│   │   └── retrieval_test.go       # Testes
 │   ├── color/
-│   │   ├── converter.go           # Conversões RGB/HSV/HSL/XYZ/LAB/LCH
-│   │   ├── deltae.go              # DeltaE 76/94/2000
-│   │   └── converter_test.go      # Testes
-│   └── mix/
-│       ├── engine.go              # Motor de mistura
-│       ├── proportions.go         # Cálculo de proporções
-│       └── engine_test.go         # Testes
+│   │   ├── converter.go            # Conversões RGB/HSV/HSL/XYZ/LAB/LCH + tipos RGB/Lab
+│   │   ├── deltae.go               # DeltaE 76/94/2000
+│   │   └── converter_test.go       # Testes
+│   ├── mix/
+│   │   ├── engine.go               # Motor de mistura
+│   │   ├── proportions.go          # Cálculo de proporções
+│   │   └── engine_test.go          # Testes
+│   └── similarity/
+│       ├── engine.go               # Motor de similaridade
+│       ├── ranking.go              # Ranking e filtros
+│       └── engine_test.go          # Testes
 ├── main.go                 # Entry point para seeds
 ├── setup.sh                # Script RTK para setup
 ├── go.mod                  # Módulo Go
@@ -87,6 +100,8 @@ paint-match-ai/
 | RF-005 | Swatch Generator | Done | 682e217 |
 | RF-006 | Color Converter | Done | 628e31a |
 | RF-007 | Mix Engine | Done | - |
+| RF-008 | Similarity Engine | Done | - |
+| RF-009 | AI Retrieval | Done | - |
 
 ---
 
@@ -94,17 +109,14 @@ paint-match-ai/
 
 | ID | Título | Status |
 |----|--------|--------|
-| RF-008 | Similarity Engine | Draft |
-| RF-009 | AI Retrieval | Draft |
 | RF-010 | Desktop Interface | Draft |
 
 ---
 
 ## Próximos Passos
 
-1. Criar RF-008 (Similarity Engine)
-2. Implementar motor de similaridade e equivalências
-3. Continuar sequência até RF-010
+1. Criar RF-010 (Desktop Interface — Wails 3 + Svelte 5)
+2. Implementar interface desktop completa
 
 ---
 
