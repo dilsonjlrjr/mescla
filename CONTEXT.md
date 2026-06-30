@@ -1,0 +1,76 @@
+# CONTEXT.md — Paint Match AI
+
+## Resumo da Interação
+
+- Inicializado repositório Git
+- Criada estrutura `.requirements/`
+- Criado e aprovado requisito RF-001 (Database Schema)
+- Implementado schema completo do banco `paint_knowledge.db`
+- Testado script SQL: 12 tabelas, 16 índices, foreign keys e constraints funcionais
+
+---
+
+## Decisões Tomadas
+
+- **Processo:** passo a passo, um requisito por vez, aprovação antes de implementar
+- **Banco:** SQLite com WAL mode, foreign keys habilitadas
+- **Driver Go:** a definir (modernc.org/sqlite ou mattn/go-sqlite3)
+- **Estrutura de cores:** tabela separada `paint_colors` (1:1 com `paints`)
+- **Lookup tables:** normalizadas para tipos, acabamentos, cobertura, opacidade
+
+---
+
+## Arquitetura Definida
+
+```
+paint-match-ai/
+├── .requirements/          # Backlog de requisitos
+│   └── rf-001-database-schema.md
+├── db/
+│   └── migrations/
+│       └── 001_initial_schema.sql
+├── CONTEXT.md              # Este arquivo
+└── PROMPT.md               # Especificação mestre
+```
+
+---
+
+## Requisitos Concluídos
+
+| ID | Título | Status |
+|----|--------|--------|
+| RF-001 | Database Schema | Done |
+
+---
+
+## Requisitos Pendentes
+
+| ID | Título | Status |
+|----|--------|--------|
+| RF-002 | Manufacturer Importer | Draft |
+| RF-003 | Thumbnail Downloader | Draft |
+| RF-004 | Paint Importer | Draft |
+| RF-005 | Swatch Generator | Draft |
+| RF-006 | Color Converter | Draft |
+| RF-007 | Mix Engine | Draft |
+| RF-008 | Similarity Engine | Draft |
+| RF-009 | AI Retrieval | Draft |
+| RF-010 | Desktop Interface | Draft |
+
+---
+
+## Próximos Passos
+
+1. Criar RF-002 (Manufacturer Importer)
+2. Implementar importação de fabricantes
+3. Criar RF-003 (Thumbnail Downloader)
+4. Continuar sequência até RF-010
+
+---
+
+## Riscos Identificados
+
+- Dados de tintas podem precisar de atualização manual constante
+- Thumbnails/imagens dependem de URLs externas (podem quebrar)
+- Cálculo de DeltaE requer precisão nos valores LAB/LCH
+- Volume de dados pode impactar performance de buscas (mitigado por índices)
