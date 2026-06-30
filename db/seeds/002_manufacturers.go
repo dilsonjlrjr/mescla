@@ -25,6 +25,7 @@ var manufacturers = []ManufacturerSeed{
 	{Name: "Acrilex", Country: "Brazil", Website: "https://www.acrilex.com.br"},
 	{Name: "Corfix", Country: "Brazil", Website: "https://www.corfix.com.br"},
 	{Name: "Talento", Country: "Brazil", Website: "https://www.talento.com.br"},
+	{Name: "Green Stuff World", Country: "Spain", Website: "https://www.greenstuffworld.com"},
 }
 
 // SeedManufacturers popula a tabela manufacturers com dados reais
