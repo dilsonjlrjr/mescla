@@ -44,14 +44,14 @@ type ManufacturerAsset struct {
 
 // manufacturerLogos contém URLs conhecidas de logotipos
 var manufacturerLogos = map[string]string{
-	"AK Interactive": "https://ak-interactive.com/wp-content/uploads/2018/01/logo-ak.png",
+	"AK Interactive": "https://ak-interactive.com/wp-content/uploads/2022/03/blanco_logo-02-copia.png",
 	"Vallejo":        "https://acrylicosvallejo.com/wp-content/themes/vallejo/img/logo-vallejo.png",
 	"Citadel":        "https://www.games-workshop.com/resources/logo-citadel.png",
 	"Army Painter":   "https://www.thearmypainter.com/images/logo.png",
-	"Scale75":        "https://scale75.com/img/logo.png",
-	"Tamiya":         "https://www.tamiya.com/images/tamiya-logo.png",
+	"Scale75":        "https://scale75.com/cdn/shop/files/00__Logo_Scale75_CMYK.jpg?v=1753709085",
+	"Tamiya":         "https://www.tamiya.com/cms/images/new_blklogo.gif",
 	"Mr Hobby":       "https://www.gsiCreos.co.jp/images/logo.png",
-	"Acrilex":        "https://www.acrilex.com.br/images/logo.png",
+	"Acrilex":        "https://acrilex.com.br/wp-content/uploads/2024/01/logo-acrilex.png",
 	"Corfix":         "https://www.corfix.com.br/images/logo.png",
 	"Talento":        "https://www.talento.com.br/images/logo.png",
 }

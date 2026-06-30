@@ -18,6 +18,7 @@ func main() {
 	downloadLogos := flag.Bool("download-logos", false, "Baixar logotipos dos fabricantes")
 	downloadAssets := flag.Bool("download-assets", false, "Baixar todos os assets (logos, thumbnails, imagens)")
 	importPaints := flag.Bool("import-paints", false, "Importar tintas e linhas de produtos")
+	generateSwatches := flag.Bool("generate-swatches", false, "Gerar imagens de swatch para todas as tintas")
 	flag.Parse()
 
 	// Garantir que o diretório do banco existe
@@ -78,6 +79,15 @@ func main() {
 		assetSeed := seeds.GetAssetDownloaderSeed()
 		if err := seeds.Run(db, assetSeed); err != nil {
 			log.Fatalf("Erro baixando assets: %v", err)
+		}
+	}
+
+	// Gerar swatches se solicitado
+	if *generateSwatches {
+		log.Println("[swatch] Iniciando geração de swatches...")
+		swatchSeed := seeds.GetSwatchGeneratorSeed()
+		if err := seeds.Run(db, swatchSeed); err != nil {
+			log.Fatalf("Erro gerando swatches: %v", err)
 		}
 	}
 
