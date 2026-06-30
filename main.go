@@ -17,6 +17,7 @@ func main() {
 	dbPath := flag.String("db", "paint_knowledge.db", "Caminho para o banco SQLite")
 	downloadLogos := flag.Bool("download-logos", false, "Baixar logotipos dos fabricantes")
 	downloadAssets := flag.Bool("download-assets", false, "Baixar todos os assets (logos, thumbnails, imagens)")
+	importPaints := flag.Bool("import-paints", false, "Importar tintas e linhas de produtos")
 	flag.Parse()
 
 	// Garantir que o diretório do banco existe
@@ -60,6 +61,11 @@ func main() {
 	// Seeds de dados (sempre executam)
 	dataSeeds := []seeds.Seed{
 		seeds.GetManufacturerSeed(),
+	}
+
+	// Importar tintas se solicitado
+	if *importPaints {
+		dataSeeds = append(dataSeeds, seeds.GetPaintImporterSeed())
 	}
 
 	if err := seeds.RunAll(db, dataSeeds); err != nil {
