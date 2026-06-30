@@ -17,6 +17,7 @@
 - Implementado RF-005 (Swatch Generator) com 45 swatches
 - Implementado RF-006 (Color Converter) com conversões RGB/HSV/HSL/XYZ/LAB/LCH e DeltaE
 - Implementado RF-007 (Mix Engine) com motor de mistura de 2-4 tintas
+- Implementado RF-008 (Similarity Engine) com busca por Delta E 2000
 
 ---
 
