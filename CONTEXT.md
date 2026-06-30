@@ -54,6 +54,7 @@ paint-match-ai/
 |----|--------|--------|
 | RF-001 | Database Schema | Done |
 | RF-002 | Manufacturer Importer | Done |
+| RF-003 | Asset Downloader | Done |
 
 ---
 
@@ -61,7 +62,6 @@ paint-match-ai/
 
 | ID | Título | Status |
 |----|--------|--------|
-| RF-003 | Thumbnail Downloader | Draft |
 | RF-004 | Paint Importer | Draft |
 | RF-005 | Swatch Generator | Draft |
 | RF-006 | Color Converter | Draft |
@@ -74,10 +74,9 @@ paint-match-ai/
 
 ## Próximos Passos
 
-1. Criar RF-003 (Thumbnail Downloader)
-2. Implementar download de logotipos dos fabricantes
-3. Criar RF-004 (Paint Importer)
-4. Continuar sequência até RF-010
+1. Criar RF-004 (Paint Importer)
+2. Implementar importação de tintas e linhas de produtos
+3. Continuar sequência até RF-010
 
 ---
 

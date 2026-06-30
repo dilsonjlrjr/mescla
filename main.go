@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"flag"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,14 +13,14 @@ import (
 )
 
 func main() {
-	// Determinar caminho do banco
-	dbPath := "paint_knowledge.db"
-	if len(os.Args) > 1 {
-		dbPath = os.Args[1]
-	}
+	// Flags
+	dbPath := flag.String("db", "paint_knowledge.db", "Caminho para o banco SQLite")
+	downloadLogos := flag.Bool("download-logos", false, "Baixar logotipos dos fabricantes")
+	downloadAssets := flag.Bool("download-assets", false, "Baixar todos os assets (logos, thumbnails, imagens)")
+	flag.Parse()
 
-	// Garantir que o diretório existe
-	dir := filepath.Dir(dbPath)
+	// Garantir que o diretório do banco existe
+	dir := filepath.Dir(*dbPath)
 	if dir != "." {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			log.Fatalf("Erro criando diretório: %v", err)
@@ -27,7 +28,7 @@ func main() {
 	}
 
 	// Abrir banco
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := sql.Open("sqlite", *dbPath)
 	if err != nil {
 		log.Fatalf("Erro abrindo banco: %v", err)
 	}
@@ -54,16 +55,25 @@ func main() {
 		log.Fatal("Banco vazio. Execute a migração primeiro: sqlite3 paint_knowledge.db < db/migrations/001_initial_schema.sql")
 	}
 
-	log.Printf("[seed] Banco: %s (%d tabelas)", dbPath, tableCount)
+	log.Printf("[seed] Banco: %s (%d tabelas)", *dbPath, tableCount)
 
-	// Executar seeds
-	allSeeds := []seeds.Seed{
+	// Seeds de dados (sempre executam)
+	dataSeeds := []seeds.Seed{
 		seeds.GetManufacturerSeed(),
 	}
 
-	if err := seeds.RunAll(db, allSeeds); err != nil {
-		log.Fatalf("Erro executando seeds: %v", err)
+	if err := seeds.RunAll(db, dataSeeds); err != nil {
+		log.Fatalf("Erro executando seeds de dados: %v", err)
 	}
 
-	log.Println("[seed] Todos os seeds concluídos com sucesso")
+	// Seeds de assets (só se solicitado)
+	if *downloadLogos || *downloadAssets {
+		log.Println("[asset] Iniciando download de assets...")
+		assetSeed := seeds.GetAssetDownloaderSeed()
+		if err := seeds.Run(db, assetSeed); err != nil {
+			log.Fatalf("Erro baixando assets: %v", err)
+		}
+	}
+
+	log.Println("[seed] Concluído com sucesso")
 }
