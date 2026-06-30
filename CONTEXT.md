@@ -56,6 +56,8 @@ paint-match-ai/
 | RF-002 | Manufacturer Importer | Done |
 | RF-003 | Asset Downloader | Done |
 | RF-004 | Paint Importer | Done |
+| RF-005 | Swatch Generator | Done |
+| RF-006 | Color Converter | Done |
 
 ---
 
@@ -63,8 +65,6 @@ paint-match-ai/
 
 | ID | Título | Status |
 |----|--------|--------|
-| RF-005 | Swatch Generator | Draft |
-| RF-006 | Color Converter | Draft |
 | RF-007 | Mix Engine | Draft |
 | RF-008 | Similarity Engine | Draft |
 | RF-009 | AI Retrieval | Draft |
@@ -74,8 +74,8 @@ paint-match-ai/
 
 ## Próximos Passos
 
-1. Criar RF-005 (Swatch Generator)
-2. Implementar geração de swatches visuais
+1. Criar RF-007 (Mix Engine)
+2. Implementar motor de mistura de tintas
 3. Continuar sequência até RF-010
 
 ---

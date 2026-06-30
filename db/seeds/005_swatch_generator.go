@@ -73,10 +73,13 @@ func (g *SwatchGenerator) GenerateAll() error {
 		}
 
 		relPath, _ := filepath.Rel(".", destPath)
-		_, err := g.db.Exec(
-			"UPDATE paint_colors SET swatch_path = ?, updated_at = CURRENT_TIMESTAMP WHERE paint_id = ?",
-			relPath, id,
-		)
+		_, err := g.db.Exec(`
+			INSERT INTO paint_colors (paint_id, rgb_r, rgb_g, rgb_b, hsv_h, hsv_s, hsv_v, hsl_h, hsl_s, hsl_l, lab_l, lab_a, lab_b, lch_l, lch_c, lch_h, swatch_path, updated_at)
+			VALUES (?, ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ?, CURRENT_TIMESTAMP)
+			ON CONFLICT(paint_id) DO UPDATE SET
+				swatch_path = excluded.swatch_path,
+				updated_at = CURRENT_TIMESTAMP
+		`, id, c.R, c.G, c.B, relPath)
 		if err != nil {
 			return fmt.Errorf("atualizar swatch_path para %s: %w", name, err)
 		}
