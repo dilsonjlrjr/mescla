@@ -7,6 +7,11 @@
 - Criado e aprovado requisito RF-001 (Database Schema)
 - Implementado schema completo do banco `paint_knowledge.db`
 - Testado script SQL: 12 tabelas, 16 índices, foreign keys e constraints funcionais
+- Criado e aprovado requisito RF-002 (Manufacturer Importer)
+- Implementado seed Go com 10 fabricantes reais
+- Testado idempotência: inserção e atualização funcionais
+- Criado executor central de seeds (`db/seeds/seed.go`)
+- Inicializado módulo Go com dependência `modernc.org/sqlite`
 
 ---
 
@@ -25,10 +30,18 @@
 ```
 paint-match-ai/
 ├── .requirements/          # Backlog de requisitos
-│   └── rf-001-database-schema.md
+│   ├── rf-001-database-schema.md
+│   └── rf-002-manufacturer-importer.md
 ├── db/
-│   └── migrations/
-│       └── 001_initial_schema.sql
+│   ├── migrations/
+│   │   └── 001_initial_schema.sql
+│   └── seeds/
+│       ├── seed.go                 # Executor central
+│       └── 002_manufacturers.go    # Seed fabricantes
+├── main.go                 # Entry point para seeds
+├── go.mod                  # Módulo Go
+├── go.sum                  # Dependências
+├── paint_knowledge.db      # Banco SQLite
 ├── CONTEXT.md              # Este arquivo
 └── PROMPT.md               # Especificação mestre
 ```
@@ -40,6 +53,7 @@ paint-match-ai/
 | ID | Título | Status |
 |----|--------|--------|
 | RF-001 | Database Schema | Done |
+| RF-002 | Manufacturer Importer | Done |
 
 ---
 
@@ -47,7 +61,6 @@ paint-match-ai/
 
 | ID | Título | Status |
 |----|--------|--------|
-| RF-002 | Manufacturer Importer | Draft |
 | RF-003 | Thumbnail Downloader | Draft |
 | RF-004 | Paint Importer | Draft |
 | RF-005 | Swatch Generator | Draft |
@@ -61,9 +74,9 @@ paint-match-ai/
 
 ## Próximos Passos
 
-1. Criar RF-002 (Manufacturer Importer)
-2. Implementar importação de fabricantes
-3. Criar RF-003 (Thumbnail Downloader)
+1. Criar RF-003 (Thumbnail Downloader)
+2. Implementar download de logotipos dos fabricantes
+3. Criar RF-004 (Paint Importer)
 4. Continuar sequência até RF-010
 
 ---

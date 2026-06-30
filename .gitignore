@@ -1,0 +1,18 @@
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# Go build artifacts
+/bin/
+*.exe
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
