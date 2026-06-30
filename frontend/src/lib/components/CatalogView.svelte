@@ -63,34 +63,30 @@
   });
 </script>
 
-<div class="min-h-full p-8">
+<div class="min-h-full p-8 relative z-10">
   <!-- Header -->
-  <div class="mb-6 animate-fadeIn">
-    <h1 class="text-2xl font-bold text-white tracking-tight mb-1">Catálogo de Tintas</h1>
-    <p class="text-sm" style="color: var(--color-surface-400);">
-      {paints.length} tintas cadastradas
+  <div class="mb-8 animate-artisan-fade">
+    <h1 class="font-[family-name:var(--font-display)] text-3xl font-bold text-white tracking-tight mb-2">Catálogo de Tintas</h1>
+    <p class="text-[13px]" style="color: var(--color-obsidian-400);">
+      {filtered.length} de {paints.length} tintas cadastradas
     </p>
+    <div class="mt-4 h-[1px]" style="background: linear-gradient(90deg, var(--color-amber-glow), transparent 50%); opacity: 0.15;"></div>
   </div>
 
   <!-- Filters -->
-  <div class="flex gap-3 mb-6 animate-fadeIn" style="animation-delay: 100ms;">
+  <div class="flex gap-3 mb-6 animate-artisan-fade" style="animation-delay: 80ms;">
     <div class="flex-1 relative">
-      <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style="color: var(--color-surface-500);" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+      <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style="color: var(--color-obsidian-500);" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
       </svg>
       <input
         type="text"
         bind:value={searchQuery}
         placeholder="Buscar por nome, código ou fabricante..."
-        class="w-full pl-10 pr-4 py-2.5 rounded-lg text-sm text-white placeholder-surface-500 outline-none focus:ring-1 focus:ring-accent-500/30 transition-all"
-        style="background: var(--color-surface-800); border: 1px solid var(--color-glass-border);"
+        class="artisan-input w-full pl-10"
       />
     </div>
-    <select
-      bind:value={selectedManufacturer}
-      class="px-4 py-2.5 rounded-lg text-sm text-white outline-none appearance-none cursor-pointer min-w-[180px]"
-      style="background: var(--color-surface-800); border: 1px solid var(--color-glass-border);"
-    >
+    <select bind:value={selectedManufacturer} class="artisan-select min-w-[180px]">
       <option value="">Todos os fabricantes</option>
       {#each manufacturers as mfr}
         <option value={mfr.name}>{mfr.name}</option>
@@ -100,30 +96,34 @@
 
   <!-- Grid -->
   {#if loading}
-    <div class="grid grid-cols-4 gap-4">
-      {#each Array(12) as _}
-        <div class="glass rounded-xl p-4 animate-pulse">
-          <div class="w-full aspect-square rounded-lg bg-white/5 mb-3"></div>
-          <div class="h-4 w-3/4 bg-white/5 rounded mb-2"></div>
-          <div class="h-3 w-1/2 bg-white/5 rounded"></div>
+    <div class="grid grid-cols-5 gap-4">
+      {#each Array(15) as _}
+        <div class="artisan-card overflow-hidden">
+          <div class="skeleton w-full aspect-[4/3] rounded-none"></div>
+          <div class="p-3.5 space-y-2">
+            <div class="skeleton h-3 w-3/4"></div>
+            <div class="skeleton h-2.5 w-1/2"></div>
+          </div>
         </div>
       {/each}
     </div>
   {:else}
-    <div class="grid grid-cols-4 gap-4">
+    <div class="grid grid-cols-5 gap-4">
       {#each filtered as paint, i (paint.id)}
-        <div class="animate-fadeIn" style="animation-delay: {Math.min(i * 30, 300)}ms;">
+        <div class="animate-artisan-fade" style="animation-delay: {Math.min(i * 20, 200)}ms;">
           <PaintCard {paint} onclick={() => selectedPaint = paint} />
         </div>
       {/each}
     </div>
 
     {#if filtered.length === 0}
-      <div class="text-center py-16">
-        <svg class="w-12 h-12 mx-auto mb-4" style="color: var(--color-surface-600);" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
-        <p class="text-sm" style="color: var(--color-surface-500);">Nenhuma tinta encontrada</p>
+      <div class="text-center py-20">
+        <div class="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center" style="background: var(--color-obsidian-800);">
+          <svg class="w-8 h-8" style="color: var(--color-obsidian-600);" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+        <p class="text-sm font-medium" style="color: var(--color-obsidian-500);">Nenhuma tinta encontrada</p>
       </div>
     {/if}
   {/if}
@@ -131,36 +131,64 @@
 
 <!-- Detail Modal -->
 {#if selectedPaint}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn" onclick={() => selectedPaint = null}>
-    <div class="glass rounded-2xl p-6 max-w-lg w-full mx-4 animate-scaleIn" onclick={(e) => e.stopPropagation()}>
-      <div class="flex items-start justify-between mb-4">
-        <div>
-          <h2 class="text-lg font-bold text-white">{selectedPaint.name}</h2>
-          <p class="text-sm" style="color: var(--color-surface-400);">{selectedPaint.manufacturer} · {selectedPaint.productLine}</p>
-        </div>
-        <button onclick={() => selectedPaint = null} class="p-1 rounded-lg hover:bg-white/5 transition-colors">
-          <svg class="w-5 h-5 text-surface-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md animate-artisan-fade" onclick={() => selectedPaint = null}>
+    <div class="artisan-panel p-0 max-w-xl w-full mx-4 animate-artisan-scale overflow-hidden" onclick={(e) => e.stopPropagation()}>
+      <!-- Color hero -->
+      <div class="w-full h-32 relative"
+        style="background: linear-gradient(135deg, rgb({selectedPaint.r}, {selectedPaint.g}, {selectedPaint.b}), rgb({Math.max(0,selectedPaint.r-30)}, {Math.max(0,selectedPaint.g-30)}, {Math.max(0,selectedPaint.b-30)}));">
+        <div class="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent"></div>
+        <button onclick={() => selectedPaint = null} class="absolute top-3 right-3 w-8 h-8 rounded-lg flex items-center justify-center bg-black/30 backdrop-blur-sm text-white/70 hover:text-white hover:bg-black/50 transition-all">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
 
-      <div class="flex gap-4 mb-4">
-        <div class="w-24 h-24 rounded-xl flex-shrink-0 shadow-lg"
-          style="background: rgb({selectedPaint.r}, {selectedPaint.g}, {selectedPaint.b}); border: 1px solid rgba(255,255,255,0.1);">
+      <div class="p-6">
+        <div class="mb-4">
+          <h2 class="font-[family-name:var(--font-display)] text-2xl font-bold text-white mb-1">{selectedPaint.name}</h2>
+          <p class="text-sm" style="color: var(--color-obsidian-400);">{selectedPaint.manufacturer} · {selectedPaint.productLine}</p>
         </div>
-        <div class="flex-1 space-y-2">
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-mono px-2 py-0.5 rounded" style="background: var(--color-surface-800); color: var(--color-accent-400);">{selectedPaint.code}</span>
+
+        <div class="flex items-center gap-2 mb-5">
+          <span class="font-mono text-xs font-medium px-2.5 py-1 rounded-lg" style="background: var(--color-obsidian-800); color: var(--color-amber-glow); border: 1px solid var(--color-glass-border);">{selectedPaint.code}</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div class="artisan-card p-3">
+            <div class="text-[10px] uppercase tracking-[0.12em] font-semibold mb-1" style="color: var(--color-obsidian-500);">RGB</div>
+            <div class="font-mono text-sm text-white">{selectedPaint.r}, {selectedPaint.g}, {selectedPaint.b}</div>
           </div>
-          <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-            <div><span style="color: var(--color-surface-500);">RGB:</span> <span class="font-mono text-surface-300">{selectedPaint.r}, {selectedPaint.g}, {selectedPaint.b}</span></div>
-            {#if selectedPaint.finishType}<div><span style="color: var(--color-surface-500);">Acabamento:</span> <span class="text-surface-300">{selectedPaint.finishType}</span></div>{/if}
-            {#if selectedPaint.paintType}<div><span style="color: var(--color-surface-500);">Tipo:</span> <span class="text-surface-300">{selectedPaint.paintType}</span></div>{/if}
-            {#if selectedPaint.coverage}<div><span style="color: var(--color-surface-500);">Cobertura:</span> <span class="text-surface-300">{selectedPaint.coverage}</span></div>{/if}
-            {#if selectedPaint.opacity}<div><span style="color: var(--color-surface-500);">Opacidade:</span> <span class="text-surface-300">{selectedPaint.opacity}</span></div>{/if}
-            {#if selectedPaint.volume}<div><span style="color: var(--color-surface-500);">Volume:</span> <span class="text-surface-300">{selectedPaint.volume}</span></div>{/if}
-          </div>
+          {#if selectedPaint.finishType}
+            <div class="artisan-card p-3">
+              <div class="text-[10px] uppercase tracking-[0.12em] font-semibold mb-1" style="color: var(--color-obsidian-500);">Acabamento</div>
+              <div class="text-sm text-white">{selectedPaint.finishType}</div>
+            </div>
+          {/if}
+          {#if selectedPaint.paintType}
+            <div class="artisan-card p-3">
+              <div class="text-[10px] uppercase tracking-[0.12em] font-semibold mb-1" style="color: var(--color-obsidian-500);">Tipo</div>
+              <div class="text-sm text-white">{selectedPaint.paintType}</div>
+            </div>
+          {/if}
+          {#if selectedPaint.coverage}
+            <div class="artisan-card p-3">
+              <div class="text-[10px] uppercase tracking-[0.12em] font-semibold mb-1" style="color: var(--color-obsidian-500);">Cobertura</div>
+              <div class="text-sm text-white">{selectedPaint.coverage}</div>
+            </div>
+          {/if}
+          {#if selectedPaint.opacity}
+            <div class="artisan-card p-3">
+              <div class="text-[10px] uppercase tracking-[0.12em] font-semibold mb-1" style="color: var(--color-obsidian-500);">Opacidade</div>
+              <div class="text-sm text-white">{selectedPaint.opacity}</div>
+            </div>
+          {/if}
+          {#if selectedPaint.volume}
+            <div class="artisan-card p-3">
+              <div class="text-[10px] uppercase tracking-[0.12em] font-semibold mb-1" style="color: var(--color-obsidian-500);">Volume</div>
+              <div class="text-sm text-white">{selectedPaint.volume}</div>
+            </div>
+          {/if}
         </div>
       </div>
     </div>

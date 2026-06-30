@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import Sidebar from './lib/components/Sidebar.svelte';
   import HomeView from './lib/components/HomeView.svelte';
   import CatalogView from './lib/components/CatalogView.svelte';
@@ -17,10 +16,14 @@
   }
 </script>
 
-<div class="flex h-full">
-  <Sidebar {currentView} {sidebarCollapsed} onNavigate={handleNavigate} onToggle={() => sidebarCollapsed = !sidebarCollapsed} />
+<div class="noise-overlay flex h-full">
+  <!-- Ambient glows -->
+  <div class="ambient-glow" style="top: -200px; left: -200px; background: radial-gradient(circle, var(--color-amber-glow), transparent);"></div>
+  <div class="ambient-glow" style="bottom: -300px; right: -200px; background: radial-gradient(circle, #6c5ce7, transparent); opacity: 0.02;"></div>
 
-  <main class="flex-1 overflow-y-auto" class:ml-0={sidebarCollapsed}>
+  <Sidebar {currentView} collapsed={sidebarCollapsed} onNavigate={handleNavigate} onToggle={() => sidebarCollapsed = !sidebarCollapsed} />
+
+  <main class="flex-1 overflow-y-auto relative z-10">
     {#if currentView === 'home'}
       <HomeView onNavigate={handleNavigate} />
     {:else if currentView === 'catalog'}

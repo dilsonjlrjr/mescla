@@ -32,75 +32,91 @@
     }
   });
 
-  const quickActions: { view: View; title: string; desc: string; icon: string; gradient: string }[] = [
+  const quickActions: { view: View; title: string; desc: string; icon: string; gradient: string; glow: string }[] = [
     {
       view: 'catalog',
-      title: 'Catálogo',
-      desc: 'Explore todas as tintas cadastradas',
+      title: 'Catálogo Completo',
+      desc: 'Explore todas as tintas cadastradas por fabricante',
       icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10',
-      gradient: 'from-blue-500/20 to-cyan-500/20',
+      gradient: 'linear-gradient(135deg, #2e86de22, #00b89422)',
+      glow: '#2e86de',
     },
     {
       view: 'color-search',
       title: 'Buscar por Cor',
-      desc: 'Encontre tintas similares a uma cor',
+      desc: 'Encontre tintas similares usando Delta E 2000',
       icon: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z',
-      gradient: 'from-purple-500/20 to-pink-500/20',
+      gradient: 'linear-gradient(135deg, #8e44ad22, #e1705522)',
+      glow: '#8e44ad',
     },
     {
       view: 'compare',
-      title: 'Comparar',
-      desc: 'Compare tintas lado a lado',
-      icon: 'M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3',
-      gradient: 'from-amber-500/20 to-orange-500/20',
+      title: 'Comparar Tintas',
+      desc: 'Compare cores lado a lado visualmente',
+      icon: 'M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4',
+      gradient: 'linear-gradient(135deg, #d4a05322, #c0392b22)',
+      glow: '#d4a053',
     },
     {
       view: 'mix',
-      title: 'Mistura',
-      desc: 'Sugestão de receitas de mistura',
+      title: 'Receita de Mistura',
+      desc: 'Descubra a fórmula perfeita para sua cor',
       icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z',
-      gradient: 'from-emerald-500/20 to-teal-500/20',
+      gradient: 'linear-gradient(135deg, #27ae6022, #2e86de22)',
+      glow: '#27ae60',
     },
   ];
 </script>
 
-<div class="min-h-full p-8">
-  <!-- Hero -->
-  <div class="mb-10 animate-fadeIn">
-    <div class="flex items-center gap-4 mb-2">
-      <div class="w-12 h-12 rounded-2xl flex items-center justify-center"
-        style="background: linear-gradient(135deg, var(--color-accent-500), var(--color-accent-600)); box-shadow: 0 8px 32px rgba(232,168,76,0.3);">
-        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<div class="min-h-full p-8 relative z-10">
+  <!-- Hero Header -->
+  <div class="mb-10 animate-artisan-fade">
+    <div class="flex items-end gap-5 mb-3">
+      <div class="w-14 h-14 rounded-2xl flex items-center justify-center relative"
+        style="background: linear-gradient(135deg, var(--color-amber-glow), var(--color-amber-warm)); box-shadow: 0 8px 32px rgba(212,160,83,0.3), 0 0 0 1px rgba(255,255,255,0.1) inset;">
+        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
         </svg>
       </div>
       <div>
-        <h1 class="text-3xl font-bold text-white tracking-tight">Paint Match AI</h1>
-        <p class="text-sm" style="color: var(--color-surface-400);">Base de conhecimento para pintores de miniaturas</p>
+        <h1 class="font-[family-name:var(--font-display)] text-4xl font-bold text-white tracking-tight leading-none">
+          Paint Match <span style="color: var(--color-amber-glow);">AI</span>
+        </h1>
+        <p class="text-sm mt-1.5" style="color: var(--color-obsidian-400);">Base de conhecimento profissional para pintores de miniaturas</p>
       </div>
     </div>
+    <!-- Decorative line -->
+    <div class="mt-5 h-[1px]" style="background: linear-gradient(90deg, var(--color-amber-glow), transparent 60%); opacity: 0.2;"></div>
   </div>
 
-  <!-- Stats -->
+  <!-- Stats Grid -->
   <div class="grid grid-cols-5 gap-4 mb-10">
     {#if loading}
       {#each Array(5) as _}
-        <div class="glass rounded-xl p-4 animate-pulse">
-          <div class="h-8 w-16 bg-white/5 rounded mb-2"></div>
-          <div class="h-3 w-20 bg-white/5 rounded"></div>
+        <div class="artisan-card p-5">
+          <div class="skeleton h-9 w-16 mb-2.5"></div>
+          <div class="skeleton h-3 w-20"></div>
         </div>
       {/each}
     {:else if stats}
       {#each [
-        { value: stats.manufacturers, label: 'Fabricantes', color: 'var(--color-accent-400)' },
-        { value: stats.productLines, label: 'Linhas', color: '#60a5fa' },
-        { value: stats.paints, label: 'Tintas', color: '#a78bfa' },
-        { value: stats.equivalences, label: 'Equivalências', color: '#34d399' },
-        { value: stats.recipes, label: 'Receitas', color: '#f472b6' },
+        { value: stats.manufacturers, label: 'Fabricantes', color: 'var(--color-amber-glow)', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
+        { value: stats.productLines, label: 'Linhas', color: '#2e86de', icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
+        { value: stats.paints, label: 'Tintas', color: '#8e44ad', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01' },
+        { value: stats.equivalences, label: 'Equivalências', color: '#27ae60', icon: 'M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4' },
+        { value: stats.recipes, label: 'Receitas', color: '#e17055', icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z' },
       ] as stat, i}
-        <div class="glass rounded-xl p-4 animate-fadeIn group hover:border-white/10 transition-colors" style="animation-delay: {i * 80}ms;">
-          <div class="text-2xl font-bold mb-1" style="color: {stat.color};">{stat.value}</div>
-          <div class="text-xs font-medium uppercase tracking-wider" style="color: var(--color-surface-500);">{stat.label}</div>
+        <div class="artisan-card stat-card p-5 animate-artisan-fade" style="animation-delay: {i * 60}ms;">
+          <div class="absolute -top-8 -right-8 w-24 h-24 rounded-full" style="background: {stat.color}; filter: blur(50px);"></div>
+          <div class="flex items-center gap-3 mb-3">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: {stat.color}15;">
+              <svg class="w-4 h-4" style="color: {stat.color};" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d={stat.icon} />
+              </svg>
+            </div>
+          </div>
+          <div class="font-[family-name:var(--font-display)] text-3xl font-bold mb-0.5" style="color: {stat.color};">{stat.value}</div>
+          <div class="text-[11px] font-semibold uppercase tracking-[0.15em]" style="color: var(--color-obsidian-500);">{stat.label}</div>
         </div>
       {/each}
     {/if}
@@ -108,23 +124,29 @@
 
   <!-- Quick Actions -->
   <div class="mb-8">
-    <h2 class="text-sm font-semibold uppercase tracking-wider mb-4" style="color: var(--color-surface-500);">Ações Rápidas</h2>
+    <h2 class="font-[family-name:var(--font-display)] text-lg font-semibold text-white mb-5 flex items-center gap-3">
+      <span>Ações Rápidas</span>
+      <div class="flex-1 h-[1px]" style="background: linear-gradient(90deg, var(--color-glass-border), transparent);"></div>
+    </h2>
     <div class="grid grid-cols-2 gap-4">
       {#each quickActions as action, i}
         <button
           onclick={() => onNavigate(action.view)}
-          class="glass glass-hover rounded-xl p-5 text-left transition-all duration-200 group animate-fadeIn"
-          style="animation-delay: {200 + i * 80}ms;"
+          class="artisan-card p-6 text-left transition-all duration-300 group animate-artisan-fade relative overflow-hidden"
+          style="animation-delay: {200 + i * 60}ms;"
         >
-          <div class="flex items-start gap-4">
-            <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-gradient-to-br {action.gradient}">
-              <svg class="w-5 h-5 text-white/80" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <!-- Glow on hover -->
+          <div class="absolute -top-12 -right-12 w-32 h-32 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" style="background: {action.glow}; filter: blur(50px);"></div>
+
+          <div class="flex items-start gap-4 relative z-10">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style="background: {action.gradient}; border: 1px solid rgba(255,255,255,0.06);">
+              <svg class="w-6 h-6 text-white/80" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d={action.icon} />
               </svg>
             </div>
             <div>
-              <div class="font-semibold text-white text-sm mb-1 group-hover:text-accent-300 transition-colors">{action.title}</div>
-              <div class="text-xs" style="color: var(--color-surface-500);">{action.desc}</div>
+              <div class="font-semibold text-white text-[15px] mb-1 group-hover:text-[var(--color-amber-hot)] transition-colors duration-200">{action.title}</div>
+              <div class="text-[13px] leading-relaxed" style="color: var(--color-obsidian-400);">{action.desc}</div>
             </div>
           </div>
         </button>
@@ -132,17 +154,20 @@
     </div>
   </div>
 
-  <!-- Info -->
-  <div class="glass rounded-xl p-5 animate-fadeIn" style="animation-delay: 600ms;">
+  <!-- Info Footer -->
+  <div class="artisan-card p-5 animate-artisan-fade relative overflow-hidden" style="animation-delay: 500ms;">
+    <div class="absolute top-0 left-0 right-0 h-[1px]" style="background: linear-gradient(90deg, transparent, var(--color-amber-glow), transparent); opacity: 0.15;"></div>
     <div class="flex items-start gap-3">
-      <svg class="w-5 h-5 flex-shrink-0 mt-0.5" style="color: var(--color-accent-400);" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
+      <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background: rgba(212,160,83,0.1);">
+        <svg class="w-4 h-4" style="color: var(--color-amber-glow);" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
       <div>
-        <div class="text-sm font-medium text-white mb-1">Sistema Offline</div>
-        <div class="text-xs leading-relaxed" style="color: var(--color-surface-400);">
-          Paint Match AI funciona completamente offline. Todos os dados estão armazenados localmente em SQLite.
-          Use o comando <code class="font-mono text-xs px-1.5 py-0.5 rounded" style="background: var(--color-surface-800); color: var(--color-accent-400);">go run ./cmd/seed</code> para popular o banco com dados de fabricantes e tintas.
+        <div class="text-sm font-semibold text-white mb-1">Sistema 100% Offline</div>
+        <div class="text-[13px] leading-relaxed" style="color: var(--color-obsidian-400);">
+          Todos os dados estão armazenados localmente em SQLite. Para popular o banco, execute:
+          <code class="font-mono text-xs px-1.5 py-0.5 rounded-lg ml-1" style="background: var(--color-obsidian-800); color: var(--color-amber-glow);">rtk go run ./cmd/seed</code>
         </div>
       </div>
     </div>
