@@ -7,6 +7,14 @@
 /bin/
 *.exe
 
+# Frontend build artifacts
+frontend/dist/
+frontend/node_modules/
+frontend/bindings/
+
+# Wails build
+build/bin/
+
 # IDE
 .idea/
 .vscode/

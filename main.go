@@ -1,95 +1,50 @@
 package main
 
 import (
-	"database/sql"
-	"flag"
+	"embed"
 	"log"
-	"os"
-	"path/filepath"
 
-	"paint-match-ai/db/seeds"
-
-	_ "modernc.org/sqlite"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
+//go:embed all:frontend/dist
+var assets embed.FS
+
 func main() {
-	// Flags
-	dbPath := flag.String("db", "paint_knowledge.db", "Caminho para o banco SQLite")
-	downloadLogos := flag.Bool("download-logos", false, "Baixar logotipos dos fabricantes")
-	downloadAssets := flag.Bool("download-assets", false, "Baixar todos os assets (logos, thumbnails, imagens)")
-	importPaints := flag.Bool("import-paints", false, "Importar tintas e linhas de produtos")
-	generateSwatches := flag.Bool("generate-swatches", false, "Gerar imagens de swatch para todas as tintas")
-	flag.Parse()
-
-	// Garantir que o diretório do banco existe
-	dir := filepath.Dir(*dbPath)
-	if dir != "." {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			log.Fatalf("Erro criando diretório: %v", err)
-		}
-	}
-
-	// Abrir banco
-	db, err := sql.Open("sqlite", *dbPath)
+	paintService, err := NewPaintService()
 	if err != nil {
-		log.Fatalf("Erro abrindo banco: %v", err)
+		log.Fatalf("Erro inicializando PaintService: %v", err)
 	}
-	defer db.Close()
+	defer paintService.Close()
 
-	// Configurar pragmas
-	pragmas := []string{
-		"PRAGMA foreign_keys = ON",
-		"PRAGMA journal_mode = WAL",
-	}
-	for _, p := range pragmas {
-		if _, err := db.Exec(p); err != nil {
-			log.Fatalf("Erro executando pragma: %v", err)
-		}
-	}
+	app := application.New(application.Options{
+		Name:        "Paint Match AI",
+		Description: "Ferramenta profissional para pintores de miniaturas",
+		Services: []application.Service{
+			application.NewService(paintService),
+		},
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
+		},
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
+		},
+	})
 
-	// Verificar se as tabelas existem
-	var tableCount int
-	err = db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").Scan(&tableCount)
-	if err != nil {
-		log.Fatalf("Erro verificando tabelas: %v", err)
-	}
-	if tableCount == 0 {
-		log.Fatal("Banco vazio. Execute a migração primeiro: sqlite3 paint_knowledge.db < db/migrations/001_initial_schema.sql")
-	}
+	app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:  "Paint Match AI",
+		Width:  1280,
+		Height: 800,
+		Mac: application.MacWindow{
+			InvisibleTitleBarHeight: 50,
+			Backdrop:                application.MacBackdropTranslucent,
+			TitleBar:                application.MacTitleBarHiddenInset,
+		},
+		BackgroundColour: application.NewRGB(15, 15, 20),
+		URL:              "/",
+	})
 
-	log.Printf("[seed] Banco: %s (%d tabelas)", *dbPath, tableCount)
-
-	// Seeds de dados (sempre executam)
-	dataSeeds := []seeds.Seed{
-		seeds.GetManufacturerSeed(),
+	if err := app.Run(); err != nil {
+		log.Fatal(err)
 	}
-
-	// Importar tintas se solicitado
-	if *importPaints {
-		dataSeeds = append(dataSeeds, seeds.GetPaintImporterSeed())
-	}
-
-	if err := seeds.RunAll(db, dataSeeds); err != nil {
-		log.Fatalf("Erro executando seeds de dados: %v", err)
-	}
-
-	// Seeds de assets (só se solicitado)
-	if *downloadLogos || *downloadAssets {
-		log.Println("[asset] Iniciando download de assets...")
-		assetSeed := seeds.GetAssetDownloaderSeed()
-		if err := seeds.Run(db, assetSeed); err != nil {
-			log.Fatalf("Erro baixando assets: %v", err)
-		}
-	}
-
-	// Gerar swatches se solicitado
-	if *generateSwatches {
-		log.Println("[swatch] Iniciando geração de swatches...")
-		swatchSeed := seeds.GetSwatchGeneratorSeed()
-		if err := seeds.Run(db, swatchSeed); err != nil {
-			log.Fatalf("Erro gerando swatches: %v", err)
-		}
-	}
-
-	log.Println("[seed] Concluído com sucesso")
 }

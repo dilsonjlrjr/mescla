@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --color-surface-950: #0a0a0f;
+  --color-surface-900: #111118;
+  --color-surface-850: #16161f;
+  --color-surface-800: #1c1c28;
+  --color-surface-700: #2a2a3a;
+  --color-surface-600: #3a3a4f;
+  --color-surface-500: #5a5a72;
+  --color-surface-400: #8888a0;
+  --color-surface-300: #aaaabb;
+  --color-surface-200: #ccccdd;
+  --color-surface-100: #e8e8f0;
+
+  --color-accent-500: #e8a84c;
+  --color-accent-400: #f0bf6a;
+  --color-accent-300: #f5d08a;
+  --color-accent-600: #c88a30;
+
+  --color-pigment-red: #e74c3c;
+  --color-pigment-blue: #3498db;
+  --color-pigment-green: #2ecc71;
+  --color-pigment-yellow: #f1c40f;
+  --color-pigment-purple: #9b59b6;
+
+  --color-glass: rgba(255, 255, 255, 0.03);
+  --color-glass-border: rgba(255, 255, 255, 0.06);
+  --color-glass-hover: rgba(255, 255, 255, 0.06);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-surface-950);
+  color: var(--color-surface-200);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-700);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-surface-600);
+}
+
+.glass {
+  background: var(--color-glass);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--color-glass-border);
+}
+
+.glass-hover:hover {
+  background: var(--color-glass-hover);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.swatch-ring {
+  box-shadow: 0 0 0 2px var(--color-surface-900), 0 0 0 4px rgba(232, 168, 76, 0.3);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out both;
+}
+
+.animate-slideIn {
+  animation: slideIn 0.3s ease-out both;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.2s ease-out both;
+}
