@@ -304,3 +304,9 @@ func clamp01(v float64) float64 {
 	}
 	return v
 }
+
+// RGBToLab converte RGB (0-255) diretamente para CIELAB
+func RGBToLab(r, g, b uint8) (l, a, bOut float64) {
+	x, y, z := RGBToXYZ(r, g, b)
+	return XYZToLab(x, y, z)
+}
