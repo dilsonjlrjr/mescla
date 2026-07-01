@@ -82,7 +82,7 @@
   </div>
 
   <!-- Filters -->
-  <div class="flex gap-3 mb-6 animate-rise" style="animation-delay: 80ms;">
+  <div class="panel p-3 flex gap-3 mb-6 animate-rise" style="animation-delay: 80ms; position: relative; z-index: 1;">
     <div class="flex-1">
       <Textfield
         variant="outlined"
@@ -95,7 +95,7 @@
         {/snippet}
       </Textfield>
     </div>
-    <div style="min-width: 180px;">
+    <div style="min-width: 210px;">
       <Select variant="outlined" bind:value={selectedManufacturer} label="Fabricante" style="width: 100%;">
         <Option value="">Todos os fabricantes</Option>
         {#each manufacturers as mfr}

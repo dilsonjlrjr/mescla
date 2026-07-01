@@ -57,12 +57,12 @@
     { view: 'mix', title: 'Receita de mistura', desc: 'Descubra a fórmula pra chegar em qualquer cor', icon: 'flask' },
   ];
 
-  const ledger: { key: keyof Stats; label: string; icon: 'building' | 'layers' | 'palette' | 'swap' | 'flask' }[] = [
-    { key: 'manufacturers', label: 'Fabricantes', icon: 'building' },
-    { key: 'productLines', label: 'Linhas', icon: 'layers' },
-    { key: 'paints', label: 'Tintas', icon: 'palette' },
-    { key: 'equivalences', label: 'Equivalências', icon: 'swap' },
-    { key: 'recipes', label: 'Receitas', icon: 'flask' },
+  const ledger: { key: keyof Stats; label: string; icon: 'building' | 'layers' | 'palette' | 'swap' | 'flask'; view: View }[] = [
+    { key: 'manufacturers', label: 'Fabricantes', icon: 'building', view: 'catalog' },
+    { key: 'productLines', label: 'Linhas', icon: 'layers', view: 'catalog' },
+    { key: 'paints', label: 'Tintas', icon: 'palette', view: 'catalog' },
+    { key: 'equivalences', label: 'Equivalências', icon: 'swap', view: 'compare' },
+    { key: 'recipes', label: 'Receitas', icon: 'flask', view: 'mix' },
   ];
 </script>
 
@@ -83,7 +83,7 @@
   <!-- Ledger -->
   <div class="ledger mb-10 animate-rise" style="animation-delay: 60ms;">
     {#each ledger as item, i}
-      <div class="ledger-col" style={i > 0 ? 'border-left: 1px solid var(--ink-700);' : ''}>
+      <button class="ledger-col" style={i > 0 ? 'border-left: 1px solid var(--ink-700);' : ''} onclick={() => onNavigate(item.view)}>
         <span class="ledger-icon"><Icon name={item.icon} size={15} /></span>
         {#if loading}
           <div class="skeleton" style="height: 30px; width: 40px; margin: 6px 0;"></div>
@@ -91,7 +91,7 @@
           <div class="ledger-value">{stats[item.key]}</div>
         {/if}
         <div class="ledger-label">{item.label}</div>
-      </div>
+      </button>
     {/each}
   </div>
 
@@ -158,7 +158,21 @@
   }
 
   .ledger-col {
+    display: block;
+    width: 100%;
     padding: 18px 20px;
+    text-align: left;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    transition: background 0.15s ease;
+  }
+
+  .ledger-col:hover {
+    background: var(--ink-850);
   }
 
   .ledger-icon {
