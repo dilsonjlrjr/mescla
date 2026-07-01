@@ -4,7 +4,10 @@ import (
 	"embed"
 	"log"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/options"
+	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
 )
 
 //go:embed all:frontend/dist
@@ -15,36 +18,30 @@ func main() {
 	if err != nil {
 		log.Fatalf("Erro inicializando PaintService: %v", err)
 	}
-	defer paintService.Close()
 
-	app := application.New(application.Options{
-		Name:        "Paint Match AI",
-		Description: "Ferramenta profissional para pintores de miniaturas",
-		Services: []application.Service{
-			application.NewService(paintService),
+	app := NewApp(paintService)
+
+	err = wails.Run(&options.App{
+		Title:     "Paint Match AI",
+		Width:     1280,
+		Height:    800,
+		MinWidth:  1024,
+		MinHeight: 700,
+		AssetServer: &assetserver.Options{
+			Assets: assets,
 		},
-		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(assets),
+		BackgroundColour: &options.RGBA{R: 10, G: 10, B: 15, A: 255},
+		OnStartup:        app.startup,
+		OnShutdown:       app.shutdown,
+		Mac: &mac.Options{
+			TitleBar: mac.TitleBarHiddenInset(),
 		},
-		Mac: application.MacOptions{
-			ApplicationShouldTerminateAfterLastWindowClosed: true,
+		Bind: []interface{}{
+			paintService,
 		},
 	})
 
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:  "Paint Match AI",
-		Width:  1280,
-		Height: 800,
-		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 50,
-			Backdrop:                application.MacBackdropTranslucent,
-			TitleBar:                application.MacTitleBarHiddenInset,
-		},
-		BackgroundColour: application.NewRGB(15, 15, 20),
-		URL:              "/",
-	})
-
-	if err := app.Run(); err != nil {
+	if err != nil {
 		log.Fatal(err)
 	}
 }

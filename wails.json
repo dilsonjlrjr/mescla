@@ -1,0 +1,17 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "paint-match-ai",
+  "outputfilename": "paint-match-ai",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Paint Match AI"
+  },
+  "info": {
+    "companyName": "Paint Match AI",
+    "productName": "Paint Match AI",
+    "productVersion": "1.0.0"
+  }
+}

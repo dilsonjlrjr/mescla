@@ -16,14 +16,10 @@
   }
 </script>
 
-<div class="noise-overlay flex h-full">
-  <!-- Ambient glows -->
-  <div class="ambient-glow" style="top: -200px; left: -200px; background: radial-gradient(circle, var(--color-amber-glow), transparent);"></div>
-  <div class="ambient-glow" style="bottom: -300px; right: -200px; background: radial-gradient(circle, #6c5ce7, transparent); opacity: 0.02;"></div>
-
+<div class="app-layout">
   <Sidebar {currentView} collapsed={sidebarCollapsed} onNavigate={handleNavigate} onToggle={() => sidebarCollapsed = !sidebarCollapsed} />
 
-  <main class="flex-1 overflow-y-auto relative z-10">
+  <main class="app-main">
     {#if currentView === 'home'}
       <HomeView onNavigate={handleNavigate} />
     {:else if currentView === 'catalog'}
