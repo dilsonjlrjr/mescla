@@ -57,7 +57,9 @@ func main() {
 
 		sair := dialog.AddButton("Sair")
 		sair.OnClick(func() {
-			app.Quit()
+			// Quit fora do callback do dialog: chamado inline ele roda no meio
+			// do event-loop do próprio dialog e o processo não termina (macOS).
+			go app.Quit()
 		})
 
 		cancelar := dialog.AddButton("Cancelar")
