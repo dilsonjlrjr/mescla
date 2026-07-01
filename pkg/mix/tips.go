@@ -49,21 +49,26 @@ func GenerateTips(targetR, targetG, targetB uint8, recipe Recipe) []string {
 		hueDiff := hueDelta(targetHue, resultHue)
 		if math.Abs(hueDiff) > hueThresholdDeg {
 			mover, others, ok := findHueMover(recipe.Ingredients, targetHue, lightener, hasLightener)
-			if ok {
-				resultBucket := hueBucketName(resultHue)
-				if len(others) == 1 {
-					tips = append(tips, fmt.Sprintf(
-						"Muito %s: aumente o %s e reduza o %s.",
-						resultBucket, mover.Paint.Name, others[0].Paint.Name))
-				} else if len(others) > 1 {
-					tips = append(tips, fmt.Sprintf(
-						"Muito %s: aumente o %s e reduza os demais.",
-						resultBucket, mover.Paint.Name))
-				} else {
-					tips = append(tips, fmt.Sprintf(
-						"Muito %s: aumente o %s.",
-						resultBucket, mover.Paint.Name))
-				}
+			resultBucket := hueBucketName(resultHue)
+			switch {
+			case ok && len(others) == 1:
+				// Há um ingrediente mais próximo do matiz do alvo e outro pra
+				// compensar — dica de rebalanceamento de verdade.
+				tips = append(tips, fmt.Sprintf(
+					"Muito %s: aumente o %s e reduza o %s.",
+					resultBucket, mover.Paint.Name, others[0].Paint.Name))
+			case ok && len(others) > 1:
+				tips = append(tips, fmt.Sprintf(
+					"Muito %s: aumente o %s e reduza os demais.",
+					resultBucket, mover.Paint.Name))
+			case ok:
+				// Só existe UM ingrediente saturado na receita: ele já é o
+				// responsável pelo desvio de matiz, não tem com o que
+				// rebalancear. "Aumentar" ele só pioraria — a mistura desse
+				// fabricante simplesmente não tem o pigmento certo pra chegar
+				// nesse tom (ex: falta um amarelo/laranja pra sair de um
+				// vermelho+branco). Ser honesto em vez de inventar uma dica.
+				tips = append(tips, "O fabricante escolhido não tem uma tinta com o matiz certo pra chegar nessa cor — o resultado é a melhor aproximação possível com o catálogo disponível.")
 			}
 		}
 	}

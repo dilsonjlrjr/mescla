@@ -92,6 +92,29 @@ func TestGenerateTipsHueMismatchNamesIngredients(t *testing.T) {
 	}
 }
 
+// Regressão: catálogo do fabricante alvo só tem branco + um vermelho — não há
+// como aproximar um laranja/amarelo com isso. A dica não pode sugerir
+// "aumente o Vermelho" pra corrigir um desvio que o próprio Vermelho causa
+// (não existe outro ingrediente pra rebalancear o matiz).
+func TestGenerateTipsSingleHueIngredientHonestLimitation(t *testing.T) {
+	recipe := Recipe{
+		Ingredients: []Ingredient{
+			{Paint: PaintInput{ID: 1, Name: "Branco", R: 233, G: 230, B: 221}, Percentage: 35},
+			{Paint: PaintInput{ID: 2, Name: "Vermelho", R: 163, G: 40, B: 42}, Percentage: 65},
+		},
+		ResultR: 188, ResultG: 107, ResultB: 105,
+	}
+
+	// Alvo: um laranja vibrante (AK Interactive "Orange").
+	tips := GenerateTips(230, 126, 34, recipe)
+
+	for _, tip := range tips {
+		if strings.Contains(tip, "aumente o Vermelho") {
+			t.Errorf("Não deveria sugerir aumentar o único ingrediente saturado disponível, got: %v", tips)
+		}
+	}
+}
+
 func TestHueBucketName(t *testing.T) {
 	cases := map[float64]string{
 		0:   "vermelho",
