@@ -2,11 +2,12 @@
   import Sidebar from './lib/components/Sidebar.svelte';
   import HomeView from './lib/components/HomeView.svelte';
   import CatalogView from './lib/components/CatalogView.svelte';
+  import ManufacturersView from './lib/components/ManufacturersView.svelte';
   import ColorSearchView from './lib/components/ColorSearchView.svelte';
   import CompareView from './lib/components/CompareView.svelte';
   import MixView from './lib/components/MixView.svelte';
 
-  type View = 'home' | 'catalog' | 'color-search' | 'compare' | 'mix';
+  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix';
 
   let currentView: View = $state('home');
   let sidebarCollapsed = $state(false);
@@ -24,6 +25,8 @@
       <HomeView onNavigate={handleNavigate} />
     {:else if currentView === 'catalog'}
       <CatalogView />
+    {:else if currentView === 'manufacturers'}
+      <ManufacturersView />
     {:else if currentView === 'color-search'}
       <ColorSearchView />
     {:else if currentView === 'compare'}

@@ -1,7 +1,7 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
 
-  type View = 'home' | 'catalog' | 'color-search' | 'compare' | 'mix';
+  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix';
 
   interface Props {
     currentView: View;
@@ -12,9 +12,10 @@
 
   let { currentView, collapsed, onNavigate, onToggle }: Props = $props();
 
-  const navItems: { id: View; label: string; icon: 'home' | 'grid' | 'pipette' | 'swap' | 'flask' }[] = [
+  const navItems: { id: View; label: string; icon: 'home' | 'grid' | 'building' | 'pipette' | 'swap' | 'flask' }[] = [
     { id: 'home', label: 'Início', icon: 'home' },
     { id: 'catalog', label: 'Catálogo', icon: 'grid' },
+    { id: 'manufacturers', label: 'Fabricantes', icon: 'building' },
     { id: 'color-search', label: 'Buscar Cor', icon: 'pipette' },
     { id: 'compare', label: 'Comparar', icon: 'swap' },
     { id: 'mix', label: 'Mistura', icon: 'flask' },

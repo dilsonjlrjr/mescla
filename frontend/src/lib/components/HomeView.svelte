@@ -3,7 +3,7 @@
   import Icon from './Icon.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
-  type View = 'home' | 'catalog' | 'color-search' | 'compare' | 'mix';
+  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix';
 
   interface Props {
     onNavigate: (view: View) => void;
@@ -58,7 +58,7 @@
   ];
 
   const ledger: { key: keyof Stats; label: string; icon: 'building' | 'layers' | 'palette' | 'swap' | 'flask'; view: View }[] = [
-    { key: 'manufacturers', label: 'Fabricantes', icon: 'building', view: 'catalog' },
+    { key: 'manufacturers', label: 'Fabricantes', icon: 'building', view: 'manufacturers' },
     { key: 'productLines', label: 'Linhas', icon: 'layers', view: 'catalog' },
     { key: 'paints', label: 'Tintas', icon: 'palette', view: 'catalog' },
     { key: 'equivalences', label: 'Equivalências', icon: 'swap', view: 'compare' },

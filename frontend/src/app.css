@@ -62,6 +62,13 @@
   --mdc-slider-ink-color: var(--lacquer);
 }
 
+/* SMUI só remove a borda superior do "notch" quando aplica a classe
+   --notched via JS; se essa medição falhar (comum em WKWebView no boot),
+   a borda cruza o texto do label. Removendo sempre evitamos o glitch. */
+.mdc-notched-outline__notch {
+  border-top: none;
+}
+
 * {
   margin: 0;
   padding: 0;

@@ -107,8 +107,12 @@ type RecipeIngredientDTO struct {
 }
 
 type ManufacturerDTO struct {
-	ID   int64  `json:"id"`
-	Name string `json:"name"`
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	Country    string `json:"country"`
+	Website    string `json:"website"`
+	LogoPath   string `json:"logoPath"`
+	PaintCount int    `json:"paintCount"`
 }
 
 type StatsDTO struct {
@@ -130,7 +134,12 @@ func (s *PaintService) GetStats() (StatsDTO, error) {
 }
 
 func (s *PaintService) GetManufacturers() ([]ManufacturerDTO, error) {
-	rows, err := s.db.Query("SELECT id, name FROM manufacturers ORDER BY name")
+	rows, err := s.db.Query(`
+		SELECT m.id, m.name, COALESCE(m.country, ''), COALESCE(m.website, ''), COALESCE(m.logo_path, ''),
+		       (SELECT COUNT(*) FROM paints p WHERE p.manufacturer_id = m.id)
+		FROM manufacturers m
+		ORDER BY m.name
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +148,7 @@ func (s *PaintService) GetManufacturers() ([]ManufacturerDTO, error) {
 	var result []ManufacturerDTO
 	for rows.Next() {
 		var m ManufacturerDTO
-		if err := rows.Scan(&m.ID, &m.Name); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.Country, &m.Website, &m.LogoPath, &m.PaintCount); err != nil {
 			return nil, err
 		}
 		result = append(result, m)

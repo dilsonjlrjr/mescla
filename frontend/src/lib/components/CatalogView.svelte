@@ -91,11 +91,11 @@
         style="width: 100%;"
       >
         {#snippet leadingIcon()}
-          <span style="color: var(--ink-500); display: flex; margin-left: 4px;"><Icon name="search" size={17} /></span>
+          <span class="mdc-text-field__icon mdc-text-field__icon--leading" style="color: var(--ink-500); display: flex;"><Icon name="search" size={17} /></span>
         {/snippet}
       </Textfield>
     </div>
-    <div style="min-width: 210px;">
+    <div style="min-width: 240px;">
       <Select variant="outlined" bind:value={selectedManufacturer} label="Fabricante" style="width: 100%;">
         <Option value="">Todos os fabricantes</Option>
         {#each manufacturers as mfr}
