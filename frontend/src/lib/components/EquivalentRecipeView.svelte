@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Select, { Option } from '@smui/select';
-  import Button from '@smui/button';
   import LinearProgress from '@smui/linear-progress';
   import Icon from './Icon.svelte';
   import PaintSearchInput from './PaintSearchInput.svelte';
   import PaintBottle from './PaintBottle.svelte';
+  import DeltaBadge from './DeltaBadge.svelte';
+  import { toast } from '../toast.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   interface Paint {
@@ -49,12 +50,16 @@
       }
     } catch (e) {
       console.error('Erro carregando dados:', e);
+      errorMsg = 'O catálogo não carregou. Feche e abra o aplicativo.';
     }
   });
 
   let availableTargets = $derived(
     manufacturers.filter(m => !sourcePaint || m.name !== sourcePaint.manufacturer)
   );
+
+  // Passo atual da jornada — guia o olho pro próximo campo
+  let step = $derived(!sourcePaint ? 1 : !targetManufacturerId ? 2 : 3);
 
   function selectSource(paint: Paint) {
     sourcePaint = paint;
@@ -80,55 +85,66 @@
       result = await PaintService.SuggestEquivalentRecipe(sourcePaint.id, Number(targetManufacturerId));
     } catch (e) {
       console.error('Erro sugerindo receita equivalente:', e);
-      errorMsg = 'Não foi possível calcular a receita equivalente.';
+      errorMsg = 'O cálculo falhou. Escolha a tinta e a marca de novo e tente outra vez.';
+      toast('O cálculo falhou. Tente de novo.', 'error');
     } finally {
       loading = false;
     }
   }
 
-  function deltaClass(de: number): string {
-    if (de < 3) return 'delta-excellent';
-    if (de < 6) return 'delta-good';
-    if (de < 10) return 'delta-fair';
-    return 'delta-poor';
+  function copyRecipe() {
+    if (!result?.ingredients) return;
+    const lines = [
+      `${result.sourceName} (${result.sourceManufacturer}) → ${result.targetManufacturer}`,
+      ...result.ingredients.map((i: any) => `${i.percentage.toFixed(1)}%  ${i.name}`),
+      `ΔE2000 ${result.deltaE.toFixed(2)}`,
+    ];
+    navigator.clipboard.writeText(lines.join('\n'));
+    toast('Receita copiada');
   }
 </script>
 
 <div class="page-container">
   <div class="page-header animate-rise">
-    <h1 class="page-title">Receita equivalente</h1>
-    <p class="page-subtitle">Escolha uma tinta e descubra como replicar a cor com outro fabricante</p>
+    <h1 class="page-title">Equivalência</h1>
+    <p class="page-subtitle">A mesma cor, feita com as tintas da marca que você tem</p>
     <div class="page-divider"></div>
   </div>
 
   <div class="mix-layout">
-    <!-- Form -->
+    <!-- Form: passos numerados guiam a jornada -->
     <div class="panel p-5 animate-rise" style="animation-delay: 80ms;">
-      <h3 class="font-display text-sm font-semibold text-white mb-4">Tinta de origem</h3>
+      <div class="form-step" class:current={step === 1} class:done={step > 1}>
+        <span class="step-n">1</span>
+        <h3 class="form-step-title font-display">Tinta que você quer</h3>
+      </div>
       <PaintSearchInput
         paints={allPaints}
         selected={sourcePaint}
         onSelect={selectSource}
         onClear={clearSource}
-        label="Buscar por nome ou fabricante..."
+        label="Nome, código ou marca…"
       />
 
-      <h3 class="font-display text-sm font-semibold text-white mb-4" style="margin-top: 24px;">Fabricante de destino</h3>
-      <Select variant="outlined" bind:value={targetManufacturerId} label="Fabricante" style="width: 100%;" disabled={!sourcePaint}>
-        <Option value="">Selecione...</Option>
+      <div class="form-step" class:current={step === 2} class:done={step > 2} style="margin-top: 24px;">
+        <span class="step-n">2</span>
+        <h3 class="form-step-title font-display">Marca que você tem</h3>
+      </div>
+      <Select variant="outlined" bind:value={targetManufacturerId} label="Marca" style="width: 100%;" disabled={!sourcePaint}>
+        <Option value="">Selecione…</Option>
         {#each availableTargets as mfr}
           <Option value={mfr.id}>{mfr.name}</Option>
         {/each}
       </Select>
 
-      <Button
-        variant="raised"
+      <button
+        class="btn-primary"
         onclick={suggest}
         disabled={!sourcePaint || !targetManufacturerId || loading}
-        style="width: 100%; margin-top: 20px; background: var(--lacquer); color: white; font-weight: 600; border-radius: 8px; height: 46px;"
+        style="margin-top: 20px;"
       >
-        {loading ? 'Calculando…' : 'Buscar receita equivalente'}
-      </Button>
+        {loading ? 'Calculando…' : 'Encontrar equivalência'}
+      </button>
 
       {#if errorMsg}
         <p style="margin-top: 12px; font-size: 12.5px; color: var(--delta-poor);">{errorMsg}</p>
@@ -138,8 +154,9 @@
     <!-- Result -->
     <div class="animate-rise" style="animation-delay: 160ms;">
       {#if loading}
-        <div style="display: flex; align-items: center; justify-content: center; padding: 80px 0;">
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 80px 0;">
           <LinearProgress indeterminate style="width: 200px;" />
+          <span style="font-size: 12.5px; color: var(--ink-500);">Testando misturas de até 3 tintas…</span>
         </div>
       {:else if result}
         <!-- Aviso: cor irreproduzível com o catálogo de destino -->
@@ -147,36 +164,45 @@
           <div class="warn-banner mb-5 animate-rise">
             <span class="warn-icon"><Icon name="info" size={18} /></span>
             <div>
-              <div class="warn-title">Não é possível reproduzir esta cor com {result.targetManufacturer}</div>
+              <div class="warn-title">Esta cor não sai com as tintas da {result.targetManufacturer}</div>
               <p class="warn-text">
-                O catálogo da {result.targetManufacturer} não tem os pigmentos necessários para chegar
-                nesta cor (ΔE {result.deltaE.toFixed(1)} — diferença muito grande). A mistura abaixo é
-                apenas a <strong>aproximação mais próxima possível</strong>, não uma receita utilizável.
+                Falta pigmento no catálogo dela pra chegar neste tom. A mistura abaixo é a
+                <strong>aproximação mais próxima possível</strong> — compare o par de cores
+                antes de decidir usar.
               </p>
             </div>
           </div>
         {/if}
 
-        <!-- Result color -->
+        <!-- O par: alvo vs obtido, lado a lado — o momento da verdade -->
         <div class="panel p-5 mb-5">
-          <h3 class="font-display text-sm font-semibold text-white mb-4">Cor resultante</h3>
-          <div class="flex gap-4 items-center">
-            <div class="swatch-flat" style="width: 76px; height: 76px; background: rgb({result.resultR}, {result.resultG}, {result.resultB}); flex-shrink: 0;"></div>
-            <div>
-              <div style="font-size: 12px; color: var(--ink-500);">{result.sourceName} ({result.sourceManufacturer}) → {result.targetManufacturer}</div>
-              <div class="font-mono text-sm text-white" style="margin-top: 4px;">RGB({result.resultR}, {result.resultG}, {result.resultB})</div>
-              <div class="font-mono font-bold {deltaClass(result.deltaE)}" style="margin-top: 4px;">
-                ΔE {result.deltaE.toFixed(2)}
-              </div>
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-display text-sm font-semibold text-white">Alvo × mistura</h3>
+            <DeltaBadge
+              deltaE={result.deltaE}
+              pair={{ r1: result.sourceR, g1: result.sourceG, b1: result.sourceB, r2: result.resultR, g2: result.resultG, b2: result.resultB }}
+            />
+          </div>
+          <div class="verdict-pair">
+            <div class="verdict-half" style="background: rgb({result.sourceR}, {result.sourceG}, {result.sourceB});">
+              <span class="verdict-tag">{result.sourceName} · {result.sourceManufacturer}</span>
+            </div>
+            <div class="verdict-half" style="background: rgb({result.resultR}, {result.resultG}, {result.resultB});">
+              <span class="verdict-tag">sua mistura · {result.targetManufacturer}</span>
             </div>
           </div>
         </div>
 
         <!-- Ingredients -->
         <div class="panel p-5 mb-5">
-          <h3 class="font-display text-sm font-semibold text-white mb-4">
-            {result.reproducible ? 'Ingredientes' : 'Melhor aproximação'} ({result.ingredients?.length || 0})
-          </h3>
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-display text-sm font-semibold text-white">
+              {result.reproducible ? 'Receita' : 'Melhor aproximação'} ({result.ingredients?.length || 0} {result.ingredients?.length === 1 ? 'tinta' : 'tintas'})
+            </h3>
+            <button class="btn-ghost" onclick={copyRecipe}>
+              Copiar receita
+            </button>
+          </div>
 
           {#if result.ingredients}
             <div style="display: flex; flex-direction: column; gap: 12px;">
@@ -214,9 +240,14 @@
           </div>
         {/if}
       {:else}
-        <div class="panel" style="text-align: center; padding: 80px 0;">
-          <span style="color: var(--ink-600); display: flex; justify-content: center;"><Icon name="flask" size={40} /></span>
-          <p class="font-medium mt-4" style="color: var(--ink-500);">Escolha a tinta de origem e o fabricante de destino</p>
+        <div class="panel empty-state">
+          <span class="empty-icon"><Icon name="flask" size={40} /></span>
+          <p class="empty-title">
+            {step === 1 ? 'Comece buscando a tinta que você quer' : 'Agora escolha a marca que você tem'}
+          </p>
+          <p class="empty-hint">
+            {step === 1 ? 'Digite o nome no campo ao lado — ou venha do Catálogo pelo botão da tinta.' : 'A receita usa só as tintas dessa marca.'}
+          </p>
         </div>
       {/if}
     </div>
@@ -228,6 +259,72 @@
     display: grid;
     grid-template-columns: 320px 1fr;
     gap: 24px;
+  }
+
+  .form-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    opacity: 0.55;
+    transition: opacity 0.2s ease;
+  }
+
+  .form-step.current,
+  .form-step.done {
+    opacity: 1;
+  }
+
+  .form-step.current .step-n {
+    background: var(--lacquer);
+    color: white;
+  }
+
+  .form-step.done .step-n {
+    background: var(--delta-excellent);
+    color: white;
+  }
+
+  .form-step .step-n {
+    margin-bottom: 0;
+  }
+
+  .form-step-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--paper);
+  }
+
+  /* Par alvo × mistura: as duas cores encostadas, como se compara tinta de verdade */
+  .verdict-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    height: 120px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.22);
+  }
+
+  .verdict-half {
+    position: relative;
+  }
+
+  .verdict-tag {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: rgba(15, 13, 18, 0.55);
+    color: rgba(255, 255, 255, 0.92);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: fit-content;
+    max-width: calc(100% - 16px);
   }
 
   .ingredient-row {

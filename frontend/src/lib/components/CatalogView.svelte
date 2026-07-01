@@ -3,10 +3,10 @@
   import Textfield from '@smui/textfield';
   import Select, { Option } from '@smui/select';
   import Dialog, { Content as DialogContent } from '@smui/dialog';
-  import Button from '@smui/button';
   import Icon from './Icon.svelte';
   import PaintCard from './PaintCard.svelte';
   import PaintBottle from './PaintBottle.svelte';
+  import { toast } from '../toast.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix';
@@ -61,6 +61,10 @@
     }
   });
 
+  // Paginação incremental — 11 mil cards de uma vez travam o webview.
+  const PAGE = 60;
+  let visibleCount = $state(PAGE);
+
   $effect(() => {
     let result = paints;
     if (searchQuery) {
@@ -75,7 +79,10 @@
       result = result.filter(p => p.manufacturer === selectedManufacturer);
     }
     filtered = result;
+    visibleCount = PAGE;
   });
+
+  let visible = $derived(filtered.slice(0, visibleCount));
 
   function openDetail(paint: Paint) {
     selectedPaint = paint;
@@ -86,13 +93,23 @@
     dialogOpen = false;
     onNavigate('mix', paint.id);
   }
+
+  function hexOf(p: Paint): string {
+    const h = (n: number) => n.toString(16).padStart(2, '0').toUpperCase();
+    return `${h(p.r)}${h(p.g)}${h(p.b)}`;
+  }
+
+  function copyHex(p: Paint) {
+    navigator.clipboard.writeText(`#${hexOf(p)}`);
+    toast(`#${hexOf(p)} copiado`);
+  }
 </script>
 
 <div class="page-container">
   <!-- Header -->
   <div class="page-header animate-rise">
-    <h1 class="page-title">Catálogo de tintas</h1>
-    <p class="page-subtitle">{filtered.length} de {paints.length} tintas cadastradas</p>
+    <h1 class="page-title">Catálogo</h1>
+    <p class="page-subtitle">{filtered.length.toLocaleString('pt-BR')} de {paints.length.toLocaleString('pt-BR')} tintas — clique numa tinta pra ver detalhes e pedir a equivalência</p>
     <div class="page-divider"></div>
   </div>
 
@@ -135,17 +152,27 @@
     </div>
   {:else}
     <div class="grid-5">
-      {#each filtered as paint, i (paint.id)}
+      {#each visible as paint, i (paint.id)}
         <div class="animate-rise" style="animation-delay: {Math.min(i * 20, 200)}ms;">
           <PaintCard {paint} onclick={() => openDetail(paint)} />
         </div>
       {/each}
     </div>
 
+    {#if visibleCount < filtered.length}
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 28px;">
+        <button class="btn-ghost" onclick={() => visibleCount += PAGE * 2}>
+          Mostrar mais {Math.min(PAGE * 2, filtered.length - visibleCount)} tintas
+        </button>
+        <span style="font-size: 11.5px; color: var(--ink-500);">exibindo {visibleCount} de {filtered.length.toLocaleString('pt-BR')}</span>
+      </div>
+    {/if}
+
     {#if filtered.length === 0}
-      <div style="text-align: center; padding: 80px 0;">
-        <div style="color: var(--ink-600); display: flex; justify-content: center; margin-bottom: 16px;"><Icon name="search-off" size={40} /></div>
-        <p class="font-medium" style="color: var(--ink-500);">Nenhuma tinta encontrada</p>
+      <div class="empty-state">
+        <div class="empty-icon"><Icon name="search-off" size={40} /></div>
+        <p class="empty-title">Nada com esse nome</p>
+        <p class="empty-hint">Tente o código do pote (ex.: 70.951) ou só parte do nome — ou limpe o filtro de marca.</p>
       </div>
     {/if}
   {/if}
@@ -175,10 +202,10 @@
       </div>
 
       <div class="grid-2">
-        <div class="panel p-3">
-          <div class="detail-label">RGB</div>
-          <div class="font-mono text-sm text-white">{selectedPaint.r}, {selectedPaint.g}, {selectedPaint.b}</div>
-        </div>
+        <button class="panel p-3 copy-cell" onclick={() => copyHex(selectedPaint!)} title="Copiar código hex">
+          <div class="detail-label">Cor · clique pra copiar</div>
+          <div class="font-mono text-sm text-white">#{hexOf(selectedPaint)} · {selectedPaint.r}, {selectedPaint.g}, {selectedPaint.b}</div>
+        </button>
         {#if selectedPaint.finishType}
           <div class="panel p-3">
             <div class="detail-label">Acabamento</div>
@@ -211,13 +238,10 @@
         {/if}
       </div>
 
-      <Button
-        variant="raised"
-        onclick={() => goToRecipe(selectedPaint!)}
-        style="width: 100%; margin-top: 20px; background: var(--lacquer); color: white; font-weight: 600; border-radius: 8px; height: 46px;"
-      >
-        <span class="flex items-center gap-2"><Icon name="flask" size={17} />Buscar receita equivalente</span>
-      </Button>
+      <button class="btn-primary" style="margin-top: 20px;" onclick={() => goToRecipe(selectedPaint!)}>
+        <Icon name="flask" size={17} />
+        Encontrar equivalência
+      </button>
     </DialogContent>
   {/if}
 </Dialog>
@@ -265,6 +289,17 @@
     font-weight: 600;
     margin-bottom: 4px;
     color: var(--ink-500);
+  }
+
+  .copy-cell {
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+  }
+
+  .copy-cell:hover {
+    border-color: var(--lacquer);
   }
 
   :global(.mdc-dialog__surface) {

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import Button from '@smui/button';
   import Icon from './Icon.svelte';
+  import DeltaBadge from './DeltaBadge.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   interface Paint {
@@ -55,19 +56,6 @@
     return selectedIDs.map(id => allPaints.find(p => p.id === id)).filter(Boolean) as Paint[];
   }
 
-  function deltaClass(de: number): string {
-    if (de < 3) return 'delta-excellent';
-    if (de < 6) return 'delta-good';
-    if (de < 10) return 'delta-fair';
-    return 'delta-poor';
-  }
-
-  function deltaColor(de: number): string {
-    if (de < 3) return 'var(--delta-excellent)';
-    if (de < 6) return 'var(--delta-good)';
-    if (de < 10) return 'var(--delta-fair)';
-    return 'var(--delta-poor)';
-  }
 </script>
 
 <div class="page-container">
@@ -147,15 +135,7 @@
                 <div class="text-sm font-medium text-white">{result.name}</div>
                 <div style="font-size: 12px; color: var(--ink-500);">{result.manufacturer}</div>
               </div>
-              <div style="text-align: right;">
-                <div class="font-mono font-bold {deltaClass(result.deltaE)}" style="font-size: 18px;">
-                  ΔE {result.deltaE.toFixed(2)}
-                </div>
-                <div style="font-size: 11px; color: var(--ink-500);">
-                  {result.similarity.toFixed(1)}% similar
-                </div>
-              </div>
-              <div style="width: 4px; height: 36px; border-radius: 999px; flex-shrink: 0; background: {deltaColor(result.deltaE)};"></div>
+              <DeltaBadge deltaE={result.deltaE} />
             </div>
           {/each}
         </div>

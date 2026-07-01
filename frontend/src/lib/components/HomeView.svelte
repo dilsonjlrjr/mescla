@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
   import PaintBottle from './PaintBottle.svelte';
+  import BrandMark from './BrandMark.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix';
@@ -41,64 +42,70 @@
       ]);
       stats = s;
       const pool = all || [];
-      const stride = Math.max(1, Math.floor(pool.length / 8));
-      shelf = pool.filter((_: Paint, i: number) => i % stride === 0).slice(0, 8);
+      const stride = Math.max(1, Math.floor(pool.length / 10));
+      shelf = pool.filter((_: Paint, i: number) => i % stride === 0).slice(0, 10);
     } catch (e) {
       console.error('Erro carregando stats:', e);
-      stats = { manufacturers: 11, productLines: 32, paints: 45, equivalences: 0, recipes: 0 };
     } finally {
       loading = false;
     }
   });
 
-  const quickActions: { view: View; title: string; desc: string; icon: 'grid' | 'pipette' | 'swap' | 'flask' }[] = [
-    { view: 'catalog', title: 'Catálogo completo', desc: 'Explore todas as tintas cadastradas por fabricante', icon: 'grid' },
-    { view: 'color-search', title: 'Buscar por cor', desc: 'Encontre tintas similares usando Delta E 2000', icon: 'pipette' },
-    { view: 'compare', title: 'Comparar tintas', desc: 'Compare cores lado a lado, até 6 por vez', icon: 'swap' },
-    { view: 'mix', title: 'Receita equivalente', desc: 'Encontre a mistura equivalente em outro fabricante', icon: 'flask' },
+  const steps = [
+    { n: '1', title: 'Escolha a tinta', desc: 'A cor que você viu num tutorial, numa caixa ou que acabou no pote.' },
+    { n: '2', title: 'Escolha sua marca', desc: 'A Mescla busca a melhor mistura usando só as tintas dela.' },
+    { n: '3', title: 'Misture com confiança', desc: 'Percentuais, selo de proximidade honesto e dicas de ajuste.' },
   ];
 
-  const ledger: { key: keyof Stats; label: string; icon: 'building' | 'layers' | 'palette' | 'swap' | 'flask'; view: View }[] = [
-    { key: 'manufacturers', label: 'Fabricantes', icon: 'building', view: 'manufacturers' },
-    { key: 'productLines', label: 'Linhas', icon: 'layers', view: 'catalog' },
-    { key: 'paints', label: 'Tintas', icon: 'palette', view: 'catalog' },
-    { key: 'equivalences', label: 'Equivalências', icon: 'swap', view: 'compare' },
-    { key: 'recipes', label: 'Receitas', icon: 'flask', view: 'mix' },
+  const tools: { view: View; title: string; desc: string; icon: 'grid' | 'pipette' | 'swap' | 'building' }[] = [
+    { view: 'catalog', title: 'Catálogo', desc: 'Todas as tintas, filtráveis por marca', icon: 'grid' },
+    { view: 'color-search', title: 'Buscar cor', desc: 'Da cor exata pra tinta mais próxima', icon: 'pipette' },
+    { view: 'compare', title: 'Comparar', desc: 'Até 6 tintas lado a lado', icon: 'swap' },
+    { view: 'manufacturers', title: 'Marcas', desc: 'Quem fabrica o quê', icon: 'building' },
   ];
 </script>
 
 <div class="page-container">
-  <!-- Hero -->
-  <div class="page-header animate-rise">
-    <div class="eyebrow mb-2">Bancada de pintura</div>
-    <div class="flex items-center gap-4">
-      <div class="hero-mark"></div>
-      <div>
-        <h1 class="page-title">Paint Match AI</h1>
-        <p class="page-subtitle">Base de conhecimento profissional pra pintores de miniaturas</p>
-      </div>
+  <!-- Hero: a tese do produto -->
+  <div class="hero animate-rise">
+    <div class="hero-brand">
+      <BrandMark size={52} />
+      <div class="hero-word font-display">Mescla</div>
     </div>
-    <div class="page-divider"></div>
+    <h1 class="hero-thesis font-display">
+      Você tem a cor em <em>uma</em> marca.<br />
+      Precisa dela em <em>outra</em>.
+    </h1>
+    <p class="hero-sub">
+      {#if loading}
+        Carregando o catálogo…
+      {:else if stats}
+        {stats.paints.toLocaleString('pt-BR')} tintas de {stats.manufacturers} marcas, comparadas como o olho vê — offline.
+      {/if}
+    </p>
+    <button class="btn-primary hero-cta" onclick={() => onNavigate('mix')}>
+      <Icon name="flask" size={17} />
+      Encontrar equivalência
+    </button>
   </div>
 
-  <!-- Ledger -->
-  <div class="ledger mb-10 animate-rise" style="animation-delay: 60ms;">
-    {#each ledger as item, i}
-      <button class="ledger-col" style={i > 0 ? 'border-left: 1px solid var(--ink-700);' : ''} onclick={() => onNavigate(item.view)}>
-        <span class="ledger-icon"><Icon name={item.icon} size={15} /></span>
-        {#if loading}
-          <div class="skeleton" style="height: 30px; width: 40px; margin: 6px 0;"></div>
-        {:else if stats}
-          <div class="ledger-value">{stats[item.key]}</div>
-        {/if}
-        <div class="ledger-label">{item.label}</div>
-      </button>
-    {/each}
+  <!-- Como funciona (guia inline, sempre visível) -->
+  <div class="mb-10 animate-rise" style="animation-delay: 80ms;">
+    <h2 class="section-title">Como funciona</h2>
+    <div class="steps">
+      {#each steps as s}
+        <div class="step">
+          <div class="step-n">{s.n}</div>
+          <div class="step-title">{s.title}</div>
+          <div class="step-desc">{s.desc}</div>
+        </div>
+      {/each}
+    </div>
   </div>
 
-  <!-- Shelf -->
+  <!-- Prateleira: amostra viva do catálogo -->
   {#if shelf.length > 0}
-    <div class="mb-10 animate-rise" style="animation-delay: 100ms;">
+    <div class="mb-10 animate-rise" style="animation-delay: 140ms;">
       <h2 class="section-title">Na prateleira</h2>
       <div class="shelf">
         {#each shelf as paint, i}
@@ -110,82 +117,67 @@
     </div>
   {/if}
 
-  <!-- Quick actions -->
-  <div class="mb-8">
+  <!-- Demais ferramentas -->
+  <div class="mb-8 animate-rise" style="animation-delay: 200ms;">
     <h2 class="section-title">Ferramentas</h2>
-    <div class="actions-list">
-      {#each quickActions as action, i}
-        <button class="row-card animate-rise" style="animation-delay: {140 + i * 50}ms;" onclick={() => onNavigate(action.view)}>
-          <div class="action-icon"><Icon name={action.icon} size={20} /></div>
-          <div class="flex-1">
-            <div class="action-title">{action.title}</div>
-            <div class="action-desc">{action.desc}</div>
+    <div class="tools-grid">
+      {#each tools as tool}
+        <button class="row-card" onclick={() => onNavigate(tool.view)}>
+          <div class="action-icon"><Icon name={tool.icon} size={20} /></div>
+          <div class="flex-1" style="min-width: 0;">
+            <div class="action-title">{tool.title}</div>
+            <div class="action-desc">{tool.desc}</div>
           </div>
-          <div class="action-arrow"><Icon name="chevron-left" size={16} /></div>
         </button>
       {/each}
     </div>
   </div>
-
 </div>
 
 <style>
-  .hero-mark {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    background: var(--lacquer);
-    box-shadow: inset 0 -4px 7px rgba(0, 0, 0, 0.25), inset 0 3px 4px rgba(255, 255, 255, 0.18);
+  .hero {
+    padding: 36px 0 40px;
+    margin-bottom: 40px;
+    border-bottom: 1px solid var(--ink-700);
   }
 
-  .ledger {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    background: var(--ink-900);
-    border: 1px solid var(--ink-700);
-    border-radius: 10px;
+  .hero-brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 26px;
   }
 
-  .ledger-col {
-    display: block;
-    width: 100%;
-    padding: 18px 20px;
-    text-align: left;
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    cursor: pointer;
-    font: inherit;
-    color: inherit;
-    transition: background 0.15s ease;
-  }
-
-  .ledger-col:hover {
-    background: var(--ink-850);
-  }
-
-  .ledger-icon {
-    display: inline-flex;
-    color: var(--ink-500);
-    margin-bottom: 10px;
-  }
-
-  .ledger-value {
-    font-family: var(--font-display);
-    font-size: 1.875rem;
-    font-weight: 600;
+  .hero-word {
+    font-size: 21px;
+    font-weight: 700;
     color: var(--paper);
-    line-height: 1;
-    margin-bottom: 6px;
+    letter-spacing: -0.01em;
   }
 
-  .ledger-label {
-    font-size: 10.5px;
+  .hero-thesis {
+    font-size: clamp(1.9rem, 4.5vw, 2.9rem);
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+    line-height: 1.14;
+    color: var(--paper);
+    letter-spacing: -0.015em;
+    margin-bottom: 14px;
+    max-width: 640px;
+  }
+
+  .hero-thesis em {
+    font-style: italic;
+    color: var(--lacquer-deep);
+  }
+
+  .hero-sub {
+    font-size: 14px;
     color: var(--ink-500);
+    margin-bottom: 26px;
+  }
+
+  .hero-cta {
+    max-width: 300px;
   }
 
   .section-title {
@@ -215,10 +207,10 @@
     transform: translateY(-3px);
   }
 
-  .actions-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+  .tools-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
   }
 
   .action-icon {
@@ -236,25 +228,12 @@
   .action-title {
     font-weight: 600;
     font-size: 14px;
-    color: var(--paper);
+    color: var(--ink-100);
     margin-bottom: 2px;
   }
 
   .action-desc {
     font-size: 12.5px;
     color: var(--ink-500);
-  }
-
-  .action-arrow {
-    display: flex;
-    flex-shrink: 0;
-    color: var(--ink-600);
-    transform: rotate(180deg);
-    transition: transform 0.15s ease, color 0.15s ease;
-  }
-
-  :global(.row-card:hover) .action-arrow {
-    transform: rotate(180deg) translateX(3px);
-    color: var(--lacquer);
   }
 </style>

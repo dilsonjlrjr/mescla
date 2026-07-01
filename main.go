@@ -22,7 +22,7 @@ func main() {
 	defer paintService.Close()
 
 	app := application.New(application.Options{
-		Name:        "Paint Match AI",
+		Name:        "Mescla",
 		Description: "Ferramenta profissional para pintores de miniaturas",
 		Services: []application.Service{
 			application.NewService(paintService),
@@ -36,7 +36,7 @@ func main() {
 	})
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:            "Paint Match AI",
+		Title:            "Mescla",
 		Width:            1280,
 		Height:           800,
 		MinWidth:         1024,
@@ -52,7 +52,7 @@ func main() {
 
 	confirmQuit := func() {
 		dialog := app.Dialog.Question().
-			SetTitle("Sair do Paint Match AI").
+			SetTitle("Sair da Mescla").
 			SetMessage("Tem certeza que deseja sair?")
 
 		sair := dialog.AddButton("Sair")
@@ -74,10 +74,10 @@ func main() {
 
 	systray := app.SystemTray.New()
 	systray.SetIcon(trayIcon)
-	systray.SetLabel("Paint Match AI")
+	systray.SetLabel("Mescla")
 
 	trayMenu := app.NewMenu()
-	trayMenu.Add("Abrir Paint Match AI").OnClick(func(ctx *application.Context) {
+	trayMenu.Add("Abrir Mescla").OnClick(func(ctx *application.Context) {
 		window.Show()
 		window.Focus()
 	})

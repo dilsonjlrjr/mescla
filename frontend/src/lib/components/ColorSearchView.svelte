@@ -4,6 +4,8 @@
   import Slider from '@smui/slider';
   import LinearProgress from '@smui/linear-progress';
   import Icon from './Icon.svelte';
+  import DeltaBadge from './DeltaBadge.svelte';
+  import PaintBottle from './PaintBottle.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   let targetR = $state(180);
@@ -28,25 +30,12 @@
     }
   }
 
-  function deltaClass(de: number): string {
-    if (de < 3) return 'delta-excellent';
-    if (de < 6) return 'delta-good';
-    if (de < 10) return 'delta-fair';
-    return 'delta-poor';
-  }
-
-  function deltaColor(de: number): string {
-    if (de < 3) return 'var(--delta-excellent)';
-    if (de < 6) return 'var(--delta-good)';
-    if (de < 10) return 'var(--delta-fair)';
-    return 'var(--delta-poor)';
-  }
 </script>
 
 <div class="page-container">
   <div class="page-header animate-rise">
-    <h1 class="page-title">Buscar por cor</h1>
-    <p class="page-subtitle">Encontre tintas similares usando Delta E 2000</p>
+    <h1 class="page-title">Buscar cor</h1>
+    <p class="page-subtitle">Monte a cor exata e descubra qual tinta chega mais perto dela</p>
     <div class="page-divider"></div>
   </div>
 
@@ -101,9 +90,10 @@
           <LinearProgress indeterminate style="width: 200px;" />
         </div>
       {:else if hasSearched && results.length === 0}
-        <div class="panel" style="text-align: center; padding: 80px 0;">
-          <span style="color: var(--ink-600); display: flex; justify-content: center;"><Icon name="search-off" size={40} /></span>
-          <p class="font-medium mt-4" style="color: var(--ink-500);">Nenhuma tinta similar encontrada</p>
+        <div class="panel empty-state">
+          <span class="empty-icon"><Icon name="search-off" size={40} /></span>
+          <p class="empty-title">Nenhuma tinta dentro do limite</p>
+          <p class="empty-hint">Aumente o "ΔE máximo" (12 já mostra cores visivelmente diferentes) e busque de novo.</p>
         </div>
       {:else if results.length > 0}
         <div style="display: flex; flex-direction: column; gap: 10px;">
@@ -112,27 +102,24 @@
           </div>
           {#each results as result, i}
             <div class="panel result-row animate-slide" style="animation-delay: {i * 40}ms;">
-              <div class="swatch-flat" style="width: 52px; height: 52px; background: rgb({result.r}, {result.g}, {result.b});"></div>
+              <PaintBottle r={result.r} g={result.g} b={result.b} size={52} />
               <div style="flex: 1; min-width: 0;">
                 <div class="font-semibold text-sm text-white truncate">{result.name}</div>
                 <div style="font-size: 12px; color: var(--ink-500);">{result.manufacturer}</div>
               </div>
-              <div style="text-align: right; flex-shrink: 0;">
-                <div class="font-mono font-bold {deltaClass(result.deltaE)}">
-                  ΔE {result.deltaE.toFixed(1)}
-                </div>
-                <div style="font-size: 11px; color: var(--ink-500);">
-                  {result.similarity.toFixed(1)}% similar
-                </div>
-              </div>
-              <div style="width: 4px; height: 36px; border-radius: 999px; flex-shrink: 0; background: {deltaColor(result.deltaE)};"></div>
+              <DeltaBadge
+                deltaE={result.deltaE}
+                size="sm"
+                pair={{ r1: targetR, g1: targetG, b1: targetB, r2: result.r, g2: result.g, b2: result.b }}
+              />
             </div>
           {/each}
         </div>
       {:else}
-        <div class="panel" style="text-align: center; padding: 80px 0;">
-          <span style="color: var(--ink-600); display: flex; justify-content: center;"><Icon name="palette" size={40} /></span>
-          <p class="font-medium mt-4" style="color: var(--ink-500);">Ajuste a cor alvo e clique em buscar</p>
+        <div class="panel empty-state">
+          <span class="empty-icon"><Icon name="palette" size={40} /></span>
+          <p class="empty-title">Monte a cor nos controles ao lado</p>
+          <p class="empty-hint">Arraste os canais R, G e B até a cor do preview bater com o que você procura.</p>
         </div>
       {/if}
     </div>

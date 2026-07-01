@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import BrandMark from './BrandMark.svelte';
 
   type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix';
 
@@ -8,17 +9,19 @@
     collapsed: boolean;
     onNavigate: (view: View) => void;
     onToggle: () => void;
+    onHelp: () => void;
   }
 
-  let { currentView, collapsed, onNavigate, onToggle }: Props = $props();
+  let { currentView, collapsed, onNavigate, onToggle, onHelp }: Props = $props();
 
+  // Ordenado pela jornada: a equivalência é o coração do produto.
   const navItems: { id: View; label: string; icon: 'home' | 'grid' | 'building' | 'pipette' | 'swap' | 'flask' }[] = [
     { id: 'home', label: 'Início', icon: 'home' },
+    { id: 'mix', label: 'Equivalência', icon: 'flask' },
     { id: 'catalog', label: 'Catálogo', icon: 'grid' },
-    { id: 'manufacturers', label: 'Fabricantes', icon: 'building' },
-    { id: 'color-search', label: 'Buscar Cor', icon: 'pipette' },
+    { id: 'color-search', label: 'Buscar cor', icon: 'pipette' },
     { id: 'compare', label: 'Comparar', icon: 'swap' },
-    { id: 'mix', label: 'Receita', icon: 'flask' },
+    { id: 'manufacturers', label: 'Marcas', icon: 'building' },
   ];
 </script>
 
@@ -26,11 +29,11 @@
   <div class="titlebar-spacer" style="--wails-draggable: drag;"></div>
 
   <div class="sidebar-logo">
-    <div class="logo-mark"></div>
+    <BrandMark size={30} />
     {#if !collapsed}
       <div>
-        <div class="logo-word">Paint Match</div>
-        <div class="logo-tag">AI</div>
+        <div class="logo-word">Mescla</div>
+        <div class="logo-tag">cor certa, qualquer marca</div>
       </div>
     {/if}
   </div>
@@ -51,6 +54,13 @@
       </button>
     {/each}
   </nav>
+
+  <button class="nav-item help-item" onclick={onHelp} title={collapsed ? 'Guia de uso' : undefined}>
+    <span class="nav-icon"><Icon name="info" size={18} /></span>
+    {#if !collapsed}
+      <span class="nav-label">Guia de uso</span>
+    {/if}
+  </button>
 
   {#if !collapsed}
     <div class="sidebar-version">v1.0.0</div>
@@ -90,30 +100,23 @@
     border-bottom: 1px solid var(--ink-700);
   }
 
-  .logo-mark {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    background: var(--lacquer);
-    box-shadow: inset 0 -3px 5px rgba(0, 0, 0, 0.25), inset 0 2px 3px rgba(255, 255, 255, 0.35);
-  }
-
   .logo-word {
     font-family: var(--font-display);
-    font-size: 15px;
-    font-weight: 600;
+    font-size: 17px;
+    font-weight: 700;
     color: var(--paper);
-    line-height: 1.2;
+    line-height: 1.15;
     white-space: nowrap;
+    letter-spacing: -0.01em;
   }
 
   .logo-tag {
     font-family: var(--font-mono);
-    font-size: 9px;
-    font-weight: 600;
-    letter-spacing: 0.22em;
-    color: var(--lacquer-deep);
+    font-size: 8.5px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: var(--ink-500);
+    white-space: nowrap;
   }
 
   .sidebar-nav {
@@ -170,6 +173,14 @@
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
+  }
+
+  .help-item {
+    margin: 0 8px;
+    width: calc(100% - 16px);
+    border-top: 1px solid var(--ink-700);
+    border-radius: 0;
+    padding-top: 14px;
   }
 
   .sidebar-version {
