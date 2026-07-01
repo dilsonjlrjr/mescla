@@ -61,6 +61,7 @@ type AssetDownloader struct {
 	db     *sql.DB
 	config AssetDownloaderConfig
 	client *http.Client
+	dbMu   sync.Mutex // serializa escritas concorrentes; SQLite só aceita um escritor por vez
 }
 
 // NewAssetDownloader cria um novo downloader
@@ -116,8 +117,11 @@ func (d *AssetDownloader) DownloadManufacturerLogos() error {
 			return nil // Continua para próximo
 		}
 
-		// Atualizar banco
+		// Atualizar banco (serializado: SQLite não aceita escritas concorrentes)
 		relPath, _ := filepath.Rel(".", destPath)
+		d.dbMu.Lock()
+		defer d.dbMu.Unlock()
+
 		_, err := d.db.Exec(
 			"UPDATE manufacturers SET logo_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
 			relPath, t.id,

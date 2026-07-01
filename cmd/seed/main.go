@@ -40,6 +40,7 @@ func main() {
 	pragmas := []string{
 		"PRAGMA foreign_keys = ON",
 		"PRAGMA journal_mode = WAL",
+		"PRAGMA busy_timeout = 5000",
 	}
 	for _, p := range pragmas {
 		if _, err := db.Exec(p); err != nil {
