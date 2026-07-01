@@ -88,7 +88,7 @@
   }
 
   .titlebar-spacer {
-    height: 30px;
+    height: 52px;
     flex-shrink: 0;
   }
 
