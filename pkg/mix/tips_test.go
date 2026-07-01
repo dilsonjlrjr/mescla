@@ -115,6 +115,36 @@ func TestGenerateTipsSingleHueIngredientHonestLimitation(t *testing.T) {
 	}
 }
 
+// Regressão: catálogo do fabricante alvo só tem branco e preto — misturar os
+// dois nunca produz nada saturado, só tons de cinza. Pedir equivalente de um
+// azul saturado com esse catálogo deve avisar que falta o pigmento certo, e
+// NUNCA fingir uma dica de ajuste (não tem ingrediente saturado pra ajustar).
+func TestGenerateTipsNoSaturatedIngredientsHonestLimitation(t *testing.T) {
+	recipe := Recipe{
+		Ingredients: []Ingredient{
+			{Paint: PaintInput{ID: 1, Name: "Branco", R: 233, G: 230, B: 221}, Percentage: 15},
+			{Paint: PaintInput{ID: 2, Name: "Preto", R: 32, G: 31, B: 29}, Percentage: 85},
+		},
+		ResultR: 62, ResultG: 61, ResultB: 58, // cinza escuro, sem saturação
+	}
+
+	// Alvo: um azul saturado (AK Interactive "Blue").
+	tips := GenerateTips(48, 66, 107, recipe)
+
+	found := false
+	for _, tip := range tips {
+		if strings.Contains(tip, "não tem nenhuma tinta na família do azul") {
+			found = true
+		}
+		if strings.Contains(tip, "aumente o Preto") || strings.Contains(tip, "aumente o Branco") && strings.Contains(tip, "reduza") {
+			t.Errorf("Não deveria sugerir rebalanceamento de matiz sem nenhum ingrediente saturado, got: %v", tips)
+		}
+	}
+	if !found {
+		t.Errorf("Esperava aviso de que falta pigmento azul no catálogo, got: %v", tips)
+	}
+}
+
 func TestHueBucketName(t *testing.T) {
 	cases := map[float64]string{
 		0:   "vermelho",
