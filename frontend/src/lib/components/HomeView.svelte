@@ -54,7 +54,7 @@
     { view: 'catalog', title: 'Catálogo completo', desc: 'Explore todas as tintas cadastradas por fabricante', icon: 'grid' },
     { view: 'color-search', title: 'Buscar por cor', desc: 'Encontre tintas similares usando Delta E 2000', icon: 'pipette' },
     { view: 'compare', title: 'Comparar tintas', desc: 'Compare cores lado a lado, até 6 por vez', icon: 'swap' },
-    { view: 'mix', title: 'Receita de mistura', desc: 'Descubra a fórmula pra chegar em qualquer cor', icon: 'flask' },
+    { view: 'mix', title: 'Receita equivalente', desc: 'Encontre a mistura equivalente em outro fabricante', icon: 'flask' },
   ];
 
   const ledger: { key: keyof Stats; label: string; icon: 'building' | 'layers' | 'palette' | 'swap' | 'flask'; view: View }[] = [

@@ -88,15 +88,6 @@ type SearchResultDTO struct {
 	Similarity   float64 `json:"similarity"`
 }
 
-type RecipeDTO struct {
-	Ingredients []RecipeIngredientDTO `json:"ingredients"`
-	ResultR     uint8                 `json:"resultR"`
-	ResultG     uint8                 `json:"resultG"`
-	ResultB     uint8                 `json:"resultB"`
-	DeltaE      float64               `json:"deltaE"`
-	Method      string                `json:"method"`
-}
-
 type RecipeIngredientDTO struct {
 	PaintID    int64   `json:"paintId"`
 	Name       string  `json:"name"`
@@ -104,6 +95,23 @@ type RecipeIngredientDTO struct {
 	R          uint8   `json:"r"`
 	G          uint8   `json:"g"`
 	B          uint8   `json:"b"`
+}
+
+type EquivalentRecipeDTO struct {
+	SourcePaintID      int64                 `json:"sourcePaintId"`
+	SourceName         string                `json:"sourceName"`
+	SourceManufacturer string                `json:"sourceManufacturer"`
+	SourceR            uint8                 `json:"sourceR"`
+	SourceG            uint8                 `json:"sourceG"`
+	SourceB            uint8                 `json:"sourceB"`
+	TargetManufacturer string                `json:"targetManufacturer"`
+	Ingredients        []RecipeIngredientDTO `json:"ingredients"`
+	ResultR            uint8                 `json:"resultR"`
+	ResultG            uint8                 `json:"resultG"`
+	ResultB            uint8                 `json:"resultB"`
+	DeltaE             float64               `json:"deltaE"`
+	Method             string                `json:"method"`
+	Tips               []string              `json:"tips"`
 }
 
 type ManufacturerDTO struct {
@@ -343,21 +351,30 @@ func (s *PaintService) FindEquivalences(paintID int64) ([]SearchResultDTO, error
 	return dto, nil
 }
 
-func (s *PaintService) SuggestRecipe(r, g, b uint8, maxPaints int) (RecipeDTO, error) {
-	if maxPaints <= 0 {
-		maxPaints = 20
-	}
-
-	available, err := s.loadAvailablePaints(maxPaints)
+// SuggestEquivalentRecipe busca a tinta de origem (de qualquer fabricante) e
+// monta uma receita de mistura usando somente tintas do fabricante de destino
+// que aproxima a cor da origem, junto com dicas de ajuste em texto.
+func (s *PaintService) SuggestEquivalentRecipe(sourcePaintID int64, targetManufacturerID int64) (EquivalentRecipeDTO, error) {
+	source, err := s.GetPaintByID(sourcePaintID)
 	if err != nil {
-		return RecipeDTO{}, err
+		return EquivalentRecipeDTO{}, fmt.Errorf("tinta de origem não encontrada: %w", err)
+	}
+	if source.R == 0 && source.G == 0 && source.B == 0 {
+		return EquivalentRecipeDTO{}, fmt.Errorf("tinta de origem não possui dados de cor cadastrados")
 	}
 
-	engine := mix.NewEngine()
-	target := [3]float64{float64(r), float64(g), float64(b)}
-	recipe := engine.SuggestRecipe(target, available)
+	candidates, err := s.loadPaintsByManufacturerID(targetManufacturerID)
+	if err != nil {
+		return EquivalentRecipeDTO{}, err
+	}
+	if len(candidates) == 0 {
+		return EquivalentRecipeDTO{}, fmt.Errorf("fabricante de destino não possui tintas cadastradas com cor")
+	}
 
-	var ingredients []RecipeIngredientDTO
+	targetL, targetA, targetB := color.RGBToLab(source.R, source.G, source.B)
+	recipe := mix.SuggestBestSubset([3]float64{targetL, targetA, targetB}, candidates, 3)
+
+	ingredients := make([]RecipeIngredientDTO, 0, len(recipe.Ingredients))
 	for _, ing := range recipe.Ingredients {
 		ingredients = append(ingredients, RecipeIngredientDTO{
 			PaintID:    ing.Paint.ID,
@@ -369,26 +386,41 @@ func (s *PaintService) SuggestRecipe(r, g, b uint8, maxPaints int) (RecipeDTO, e
 		})
 	}
 
-	return RecipeDTO{
-		Ingredients: ingredients,
-		ResultR:     recipe.ResultR,
-		ResultG:     recipe.ResultG,
-		ResultB:     recipe.ResultB,
-		DeltaE:      recipe.DeltaE,
-		Method:      recipe.Method,
+	tips := mix.GenerateTips(source.R, source.G, source.B, recipe)
+
+	var targetMfrName string
+	s.db.QueryRow("SELECT name FROM manufacturers WHERE id = ?", targetManufacturerID).Scan(&targetMfrName)
+
+	return EquivalentRecipeDTO{
+		SourcePaintID:      source.ID,
+		SourceName:         source.Name,
+		SourceManufacturer: source.Manufacturer,
+		SourceR:            source.R,
+		SourceG:            source.G,
+		SourceB:            source.B,
+		TargetManufacturer: targetMfrName,
+		Ingredients:        ingredients,
+		ResultR:            recipe.ResultR,
+		ResultG:            recipe.ResultG,
+		ResultB:            recipe.ResultB,
+		DeltaE:             recipe.DeltaE,
+		Method:             recipe.Method,
+		Tips:               tips,
 	}, nil
 }
 
-func (s *PaintService) loadAvailablePaints(limit int) ([]mix.PaintInput, error) {
+// loadPaintsByManufacturerID carrega as tintas com cor cadastrada de um único
+// fabricante — pool de candidatos para SuggestBestSubset. Usa JOIN (não
+// LEFT JOIN + COALESCE como o resto do arquivo) de propósito: tinta sem RGB
+// não deve virar candidato "preto" silencioso numa receita de mistura.
+func (s *PaintService) loadPaintsByManufacturerID(manufacturerID int64) ([]mix.PaintInput, error) {
 	query := `
-		SELECT p.id, p.name, COALESCE(pc.rgb_r, 0), COALESCE(pc.rgb_g, 0), COALESCE(pc.rgb_b, 0)
+		SELECT p.id, p.name, pc.rgb_r, pc.rgb_g, pc.rgb_b
 		FROM paints p
 		JOIN paint_colors pc ON pc.paint_id = p.id
-		WHERE pc.rgb_r IS NOT NULL
-		ORDER BY RANDOM()
-		LIMIT ?
+		WHERE p.manufacturer_id = ?
 	`
-	rows, err := s.db.Query(query, limit)
+	rows, err := s.db.Query(query, manufacturerID)
 	if err != nil {
 		return nil, err
 	}

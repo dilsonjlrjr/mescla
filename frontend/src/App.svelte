@@ -5,7 +5,7 @@
   import ManufacturersView from './lib/components/ManufacturersView.svelte';
   import ColorSearchView from './lib/components/ColorSearchView.svelte';
   import CompareView from './lib/components/CompareView.svelte';
-  import MixView from './lib/components/MixView.svelte';
+  import EquivalentRecipeView from './lib/components/EquivalentRecipeView.svelte';
 
   type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix';
 
@@ -32,7 +32,7 @@
     {:else if currentView === 'compare'}
       <CompareView />
     {:else if currentView === 'mix'}
-      <MixView />
+      <EquivalentRecipeView />
     {/if}
   </main>
 </div>

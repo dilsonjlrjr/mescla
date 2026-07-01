@@ -18,7 +18,7 @@
     { id: 'manufacturers', label: 'Fabricantes', icon: 'building' },
     { id: 'color-search', label: 'Buscar Cor', icon: 'pipette' },
     { id: 'compare', label: 'Comparar', icon: 'swap' },
-    { id: 'mix', label: 'Mistura', icon: 'flask' },
+    { id: 'mix', label: 'Receita', icon: 'flask' },
   ];
 </script>
 

@@ -66,11 +66,25 @@
    --notched via JS; se essa medição falhar (comum em WKWebView no boot,
    e também em Textfields com valor pré-preenchido ou focados), a borda
    cruza o texto do label. Em vez de confiar nessa classe, reagimos ao
-   estado real do label (flutuado ou não) — cobre Select, Textfield com
-   valor, Textfield focado, etc., sem deixar vão vazio quando o label
-   está inline (Textfield vazio e sem foco, que não tem notch de verdade). */
+   estado real do label (flutuado ou não) — cobre Textfield com valor,
+   Textfield focado, etc., sem deixar vão vazio quando o label está
+   inline (Textfield vazio e sem foco, que não tem notch de verdade). */
 .mdc-notched-outline__notch:has(.mdc-floating-label--float-above) {
   border-top: none;
+}
+
+/* No Select o label deveria ficar SEMPRE flutuado (nunca tem estado "inline"
+   de verdade nesse app), mas a classe --float-above do SMUI se perde de
+   forma intermitente depois de re-renders não relacionados (observado após
+   um sibling reativo mudar de estado) — isso desfaz tanto o float visual
+   quanto a regra acima. Forçamos o Select via CSS puro, sem depender da
+   classe JS: nunca há um caso legítimo de label "não flutuado" pra perder. */
+.mdc-select .mdc-notched-outline__notch {
+  border-top: none;
+}
+
+.mdc-select .mdc-floating-label {
+  transform: translateY(-106%) scale(0.75);
 }
 
 * {
