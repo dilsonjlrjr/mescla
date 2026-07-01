@@ -293,7 +293,12 @@ func GetPaintImporterSeed() Seed {
 			}
 
 			// Popular tintas
-			return SeedPaints(db)
+			if err := SeedPaints(db); err != nil {
+				return err
+			}
+
+			// Popular cores reais das tintas (RGB + espaços derivados)
+			return SeedPaintColors(db)
 		},
 	}
 }
