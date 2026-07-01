@@ -49,7 +49,10 @@ CREATE TABLE IF NOT EXISTS product_lines (
     description TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (manufacturer_id) REFERENCES manufacturers(id)
+    FOREIGN KEY (manufacturer_id) REFERENCES manufacturers(id),
+    -- Sem esta UNIQUE o "ON CONFLICT DO NOTHING" do seed nunca dispara e
+    -- reimportar o catálogo duplica linhas de produto (e, em cascata, tintas).
+    UNIQUE(manufacturer_id, name)
 );
 
 CREATE INDEX IF NOT EXISTS idx_product_lines_manufacturer ON product_lines(manufacturer_id);

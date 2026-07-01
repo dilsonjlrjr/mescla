@@ -5,6 +5,7 @@
   import LinearProgress from '@smui/linear-progress';
   import Icon from './Icon.svelte';
   import PaintSearchInput from './PaintSearchInput.svelte';
+  import PaintBottle from './PaintBottle.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   interface Paint {
@@ -141,6 +142,21 @@
           <LinearProgress indeterminate style="width: 200px;" />
         </div>
       {:else if result}
+        <!-- Aviso: cor irreproduzível com o catálogo de destino -->
+        {#if !result.reproducible}
+          <div class="warn-banner mb-5 animate-rise">
+            <span class="warn-icon"><Icon name="info" size={18} /></span>
+            <div>
+              <div class="warn-title">Não é possível reproduzir esta cor com {result.targetManufacturer}</div>
+              <p class="warn-text">
+                O catálogo da {result.targetManufacturer} não tem os pigmentos necessários para chegar
+                nesta cor (ΔE {result.deltaE.toFixed(1)} — diferença muito grande). A mistura abaixo é
+                apenas a <strong>aproximação mais próxima possível</strong>, não uma receita utilizável.
+              </p>
+            </div>
+          </div>
+        {/if}
+
         <!-- Result color -->
         <div class="panel p-5 mb-5">
           <h3 class="font-display text-sm font-semibold text-white mb-4">Cor resultante</h3>
@@ -158,14 +174,16 @@
 
         <!-- Ingredients -->
         <div class="panel p-5 mb-5">
-          <h3 class="font-display text-sm font-semibold text-white mb-4">Ingredientes ({result.ingredients?.length || 0})</h3>
+          <h3 class="font-display text-sm font-semibold text-white mb-4">
+            {result.reproducible ? 'Ingredientes' : 'Melhor aproximação'} ({result.ingredients?.length || 0})
+          </h3>
 
           {#if result.ingredients}
             <div style="display: flex; flex-direction: column; gap: 12px;">
               {#each result.ingredients as ing, i}
                 <div class="ingredient-row animate-slide" style="animation-delay: {i * 40}ms;">
                   <div class="flex items-center gap-4">
-                    <div class="swatch-flat" style="width: 40px; height: 40px; background: rgb({ing.r}, {ing.g}, {ing.b}); flex-shrink: 0;"></div>
+                    <PaintBottle r={ing.r} g={ing.g} b={ing.b} size={46} />
                     <div style="flex: 1; min-width: 0;">
                       <div class="font-semibold text-sm text-white truncate">{ing.name}</div>
                     </div>
@@ -216,5 +234,35 @@
     padding: 12px;
     border: 1px solid var(--ink-700);
     border-radius: 8px;
+  }
+
+  .warn-banner {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 16px 18px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--delta-poor) 45%, transparent);
+    background: color-mix(in srgb, var(--delta-poor) 12%, transparent);
+  }
+
+  .warn-icon {
+    color: var(--delta-poor);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .warn-title {
+    font-weight: 600;
+    font-size: 13.5px;
+    color: var(--delta-poor);
+    margin-bottom: 4px;
+  }
+
+  .warn-text {
+    font-size: 12.5px;
+    color: var(--ink-300);
+    line-height: 1.55;
+    margin: 0;
   }
 </style>

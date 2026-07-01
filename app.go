@@ -111,8 +111,18 @@ type EquivalentRecipeDTO struct {
 	ResultB            uint8                 `json:"resultB"`
 	DeltaE             float64               `json:"deltaE"`
 	Method             string                `json:"method"`
-	Tips               []string              `json:"tips"`
+	// Reproducible indica se a mistura chega perto o bastante da cor de origem
+	// pra ser considerada uma equivalência de verdade. Quando falso, o fabricante
+	// de destino não tem os pigmentos necessários e os "ingredientes" são só a
+	// melhor aproximação possível — não uma receita utilizável.
+	Reproducible bool     `json:"reproducible"`
+	Tips         []string `json:"tips"`
 }
+
+// maxViableDeltaE é o limite de ΔE2000 acima do qual uma cor é considerada
+// irreproduzível com o catálogo de destino. ΔE ~10 já é uma diferença de cor
+// óbvia a olho nu; acima disso a "receita" não replica a cor, só a aproxima.
+const maxViableDeltaE = 10.0
 
 type ManufacturerDTO struct {
 	ID         int64  `json:"id"`
@@ -405,6 +415,7 @@ func (s *PaintService) SuggestEquivalentRecipe(sourcePaintID int64, targetManufa
 		ResultB:            recipe.ResultB,
 		DeltaE:             recipe.DeltaE,
 		Method:             recipe.Method,
+		Reproducible:       recipe.DeltaE <= maxViableDeltaE,
 		Tips:               tips,
 	}, nil
 }

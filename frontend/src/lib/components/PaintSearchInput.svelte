@@ -1,6 +1,7 @@
 <script lang="ts">
   import Textfield from '@smui/textfield';
   import Icon from './Icon.svelte';
+  import PaintBottle from './PaintBottle.svelte';
 
   interface PaintOption {
     id: number;
@@ -42,7 +43,7 @@
 
 {#if selected}
   <div class="paint-search-chip">
-    <div class="swatch-flat" style="width: 40px; height: 40px; background: rgb({selected.r}, {selected.g}, {selected.b}); flex-shrink: 0;"></div>
+    <PaintBottle r={selected.r} g={selected.g} b={selected.b} size={44} />
     <div style="flex: 1; min-width: 0;">
       <div class="font-semibold text-sm text-white truncate">{selected.name}</div>
       <div style="font-size: 11px; color: var(--ink-500);">{selected.manufacturer}</div>
@@ -62,7 +63,7 @@
         {#if results.length > 0}
           {#each results as p (p.id)}
             <button class="paint-search-result" onclick={() => pick(p)}>
-              <div class="swatch-flat" style="width: 28px; height: 28px; background: rgb({p.r}, {p.g}, {p.b}); flex-shrink: 0;"></div>
+              <PaintBottle r={p.r} g={p.g} b={p.b} size={32} />
               <div style="flex: 1; min-width: 0;">
                 <div class="font-medium text-sm text-white truncate">{p.name}</div>
                 <div style="font-size: 11px; color: var(--ink-500);">{p.manufacturer}</div>
