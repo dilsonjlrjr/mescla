@@ -1,4 +1,6 @@
 <script lang="ts">
+  import PaintBottle from './PaintBottle.svelte';
+
   interface Paint {
     id: number;
     name: string;
@@ -24,15 +26,10 @@
 </script>
 
 <button class="chip" {onclick}>
-  <div class="chip-swatch" style="background: rgb({paint.r}, {paint.g}, {paint.b});">
-    {#if paint.swatchPath}
-      <img
-        src="file://{paint.swatchPath}"
-        alt={paint.name}
-        loading="lazy"
-        onerror={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
-      />
-    {/if}
+  <div class="chip-swatch" style="background: color-mix(in srgb, rgb({paint.r}, {paint.g}, {paint.b}) 22%, var(--ink-800));">
+    <div class="chip-bottle">
+      <PaintBottle r={paint.r} g={paint.g} b={paint.b} size={96} />
+    </div>
     <span class="chip-punch"></span>
     <span class="chip-code">{paint.code}</span>
   </div>

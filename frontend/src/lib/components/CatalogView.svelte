@@ -6,6 +6,7 @@
   import Button from '@smui/button';
   import Icon from './Icon.svelte';
   import PaintCard from './PaintCard.svelte';
+  import PaintBottle from './PaintBottle.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix';
@@ -155,6 +156,9 @@
   {#if selectedPaint}
     <!-- Color hero -->
     <div class="color-hero" style="background: rgb({selectedPaint.r}, {selectedPaint.g}, {selectedPaint.b});">
+      <div class="hero-bottle">
+        <PaintBottle r={selectedPaint.r} g={selectedPaint.g} b={selectedPaint.b} size={104} label={selectedPaint.code} />
+      </div>
       <button class="close-btn" onclick={() => dialogOpen = false} aria-label="Fechar">
         <Icon name="close" size={18} />
       </button>
@@ -223,6 +227,15 @@
     width: 100%;
     height: 128px;
     position: relative;
+  }
+
+  .hero-bottle {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
   }
 
   .close-btn {

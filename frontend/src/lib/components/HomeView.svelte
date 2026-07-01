@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
+  import PaintBottle from './PaintBottle.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix';
@@ -101,7 +102,9 @@
       <h2 class="section-title">Na prateleira</h2>
       <div class="shelf">
         {#each shelf as paint, i}
-          <button class="shelf-swatch swatch-flat" style="background: rgb({paint.r}, {paint.g}, {paint.b}); animation-delay: {i * 30}ms;" title="{paint.name} — {paint.manufacturer}" onclick={() => onNavigate('catalog')}></button>
+          <button class="shelf-swatch" style="animation-delay: {i * 30}ms;" title="{paint.name} — {paint.manufacturer}" onclick={() => onNavigate('catalog')}>
+            <PaintBottle r={paint.r} g={paint.g} b={paint.b} size={58} />
+          </button>
         {/each}
       </div>
     </div>
@@ -213,9 +216,8 @@
   }
 
   .shelf-swatch {
-    width: 46px;
-    height: 46px;
     border: none;
+    background: transparent;
     cursor: pointer;
     padding: 0;
     transition: transform 0.15s ease;
