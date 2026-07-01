@@ -4,6 +4,7 @@
   import Slider from '@smui/slider';
   import LinearProgress from '@smui/linear-progress';
   import Icon from './Icon.svelte';
+  import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   let targetR = $state(180);
   let targetG = $state(120);
@@ -15,8 +16,7 @@
   async function doMix() {
     mixing = true;
     try {
-      const wailsjs = await import('../../../wailsjs/go/main/PaintService');
-      recipe = await wailsjs.SuggestRecipe(targetR, targetG, targetB, maxPaints);
+      recipe = await PaintService.SuggestRecipe(targetR, targetG, targetB, maxPaints);
     } catch (e) {
       console.error('Erro sugerindo mistura:', e);
       recipe = null;

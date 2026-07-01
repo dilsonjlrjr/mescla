@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
+  import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   type View = 'home' | 'catalog' | 'color-search' | 'compare' | 'mix';
 
@@ -33,10 +34,9 @@
 
   onMount(async () => {
     try {
-      const wailsjs = await import('../../../wailsjs/go/main/PaintService');
       const [s, all] = await Promise.all([
-        wailsjs.GetStats(),
-        wailsjs.GetAllPaints(),
+        PaintService.GetStats(),
+        PaintService.GetAllPaints(),
       ]);
       stats = s;
       const pool = all || [];

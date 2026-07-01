@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import Button from '@smui/button';
   import Icon from './Icon.svelte';
+  import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   interface Paint {
     id: number;
@@ -21,8 +22,7 @@
 
   onMount(async () => {
     try {
-      const wailsjs = await import('../../../wailsjs/go/main/PaintService');
-      allPaints = await wailsjs.GetAllPaints() || [];
+      allPaints = await PaintService.GetAllPaints() || [];
     } catch (e) {
       console.error('Erro:', e);
     } finally {
@@ -42,8 +42,7 @@
     if (selectedIDs.length < 2) return;
     comparing = true;
     try {
-      const wailsjs = await import('../../../wailsjs/go/main/PaintService');
-      results = await wailsjs.CompareColors(selectedIDs) || [];
+      results = await PaintService.CompareColors(selectedIDs) || [];
     } catch (e) {
       console.error('Erro comparando:', e);
       results = [];

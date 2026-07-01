@@ -5,6 +5,7 @@
   import Dialog, { Content as DialogContent } from '@smui/dialog';
   import Icon from './Icon.svelte';
   import PaintCard from './PaintCard.svelte';
+  import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   interface Paint {
     id: number;
@@ -36,10 +37,9 @@
 
   onMount(async () => {
     try {
-      const wailsjs = await import('../../../wailsjs/go/main/PaintService');
       const [allPaints, mfrs] = await Promise.all([
-        wailsjs.GetAllPaints(),
-        wailsjs.GetManufacturers(),
+        PaintService.GetAllPaints(),
+        PaintService.GetManufacturers(),
       ]);
       paints = allPaints || [];
       filtered = paints;

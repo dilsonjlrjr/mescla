@@ -4,6 +4,7 @@
   import Slider from '@smui/slider';
   import LinearProgress from '@smui/linear-progress';
   import Icon from './Icon.svelte';
+  import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   let targetR = $state(180);
   let targetG = $state(120);
@@ -18,8 +19,7 @@
     searching = true;
     hasSearched = true;
     try {
-      const wailsjs = await import('../../../wailsjs/go/main/PaintService');
-      results = await wailsjs.FindSimilar(targetR, targetG, targetB, maxDeltaE, maxResults) || [];
+      results = await PaintService.FindSimilar(targetR, targetG, targetB, maxDeltaE, maxResults) || [];
     } catch (e) {
       console.error('Erro buscando similar:', e);
       results = [];

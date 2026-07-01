@@ -11,6 +11,7 @@
     "check": "svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
+    "@wailsio/runtime": "latest",
     "@smui/button": "^9.0.1",
     "@smui/card": "^9.0.1",
     "@smui/checkbox": "^9.0.1",
