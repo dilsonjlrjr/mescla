@@ -127,19 +127,6 @@
     </div>
   </div>
 
-  <!-- Info footer -->
-  <div class="panel p-4 animate-rise" style="animation-delay: 380ms;">
-    <div class="flex items-center gap-3">
-      <span style="color: var(--ink-500);"><Icon name="info" size={18} /></span>
-      <div>
-        <span class="text-sm font-semibold text-white">Sistema 100% offline</span>
-        <span style="font-size: 13px; color: var(--ink-500); margin-left: 8px;">
-          Dados locais em SQLite. Seed:
-          <code class="font-mono" style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--ink-800); color: var(--lacquer-tint);">rtk go run ./cmd/seed</code>
-        </span>
-      </div>
-    </div>
-  </div>
 </div>
 
 <style>
