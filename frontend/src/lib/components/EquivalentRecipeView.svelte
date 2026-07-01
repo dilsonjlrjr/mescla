@@ -21,6 +21,12 @@
     name: string;
   }
 
+  interface Props {
+    initialSourcePaintId?: number | null;
+  }
+
+  let { initialSourcePaintId = null }: Props = $props();
+
   let allPaints: Paint[] = $state([]);
   let manufacturers: Manufacturer[] = $state([]);
   let sourcePaint: Paint | null = $state(null);
@@ -37,6 +43,9 @@
       ]);
       allPaints = paints || [];
       manufacturers = mfrs || [];
+      if (initialSourcePaintId) {
+        sourcePaint = allPaints.find(p => p.id === initialSourcePaintId) || null;
+      }
     } catch (e) {
       console.error('Erro carregando dados:', e);
     }

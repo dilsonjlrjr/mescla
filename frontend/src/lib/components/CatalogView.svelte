@@ -3,9 +3,18 @@
   import Textfield from '@smui/textfield';
   import Select, { Option } from '@smui/select';
   import Dialog, { Content as DialogContent } from '@smui/dialog';
+  import Button from '@smui/button';
   import Icon from './Icon.svelte';
   import PaintCard from './PaintCard.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
+
+  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix';
+
+  interface Props {
+    onNavigate: (view: View, paintId?: number) => void;
+  }
+
+  let { onNavigate }: Props = $props();
 
   interface Paint {
     id: number;
@@ -70,6 +79,11 @@
   function openDetail(paint: Paint) {
     selectedPaint = paint;
     dialogOpen = true;
+  }
+
+  function goToRecipe(paint: Paint) {
+    dialogOpen = false;
+    onNavigate('mix', paint.id);
   }
 </script>
 
@@ -192,6 +206,14 @@
           </div>
         {/if}
       </div>
+
+      <Button
+        variant="raised"
+        onclick={() => goToRecipe(selectedPaint!)}
+        style="width: 100%; margin-top: 20px; background: var(--lacquer); color: white; font-weight: 600; border-radius: 8px; height: 46px;"
+      >
+        <span class="flex items-center gap-2"><Icon name="flask" size={17} />Buscar receita equivalente</span>
+      </Button>
     </DialogContent>
   {/if}
 </Dialog>

@@ -11,9 +11,13 @@
 
   let currentView: View = $state('home');
   let sidebarCollapsed = $state(false);
+  let recipeSourcePaintId: number | null = $state(null);
 
-  function handleNavigate(view: View) {
+  function handleNavigate(view: View, paintId?: number) {
     currentView = view;
+    if (view === 'mix' && paintId) {
+      recipeSourcePaintId = paintId;
+    }
   }
 </script>
 
@@ -24,7 +28,7 @@
     {#if currentView === 'home'}
       <HomeView onNavigate={handleNavigate} />
     {:else if currentView === 'catalog'}
-      <CatalogView />
+      <CatalogView onNavigate={handleNavigate} />
     {:else if currentView === 'manufacturers'}
       <ManufacturersView />
     {:else if currentView === 'color-search'}
@@ -32,7 +36,7 @@
     {:else if currentView === 'compare'}
       <CompareView />
     {:else if currentView === 'mix'}
-      <EquivalentRecipeView />
+      <EquivalentRecipeView initialSourcePaintId={recipeSourcePaintId} />
     {/if}
   </main>
 </div>
