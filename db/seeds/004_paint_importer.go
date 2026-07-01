@@ -146,10 +146,17 @@ func defaultPaints() []PaintSeed {
 		{Manufacturer: "Mr Hobby", Line: "Aqueous", Code: "H-01", Name: "White", PaintType: "Acrylic", Finish: "Gloss", Coverage: "Opaque", Opacity: "High", VolumeML: 10},
 		{Manufacturer: "Mr Hobby", Line: "Aqueous", Code: "H-02", Name: "Black", PaintType: "Acrylic", Finish: "Gloss", Coverage: "Opaque", Opacity: "High", VolumeML: 10},
 
-		// Acrilex Acrílica
+		// Acrilex Acrílica — conjunto de mistura (primárias + secundárias) pra
+		// permitir receitas de verdade; só branco+preto+vermelho não fecha cor
+		// nenhuma fora do eixo do cinza/rosa.
 		{Manufacturer: "Acrilex", Line: "Acrílica", Code: "AC-001", Name: "Branco", PaintType: "Acrylic", Finish: "Matte", Coverage: "Opaque", Opacity: "High", VolumeML: 20},
 		{Manufacturer: "Acrilex", Line: "Acrílica", Code: "AC-002", Name: "Preto", PaintType: "Acrylic", Finish: "Matte", Coverage: "Opaque", Opacity: "High", VolumeML: 20},
 		{Manufacturer: "Acrilex", Line: "Acrílica", Code: "AC-003", Name: "Vermelho", PaintType: "Acrylic", Finish: "Matte", Coverage: "Opaque", Opacity: "High", VolumeML: 20},
+		{Manufacturer: "Acrilex", Line: "Acrílica", Code: "AC-004", Name: "Amarelo", PaintType: "Acrylic", Finish: "Matte", Coverage: "Opaque", Opacity: "Medium", VolumeML: 20},
+		{Manufacturer: "Acrilex", Line: "Acrílica", Code: "AC-005", Name: "Amarelo Ouro", PaintType: "Acrylic", Finish: "Matte", Coverage: "Opaque", Opacity: "Medium", VolumeML: 20},
+		{Manufacturer: "Acrilex", Line: "Acrílica", Code: "AC-006", Name: "Azul", PaintType: "Acrylic", Finish: "Matte", Coverage: "Opaque", Opacity: "High", VolumeML: 20},
+		{Manufacturer: "Acrilex", Line: "Acrílica", Code: "AC-007", Name: "Verde", PaintType: "Acrylic", Finish: "Matte", Coverage: "Opaque", Opacity: "High", VolumeML: 20},
+		{Manufacturer: "Acrilex", Line: "Acrílica", Code: "AC-008", Name: "Laranja", PaintType: "Acrylic", Finish: "Matte", Coverage: "Opaque", Opacity: "Medium", VolumeML: 20},
 
 		// Corfix Acrílica
 		{Manufacturer: "Corfix", Line: "Acrílica", Code: "CF-001", Name: "Branco", PaintType: "Acrylic", Finish: "Matte", Coverage: "Opaque", Opacity: "High", VolumeML: 20},

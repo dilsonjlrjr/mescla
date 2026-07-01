@@ -85,6 +85,11 @@ var paintColorData = []paintColorSeed{
 	{"Acrilex", "AC-001", "e9e6dd"},
 	{"Acrilex", "AC-002", "201f1d"},
 	{"Acrilex", "AC-003", "a3282a"},
+	{"Acrilex", "AC-004", "f2c81e"},
+	{"Acrilex", "AC-005", "d3a531"},
+	{"Acrilex", "AC-006", "27487e"},
+	{"Acrilex", "AC-007", "2f7245"},
+	{"Acrilex", "AC-008", "d9662b"},
 
 	// Corfix Acrílica
 	{"Corfix", "CF-001", "ece8de"},
