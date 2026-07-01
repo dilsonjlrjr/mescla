@@ -63,12 +63,13 @@
 }
 
 /* SMUI só remove a borda superior do "notch" quando aplica a classe
-   --notched via JS; se essa medição falhar (comum em WKWebView no boot),
-   a borda cruza o texto do label. No Select o label fica sempre flutuado
-   (nunca fica "dentro" da caixa), então remover a borda é sempre seguro.
-   Num Textfield comum o label pode ficar inline (sem notch de verdade),
-   removendo a borda ali criava um vão vazio — por isso escopamos ao Select. */
-.mdc-select .mdc-notched-outline__notch {
+   --notched via JS; se essa medição falhar (comum em WKWebView no boot,
+   e também em Textfields com valor pré-preenchido ou focados), a borda
+   cruza o texto do label. Em vez de confiar nessa classe, reagimos ao
+   estado real do label (flutuado ou não) — cobre Select, Textfield com
+   valor, Textfield focado, etc., sem deixar vão vazio quando o label
+   está inline (Textfield vazio e sem foco, que não tem notch de verdade). */
+.mdc-notched-outline__notch:has(.mdc-floating-label--float-above) {
   border-top: none;
 }
 
