@@ -2,8 +2,8 @@
   import Textfield from '@smui/textfield';
   import Button from '@smui/button';
   import Slider from '@smui/slider';
-  import Card, { Content } from '@smui/card';
   import LinearProgress from '@smui/linear-progress';
+  import Icon from './Icon.svelte';
 
   let targetR = $state(180);
   let targetG = $state(120);
@@ -36,24 +36,24 @@
   }
 
   function deltaColor(de: number): string {
-    if (de < 3) return '#2ecc71';
-    if (de < 6) return '#f1c40f';
-    if (de < 10) return '#e67e22';
-    return '#e74c3c';
+    if (de < 3) return 'var(--delta-excellent)';
+    if (de < 6) return 'var(--delta-good)';
+    if (de < 10) return 'var(--delta-fair)';
+    return 'var(--delta-poor)';
   }
 </script>
 
 <div class="page-container">
-  <div class="page-header animate-artisan-fade">
-    <h1 class="page-title">Buscar por Cor</h1>
+  <div class="page-header animate-rise">
+    <h1 class="page-title">Buscar por cor</h1>
     <p class="page-subtitle">Encontre tintas similares usando Delta E 2000</p>
     <div class="page-divider"></div>
   </div>
 
   <div class="search-layout">
     <!-- Color Picker Panel -->
-    <div class="artisan-panel p-5 animate-artisan-fade" style="animation-delay: 80ms;">
-      <h3 class="font-display text-sm font-semibold text-white mb-4">Cor Alvo</h3>
+    <div class="panel p-5 animate-rise" style="animation-delay: 80ms;">
+      <h3 class="font-display text-sm font-semibold text-white mb-4">Cor alvo</h3>
 
       <!-- Preview -->
       <div class="color-preview" style="width: 100%; aspect-ratio: 16/10; background: rgb({targetR}, {targetG}, {targetB});">
@@ -63,14 +63,14 @@
       <!-- Sliders -->
       <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 16px;">
         {#each [
-          { label: 'Red', value: targetR, color: '#ef4444', setter: (v: number) => targetR = v },
-          { label: 'Green', value: targetG, color: '#22c55e', setter: (v: number) => targetG = v },
-          { label: 'Blue', value: targetB, color: '#3b82f6', setter: (v: number) => targetB = v },
+          { label: 'Red', value: targetR, color: 'var(--chan-r)', setter: (v: number) => targetR = v },
+          { label: 'Green', value: targetG, color: 'var(--chan-g)', setter: (v: number) => targetG = v },
+          { label: 'Blue', value: targetB, color: 'var(--chan-b)', setter: (v: number) => targetB = v },
         ] as channel}
           <div>
             <div class="flex justify-between mb-2">
               <span style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: {channel.color};">{channel.label}</span>
-              <span class="font-mono" style="font-size: 12px; color: var(--color-obsidian-400);">{channel.value}</span>
+              <span class="font-mono" style="font-size: 12px; color: var(--ink-400);">{channel.value}</span>
             </div>
             <Slider
               min={0}
@@ -85,58 +85,54 @@
 
       <!-- Filters -->
       <div style="margin-top: 24px; display: flex; flex-direction: column; gap: 12px;">
-        <Textfield variant="outlined" bind:value={maxDeltaE} label="Delta E Máximo" type="number" style="width: 100%;" />
-        <Textfield variant="outlined" bind:value={maxResults} label="Máx. Resultados" type="number" style="width: 100%;" />
+        <Textfield variant="outlined" bind:value={maxDeltaE} label="Delta E máximo" type="number" style="width: 100%;" />
+        <Textfield variant="outlined" bind:value={maxResults} label="Máx. resultados" type="number" style="width: 100%;" />
       </div>
 
-      <Button variant="raised" onclick={doSearch} disabled={searching} style="width: 100%; margin-top: 20px; background: linear-gradient(135deg, var(--color-amber-glow), var(--color-amber-warm)); color: white; font-weight: 600; border-radius: 12px; height: 48px;">
-        {searching ? 'Buscando...' : 'Buscar Tintas Similares'}
+      <Button variant="raised" onclick={doSearch} disabled={searching} style="width: 100%; margin-top: 20px; background: var(--lacquer); color: white; font-weight: 600; border-radius: 8px; height: 46px;">
+        {searching ? 'Buscando…' : 'Buscar tintas similares'}
       </Button>
     </div>
 
     <!-- Results -->
-    <div class="animate-artisan-fade" style="animation-delay: 160ms;">
+    <div class="animate-rise" style="animation-delay: 160ms;">
       {#if searching}
         <div style="display: flex; align-items: center; justify-content: center; padding: 80px 0;">
           <LinearProgress indeterminate style="width: 200px;" />
         </div>
       {:else if hasSearched && results.length === 0}
-        <div style="text-align: center; padding: 80px 0;" class="artisan-panel">
-          <span class="material-icons" style="color: var(--color-obsidian-600); font-size: 48px;">search_off</span>
-          <p class="font-medium mt-4" style="color: var(--color-obsidian-500);">Nenhuma tinta similar encontrada</p>
+        <div class="panel" style="text-align: center; padding: 80px 0;">
+          <span style="color: var(--ink-600); display: flex; justify-content: center;"><Icon name="search-off" size={40} /></span>
+          <p class="font-medium mt-4" style="color: var(--ink-500);">Nenhuma tinta similar encontrada</p>
         </div>
       {:else if results.length > 0}
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-          <div class="text-sm font-medium mb-2" style="color: var(--color-obsidian-400);">
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div class="text-sm font-medium mb-2" style="color: var(--ink-400);">
             {results.length} tintas encontradas
           </div>
           {#each results as result, i}
-            <Card variant="outlined" class="result-card animate-artisan-slide" style="animation-delay: {i * 40}ms;">
-              <Content>
-                <div class="flex items-center gap-4">
-                  <div class="swatch-shimmer" style="width: 56px; height: 56px; border-radius: 12px; flex-shrink: 0; background: rgb({result.r}, {result.g}, {result.b}); box-shadow: 0 4px 12px rgba(0,0,0,0.3);"></div>
-                  <div style="flex: 1; min-width: 0;">
-                    <div class="font-semibold text-sm text-white truncate">{result.name}</div>
-                    <div style="font-size: 12px; color: var(--color-obsidian-400);">{result.manufacturer}</div>
-                  </div>
-                  <div style="text-align: right; flex-shrink: 0;">
-                    <div class="font-mono font-bold {deltaClass(result.deltaE)}">
-                      ΔE {result.deltaE.toFixed(1)}
-                    </div>
-                    <div style="font-size: 11px; color: var(--color-obsidian-500);">
-                      {result.similarity.toFixed(1)}% similar
-                    </div>
-                  </div>
-                  <div style="width: 6px; height: 40px; border-radius: 999px; flex-shrink: 0; background: {deltaColor(result.deltaE)}; opacity: 0.7;"></div>
+            <div class="panel result-row animate-slide" style="animation-delay: {i * 40}ms;">
+              <div class="swatch-flat" style="width: 52px; height: 52px; background: rgb({result.r}, {result.g}, {result.b});"></div>
+              <div style="flex: 1; min-width: 0;">
+                <div class="font-semibold text-sm text-white truncate">{result.name}</div>
+                <div style="font-size: 12px; color: var(--ink-500);">{result.manufacturer}</div>
+              </div>
+              <div style="text-align: right; flex-shrink: 0;">
+                <div class="font-mono font-bold {deltaClass(result.deltaE)}">
+                  ΔE {result.deltaE.toFixed(1)}
                 </div>
-              </Content>
-            </Card>
+                <div style="font-size: 11px; color: var(--ink-500);">
+                  {result.similarity.toFixed(1)}% similar
+                </div>
+              </div>
+              <div style="width: 4px; height: 36px; border-radius: 999px; flex-shrink: 0; background: {deltaColor(result.deltaE)};"></div>
+            </div>
           {/each}
         </div>
       {:else}
-        <div style="text-align: center; padding: 80px 0;" class="artisan-panel">
-          <span class="material-icons" style="color: var(--color-obsidian-600); font-size: 48px;">palette</span>
-          <p class="font-medium mt-4" style="color: var(--color-obsidian-500);">Ajuste a cor alvo e clique em buscar</p>
+        <div class="panel" style="text-align: center; padding: 80px 0;">
+          <span style="color: var(--ink-600); display: flex; justify-content: center;"><Icon name="palette" size={40} /></span>
+          <p class="font-medium mt-4" style="color: var(--ink-500);">Ajuste a cor alvo e clique em buscar</p>
         </div>
       {/if}
     </div>
@@ -150,16 +146,15 @@
     gap: 24px;
   }
 
-  :global(.result-card) {
-    background: linear-gradient(145deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01));
-    border-color: rgba(255, 255, 255, 0.06);
-    border-radius: 14px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  .result-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+    transition: border-color 0.15s ease;
   }
 
-  :global(.result-card:hover) {
-    background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025));
-    border-color: rgba(212, 160, 83, 0.15);
-    transform: translateY(-1px);
+  .result-row:hover {
+    border-color: var(--ink-600);
   }
 </style>

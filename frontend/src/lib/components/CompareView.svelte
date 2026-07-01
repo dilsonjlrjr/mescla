@@ -1,10 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Button from '@smui/button';
-  import Card, { Content } from '@smui/card';
-  import Checkbox from '@smui/checkbox';
-  import FormField from '@smui/form-field';
-  import List, { Item, Text, Graphic } from '@smui/list';
+  import Icon from './Icon.svelte';
 
   interface Paint {
     id: number;
@@ -67,25 +64,25 @@
   }
 
   function deltaColor(de: number): string {
-    if (de < 3) return '#2ecc71';
-    if (de < 6) return '#f1c40f';
-    if (de < 10) return '#e67e22';
-    return '#e74c3c';
+    if (de < 3) return 'var(--delta-excellent)';
+    if (de < 6) return 'var(--delta-good)';
+    if (de < 10) return 'var(--delta-fair)';
+    return 'var(--delta-poor)';
   }
 </script>
 
 <div class="page-container">
-  <div class="page-header animate-artisan-fade">
-    <h1 class="page-title">Comparar Tintas</h1>
+  <div class="page-header animate-rise">
+    <h1 class="page-title">Comparar tintas</h1>
     <p class="page-subtitle">Selecione até 6 tintas para comparar lado a lado</p>
     <div class="page-divider"></div>
   </div>
 
   <div class="compare-layout">
     <!-- Selection Panel -->
-    <div class="artisan-panel p-5 animate-artisan-fade" style="animation-delay: 80ms;">
-      <h3 class="font-display text-sm font-semibold text-white mb-2">Selecionar Tintas</h3>
-      <div style="font-size: 11px; font-weight: 500; margin-bottom: 16px; color: var(--color-obsidian-500);">
+    <div class="panel p-5 animate-rise" style="animation-delay: 80ms;">
+      <h3 class="font-display text-sm font-semibold text-white mb-2">Selecionar tintas</h3>
+      <div style="font-size: 11px; font-weight: 500; margin-bottom: 16px; color: var(--ink-500);">
         {selectedIDs.length}/6 selecionadas
       </div>
 
@@ -94,57 +91,50 @@
         <div class="flex gap-2 mb-4 flex-wrap">
           {#each getSelectedPaints() as paint}
             <button class="selected-chip" onclick={() => togglePaint(paint.id)}>
-              <span class="chip-swatch" style="background: rgb({paint.r}, {paint.g}, {paint.b});"></span>
+              <span class="chip-swatch-sm" style="background: rgb({paint.r}, {paint.g}, {paint.b});"></span>
               <span class="truncate" style="max-width: 70px;">{paint.name}</span>
-              <span class="material-icons" style="font-size: 14px; color: var(--color-obsidian-400);">close</span>
+              <Icon name="close" size={12} />
             </button>
           {/each}
         </div>
       {/if}
 
       <!-- Paint list -->
-      <List twoLine style="max-height: 400px; overflow-y: auto;">
+      <div class="pick-list">
         {#each allPaints as paint (paint.id)}
           {@const isSelected = selectedIDs.includes(paint.id)}
-          <Item
-            href="javascript:void(0)"
-            onclick={() => togglePaint(paint.id)}
-            selected={isSelected}
-            style="border-radius: 8px; margin: 2px 0; {isSelected ? 'background: rgba(212,160,83,0.08); border: 1px solid rgba(212,160,83,0.15);' : ''}"
-          >
-            <Graphic>
-              <span style="width: 16px; height: 16px; border-radius: 4px; background: rgb({paint.r}, {paint.g}, {paint.b}); border: 1px solid rgba(255,255,255,0.08); display: block;"></span>
-            </Graphic>
-            <Text>
-              <span style="color: {isSelected ? 'white' : 'var(--color-obsidian-300)'}; font-size: 13px;">{paint.name}</span>
-              <span style="color: var(--color-obsidian-500); font-size: 11px; font-family: var(--font-mono);">{paint.code}</span>
-            </Text>
-          </Item>
+          <button class="pick-item" class:selected={isSelected} onclick={() => togglePaint(paint.id)}>
+            <span class="chip-swatch-sm" style="background: rgb({paint.r}, {paint.g}, {paint.b});"></span>
+            <span class="pick-text">
+              <span class="pick-name">{paint.name}</span>
+              <span class="pick-code">{paint.code}</span>
+            </span>
+          </button>
         {/each}
-      </List>
+      </div>
 
-      <Button variant="raised" onclick={doCompare} disabled={selectedIDs.length < 2 || comparing} style="width: 100%; margin-top: 16px; background: linear-gradient(135deg, var(--color-amber-glow), var(--color-amber-warm)); color: white; font-weight: 600; border-radius: 12px; height: 44px;">
-        {comparing ? 'Comparando...' : 'Comparar Selecionadas'}
+      <Button variant="raised" onclick={doCompare} disabled={selectedIDs.length < 2 || comparing} style="width: 100%; margin-top: 16px; background: var(--lacquer); color: white; font-weight: 600; border-radius: 8px; height: 44px;">
+        {comparing ? 'Comparando…' : 'Comparar selecionadas'}
       </Button>
     </div>
 
     <!-- Results -->
-    <div class="animate-artisan-fade" style="animation-delay: 160ms;">
+    <div class="animate-rise" style="animation-delay: 160ms;">
       {#if results.length > 0}
         <div style="display: flex; flex-direction: column; gap: 20px;">
-          <div class="text-sm font-medium" style="color: var(--color-obsidian-400);">
+          <div class="text-sm font-medium" style="color: var(--ink-400);">
             {results.length} comparações
           </div>
 
           <!-- Visual comparison -->
-          <div class="artisan-panel p-5">
+          <div class="panel p-5">
             <div class="flex gap-3">
               {#each getSelectedPaints() as paint}
                 <div style="flex: 1;">
-                  <div class="swatch-shimmer" style="width: 100%; aspect-ratio: 1; border-radius: 12px; background: rgb({paint.r}, {paint.g}, {paint.b}); box-shadow: 0 4px 16px rgba(0,0,0,0.3);"></div>
+                  <div class="swatch-flat" style="width: 100%; aspect-ratio: 1; background: rgb({paint.r}, {paint.g}, {paint.b});"></div>
                   <div style="text-align: center; margin-top: 10px;">
-                    <div style="font-size: 12px; font-weight: 500; color: white; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{paint.name}</div>
-                    <div style="font-size: 10px; font-family: var(--font-mono); color: var(--color-obsidian-500);">rgb({paint.r},{paint.g},{paint.b})</div>
+                    <div style="font-size: 12px; font-weight: 500; color: var(--paper); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{paint.name}</div>
+                    <div style="font-size: 10px; font-family: var(--font-mono); color: var(--ink-500);">rgb({paint.r},{paint.g},{paint.b})</div>
                   </div>
                 </div>
               {/each}
@@ -153,31 +143,27 @@
 
           <!-- Delta E Results -->
           {#each results as result, i}
-            <Card variant="outlined" class="result-card animate-artisan-slide" style="animation-delay: {i * 50}ms;">
-              <Content>
-                <div class="flex items-center gap-4">
-                  <div style="flex: 1;">
-                    <div class="text-sm font-medium text-white">{result.name}</div>
-                    <div style="font-size: 12px; color: var(--color-obsidian-400);">{result.manufacturer}</div>
-                  </div>
-                  <div style="text-align: right;">
-                    <div class="font-mono font-bold {deltaClass(result.deltaE)}" style="font-size: 18px;">
-                      ΔE {result.deltaE.toFixed(2)}
-                    </div>
-                    <div style="font-size: 11px; color: var(--color-obsidian-500);">
-                      {result.similarity.toFixed(1)}% similar
-                    </div>
-                  </div>
-                  <div style="width: 6px; height: 40px; border-radius: 999px; flex-shrink: 0; background: {deltaColor(result.deltaE)}; opacity: 0.7;"></div>
+            <div class="panel result-row animate-slide" style="animation-delay: {i * 50}ms;">
+              <div style="flex: 1;">
+                <div class="text-sm font-medium text-white">{result.name}</div>
+                <div style="font-size: 12px; color: var(--ink-500);">{result.manufacturer}</div>
+              </div>
+              <div style="text-align: right;">
+                <div class="font-mono font-bold {deltaClass(result.deltaE)}" style="font-size: 18px;">
+                  ΔE {result.deltaE.toFixed(2)}
                 </div>
-              </Content>
-            </Card>
+                <div style="font-size: 11px; color: var(--ink-500);">
+                  {result.similarity.toFixed(1)}% similar
+                </div>
+              </div>
+              <div style="width: 4px; height: 36px; border-radius: 999px; flex-shrink: 0; background: {deltaColor(result.deltaE)};"></div>
+            </div>
           {/each}
         </div>
       {:else}
-        <div style="text-align: center; padding: 80px 0;" class="artisan-panel">
-          <span class="material-icons" style="color: var(--color-obsidian-600); font-size: 48px;">compare_arrows</span>
-          <p class="font-medium mt-4" style="color: var(--color-obsidian-500);">Selecione tintas e clique em comparar</p>
+        <div class="panel" style="text-align: center; padding: 80px 0;">
+          <span style="color: var(--ink-600); display: flex; justify-content: center;"><Icon name="swap" size={40} /></span>
+          <p class="font-medium mt-4" style="color: var(--ink-500);">Selecione tintas e clique em comparar</p>
         </div>
       {/if}
     </div>
@@ -191,17 +177,11 @@
     gap: 24px;
   }
 
-  :global(.result-card) {
-    background: linear-gradient(145deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01));
-    border-color: rgba(255, 255, 255, 0.06);
-    border-radius: 14px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  :global(.result-card:hover) {
-    background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025));
-    border-color: rgba(212, 160, 83, 0.15);
-    transform: translateY(-1px);
+  .result-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
   }
 
   .selected-chip {
@@ -209,25 +189,79 @@
     align-items: center;
     gap: 6px;
     padding: 4px 8px 4px 6px;
-    border-radius: 8px;
-    background: var(--color-obsidian-700);
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    background: var(--ink-700);
+    color: var(--paper);
+    border: none;
     font-size: 11px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background 0.15s ease;
   }
 
   .selected-chip:hover {
-    background: var(--color-obsidian-600);
-    transform: scale(1.05);
+    background: var(--ink-600);
   }
 
-  .chip-swatch {
+  .chip-swatch-sm {
     width: 12px;
     height: 12px;
     border-radius: 3px;
     flex-shrink: 0;
+  }
+
+  .pick-list {
+    max-height: 400px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .pick-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .pick-item:hover {
+    background: var(--ink-850);
+  }
+
+  .pick-item.selected {
+    background: rgba(232, 84, 44, 0.08);
+    border-color: rgba(232, 84, 44, 0.25);
+  }
+
+  .pick-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .pick-name {
+    font-size: 13px;
+    color: var(--ink-300);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pick-item.selected .pick-name {
+    color: var(--paper);
+  }
+
+  .pick-code {
+    font-size: 10.5px;
+    font-family: var(--font-mono);
+    color: var(--ink-600);
   }
 </style>

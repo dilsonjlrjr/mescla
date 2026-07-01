@@ -153,10 +153,10 @@ func (s *PaintService) GetAllPaints() ([]PaintDTO, error) {
 			   COALESCE(pl.name, ''),
 			   COALESCE(pc.rgb_r, 0), COALESCE(pc.rgb_g, 0), COALESCE(pc.rgb_b, 0),
 			   COALESCE(pc.swatch_path, ''),
-			   COALESCE(p.thumbnail_url, ''), COALESCE(p.image_url, ''),
+			   COALESCE(p.thumbnail_path, ''), COALESCE(p.image_path, ''),
 			   COALESCE(ft.name, ''), COALESCE(pt.name, ''),
 			   COALESCE(ct.name, ''), COALESCE(ot.name, ''),
-			   COALESCE(p.volume, '')
+			   COALESCE(p.volume_ml || 'ml', '')
 		FROM paints p
 		JOIN manufacturers m ON m.id = p.manufacturer_id
 		LEFT JOIN product_lines pl ON pl.id = p.product_line_id
@@ -199,10 +199,10 @@ func (s *PaintService) SearchPaints(query string) ([]PaintDTO, error) {
 			   COALESCE(pl.name, ''),
 			   COALESCE(pc.rgb_r, 0), COALESCE(pc.rgb_g, 0), COALESCE(pc.rgb_b, 0),
 			   COALESCE(pc.swatch_path, ''),
-			   COALESCE(p.thumbnail_url, ''), COALESCE(p.image_url, ''),
+			   COALESCE(p.thumbnail_path, ''), COALESCE(p.image_path, ''),
 			   COALESCE(ft.name, ''), COALESCE(pt.name, ''),
 			   COALESCE(ct.name, ''), COALESCE(ot.name, ''),
-			   COALESCE(p.volume, '')
+			   COALESCE(p.volume_ml || 'ml', '')
 		FROM paints p
 		JOIN manufacturers m ON m.id = p.manufacturer_id
 		LEFT JOIN product_lines pl ON pl.id = p.product_line_id
@@ -248,10 +248,10 @@ func (s *PaintService) GetPaintByID(id int64) (PaintDTO, error) {
 			   COALESCE(pl.name, ''),
 			   COALESCE(pc.rgb_r, 0), COALESCE(pc.rgb_g, 0), COALESCE(pc.rgb_b, 0),
 			   COALESCE(pc.swatch_path, ''),
-			   COALESCE(p.thumbnail_url, ''), COALESCE(p.image_url, ''),
+			   COALESCE(p.thumbnail_path, ''), COALESCE(p.image_path, ''),
 			   COALESCE(ft.name, ''), COALESCE(pt.name, ''),
 			   COALESCE(ct.name, ''), COALESCE(ot.name, ''),
-			   COALESCE(p.volume, '')
+			   COALESCE(p.volume_ml || 'ml', '')
 		FROM paints p
 		JOIN manufacturers m ON m.id = p.manufacturer_id
 		LEFT JOIN product_lines pl ON pl.id = p.product_line_id

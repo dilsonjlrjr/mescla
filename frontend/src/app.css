@@ -1,70 +1,65 @@
-/* ── Paint Match AI — Atelier Theme ── */
+/* ── Paint Match AI — Bancada Theme (claro) ──
+   Linguagem visual: cartela de tinta física (paint chip). Cor chapada,
+   furo de catálogo, etiqueta impressa em mono — não vidro, não gradiente. */
 
 :root {
-  /* Obsidian palette */
-  --color-obsidian-950: #0a0a0f;
-  --color-obsidian-900: #12121a;
-  --color-obsidian-850: #181822;
-  --color-obsidian-800: #1e1e2a;
-  --color-obsidian-700: #2a2a3a;
-  --color-obsidian-600: #3a3a50;
-  --color-obsidian-500: #5a5a78;
-  --color-obsidian-400: #8888a8;
-  --color-obsidian-300: #b0b0c8;
-  --color-obsidian-200: #d0d0e0;
-  --color-obsidian-100: #eaeaf2;
+  /* Ink (neutros quentes claros, tom de papel/bancada) */
+  --ink-950: #f6f4f0;
+  --ink-900: #ffffff;
+  --ink-850: #faf8f4;
+  --ink-800: #efeae1;
+  --ink-700: #e2ddd0;
+  --ink-600: #cec4b1;
+  --ink-500: #857a68;
+  --ink-400: #a89c88;
+  --ink-300: #6b6152;
+  --ink-100: #211d16;
 
-  /* Amber accent */
-  --color-amber-glow: #d4a053;
-  --color-amber-warm: #c4903a;
-  --color-amber-hot: #e8b060;
-  --color-amber-dim: #a07830;
+  --paper: #1a1712;
 
-  /* Status colors */
-  --color-crimson: #c0392b;
-  --color-azure: #2e86de;
-  --color-emerald: #27ae60;
-  --color-violet: #8e44ad;
-  --color-coral: #e17055;
-  --color-teal: #00b894;
+  /* Lacre — acento único (laca cádmio, não dourado genérico) */
+  --lacquer: #e8542c;
+  --lacquer-deep: #b53d1f;
+  --lacquer-tint: #c2451f;
 
-  /* Fonts */
-  --font-display: 'Playfair Display', Georgia, serif;
-  --font-body: 'DM Sans', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  /* Delta E — família separada do acento, escurecida pra ler bem no claro */
+  --delta-excellent: #2f7d49;
+  --delta-good: #96760f;
+  --delta-fair: #a85a1f;
+  --delta-poor: #a13328;
 
-  /* SMUI theme overrides (dark) */
-  --mdc-theme-primary: var(--color-amber-glow);
-  --mdc-theme-secondary: var(--color-amber-warm);
-  --mdc-theme-surface: var(--color-obsidian-900);
-  --mdc-theme-background: var(--color-obsidian-950);
-  --mdc-theme-error: var(--color-crimson);
+  /* Canais RGB (escurecidos pra legibilidade em fundo claro) */
+  --chan-r: #c0392b;
+  --chan-g: #2f7d49;
+  --chan-b: #2f5f9e;
+
+  /* Fontes */
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  /* SMUI — usado só nos controles de formulário (Textfield/Select/Slider/Dialog) */
+  --mdc-theme-primary: var(--lacquer);
+  --mdc-theme-secondary: var(--lacquer);
+  --mdc-theme-surface: var(--ink-900);
+  --mdc-theme-background: var(--ink-950);
+  --mdc-theme-error: var(--delta-poor);
   --mdc-theme-on-primary: white;
   --mdc-theme-on-secondary: white;
-  --mdc-theme-on-surface: var(--color-obsidian-200);
-  --mdc-theme-on-background: var(--color-obsidian-200);
+  --mdc-theme-on-surface: var(--ink-300);
+  --mdc-theme-on-background: var(--ink-300);
   --mdc-theme-on-error: white;
 
-  /* SMUI text field / select overrides */
-  --mdc-text-field-fill-color: var(--color-obsidian-800);
-  --mdc-text-field-ink-color: var(--color-obsidian-100);
-  --mdc-text-field-label-ink-color: var(--color-obsidian-400);
-  --mdc-text-field-outlined-idle-border-color: rgba(255, 255, 255, 0.08);
-  --mdc-text-field-outlined-hover-border-color: rgba(212, 160, 83, 0.3);
-  --mdc-text-field-focused-label-color: var(--color-amber-glow);
+  --mdc-text-field-fill-color: var(--ink-800);
+  --mdc-text-field-ink-color: var(--ink-100);
+  --mdc-text-field-label-ink-color: var(--ink-500);
+  --mdc-text-field-outlined-idle-border-color: rgba(0, 0, 0, 0.16);
+  --mdc-text-field-outlined-hover-border-color: rgba(232, 84, 44, 0.45);
+  --mdc-text-field-focused-label-color: var(--lacquer-deep);
 
-  /* SMUI drawer */
-  --mdc-drawer-surface-background: var(--color-obsidian-900);
-  --mdc-drawer-item-text-color: var(--color-obsidian-400);
-  --mdc-drawer-item-icon-color: var(--color-obsidian-400);
-
-  /* SMUI list */
-  --mdc-list-single-line-height: 44px;
-
-  /* SMUI slider */
-  --mdc-slider-handle-color: var(--color-amber-glow);
-  --mdc-slider-focus-handle-color: var(--color-amber-hot);
-  --mdc-slider-ink-color: var(--color-amber-glow);
+  --mdc-slider-handle-color: var(--lacquer);
+  --mdc-slider-focus-handle-color: var(--lacquer);
+  --mdc-slider-ink-color: var(--lacquer);
 }
 
 * {
@@ -80,8 +75,8 @@ html, body, #app {
 
 body {
   font-family: var(--font-body);
-  background: var(--color-obsidian-950);
-  color: var(--color-obsidian-200);
+  background: var(--ink-950);
+  color: var(--ink-300);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -97,18 +92,31 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-obsidian-700);
+  background: var(--ink-700);
   border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-obsidian-600);
+  background: var(--ink-600);
+}
+
+:focus-visible {
+  outline: 2px solid var(--lacquer);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }
 
 /* ── Layout ── */
 .app-layout {
   display: flex;
   height: 100%;
-  background: var(--color-obsidian-950);
+  background: var(--ink-950);
 }
 
 .app-main {
@@ -119,7 +127,7 @@ body {
 
 .page-container {
   min-height: 100%;
-  padding: 32px;
+  padding: 32px 40px 48px;
 }
 
 .page-header {
@@ -128,77 +136,201 @@ body {
 
 .page-title {
   font-family: var(--font-display);
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: white;
-  letter-spacing: -0.02em;
-  margin-bottom: 8px;
+  font-size: 2rem;
+  font-weight: 600;
+  font-optical-sizing: auto;
+  color: var(--paper);
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
 }
 
 .page-subtitle {
   font-size: 13px;
-  color: var(--color-obsidian-400);
+  color: var(--ink-500);
 }
 
 .page-divider {
-  margin-top: 16px;
+  margin-top: 18px;
   height: 1px;
-  background: linear-gradient(90deg, var(--color-amber-glow), transparent 50%);
-  opacity: 0.15;
+  background: var(--ink-700);
 }
 
-/* ── Artisan Glass ── */
-.artisan-panel {
-  background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 16px;
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--lacquer-deep);
 }
 
-.artisan-card {
-  background: linear-gradient(145deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01));
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 14px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+/* ── Flat surfaces (sem vidro, sem gradiente) ── */
+.panel {
+  background: var(--ink-900);
+  border: 1px solid var(--ink-700);
+  border-radius: 10px;
 }
 
-.artisan-card:hover {
-  background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025));
-  border-color: rgba(212, 160, 83, 0.15);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(212,160,83,0.08);
-  transform: translateY(-1px);
+.row-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--ink-900);
+  border: 1px solid var(--ink-700);
+  border-left: 2px solid transparent;
+  border-radius: 8px;
+  padding: 16px 18px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-/* ── Swatch shimmer ── */
-.swatch-shimmer {
+.row-card:hover {
+  background: var(--ink-850);
+  border-left-color: var(--lacquer);
+}
+
+.hairline {
+  height: 1px;
+  background: var(--ink-700);
+  border: none;
+}
+
+/* ── Paint chip — elemento assinatura ── */
+.chip {
+  display: block;
+  width: 100%;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  background: var(--ink-850);
+  border: 1px solid var(--ink-700);
+  border-radius: 8px;
+  overflow: visible;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s ease;
+}
+
+.chip:hover {
+  transform: translateY(-2px) rotate(-0.4deg);
+  border-color: var(--ink-600);
+}
+
+.chip-swatch {
   position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 7px 7px 0 0;
   overflow: hidden;
 }
 
-.swatch-shimmer::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
+.chip-swatch img {
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
-  transition: left 0.5s ease;
+  object-fit: cover;
 }
 
-.swatch-shimmer:hover::after {
-  left: 100%;
+/* furo de catálogo — como uma cartela física perfurada */
+.chip-punch {
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--ink-850);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
-/* ── Delta E badges ── */
-.delta-excellent { color: #2ecc71; }
-.delta-good { color: #f1c40f; }
-.delta-fair { color: #e67e22; }
-.delta-poor { color: #e74c3c; }
+.chip-code {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(15, 13, 18, 0.55);
+  color: rgba(255, 255, 255, 0.92);
+}
 
-/* ── Color preview box ── */
+.chip-label {
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--ink-700);
+}
+
+.chip-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink-100);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+  margin-bottom: 3px;
+}
+
+.chip:hover .chip-name {
+  color: var(--lacquer-tint);
+}
+
+.chip-mfr {
+  font-size: 11px;
+  color: var(--ink-500);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip-finish {
+  display: inline-block;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--ink-700);
+  color: var(--ink-400);
+}
+
+/* Swatch pequeno (linhas de resultado, ingredientes) com o mesmo furo,
+   deslocado pro canto — reduz o motivo em escala sem perder a assinatura. */
+.swatch-flat {
+  position: relative;
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+.swatch-flat::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 9px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-900);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Delta E ── */
+.delta-excellent { color: var(--delta-excellent); }
+.delta-good { color: var(--delta-good); }
+.delta-fair { color: var(--delta-fair); }
+.delta-poor { color: var(--delta-poor); }
+
+/* ── Preview de cor grande (sliders) ── */
 .color-preview {
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
   position: relative;
   overflow: hidden;
 }
@@ -210,47 +342,36 @@ body {
   font-size: 11px;
   font-family: var(--font-mono);
   padding: 4px 10px;
-  border-radius: 8px;
-  backdrop-filter: blur(12px);
-  background: rgba(0,0,0,0.5);
-  color: rgba(255,255,255,0.9);
-  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 5px;
+  background: rgba(15, 13, 18, 0.6);
+  color: rgba(255, 255, 255, 0.92);
 }
 
-/* ── Animations ── */
-@keyframes artisan-fade {
-  from { opacity: 0; transform: translateY(12px); }
+/* ── Animações (só entrada, discretas) ── */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes artisan-slide {
-  from { opacity: 0; transform: translateX(-16px); }
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(-12px); }
   to { opacity: 1; transform: translateX(0); }
 }
 
-@keyframes artisan-scale {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+.animate-rise {
+  animation: rise-in 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
-.animate-artisan-fade {
-  animation: artisan-fade 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+.animate-slide {
+  animation: slide-in 0.35s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
-.animate-artisan-slide {
-  animation: artisan-slide 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-
-.animate-artisan-scale {
-  animation: artisan-scale 0.35s cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-
-/* ── Skeleton loader ── */
+/* ── Skeleton ── */
 .skeleton {
-  background: linear-gradient(90deg, var(--color-obsidian-800) 25%, var(--color-obsidian-700) 50%, var(--color-obsidian-800) 75%);
+  background: linear-gradient(90deg, var(--ink-850) 25%, var(--ink-800) 50%, var(--ink-850) 75%);
   background-size: 200% 100%;
   animation: shimmer-load 1.5s ease-in-out infinite;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 @keyframes shimmer-load {
@@ -258,25 +379,26 @@ body {
   100% { background-position: 200% 0; }
 }
 
-/* ── Custom range slider ── */
+/* ── Range slider customizado ── */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
-  height: 6px;
+  height: 4px;
   border-radius: 999px;
   outline: none;
   cursor: pointer;
   width: 100%;
+  background: var(--ink-700);
 }
 
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.9);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  border: 2px solid var(--ink-950);
+  box-shadow: 0 0 0 1.5px currentColor;
   cursor: pointer;
   transition: transform 0.15s ease;
 }
@@ -296,8 +418,10 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .flex-col { flex-direction: column; }
 .flex-1 { flex: 1; }
 .items-center { align-items: center; }
+.items-start { align-items: flex-start; }
 .justify-center { justify-content: center; }
 .justify-between { justify-content: space-between; }
+.flex-wrap { flex-wrap: wrap; }
 .gap-1 { gap: 4px; }
 .gap-2 { gap: 8px; }
 .gap-3 { gap: 12px; }
@@ -323,7 +447,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .ml-auto { margin-left: auto; }
 
 /* ── Text helpers ── */
-.text-white { color: white; }
+.text-white { color: var(--paper); }
 .text-sm { font-size: 14px; }
 .text-xs { font-size: 12px; }
 .text-lg { font-size: 1.125rem; }

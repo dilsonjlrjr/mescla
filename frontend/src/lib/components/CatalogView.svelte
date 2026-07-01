@@ -2,8 +2,8 @@
   import { onMount } from 'svelte';
   import Textfield from '@smui/textfield';
   import Select, { Option } from '@smui/select';
-  import Dialog, { Content as DialogContent, Title as DialogTitle } from '@smui/dialog';
-  import IconButton from '@smui/icon-button';
+  import Dialog, { Content as DialogContent } from '@smui/dialog';
+  import Icon from './Icon.svelte';
   import PaintCard from './PaintCard.svelte';
 
   interface Paint {
@@ -75,14 +75,14 @@
 
 <div class="page-container">
   <!-- Header -->
-  <div class="page-header animate-artisan-fade">
-    <h1 class="page-title">Catálogo de Tintas</h1>
+  <div class="page-header animate-rise">
+    <h1 class="page-title">Catálogo de tintas</h1>
     <p class="page-subtitle">{filtered.length} de {paints.length} tintas cadastradas</p>
     <div class="page-divider"></div>
   </div>
 
   <!-- Filters -->
-  <div class="flex gap-3 mb-6 animate-artisan-fade" style="animation-delay: 80ms;">
+  <div class="flex gap-3 mb-6 animate-rise" style="animation-delay: 80ms;">
     <div class="flex-1">
       <Textfield
         variant="outlined"
@@ -91,7 +91,7 @@
         style="width: 100%;"
       >
         {#snippet leadingIcon()}
-          <span class="material-icons" style="color: var(--color-obsidian-500);">search</span>
+          <span style="color: var(--ink-500); display: flex; margin-left: 4px;"><Icon name="search" size={17} /></span>
         {/snippet}
       </Textfield>
     </div>
@@ -109,8 +109,8 @@
   {#if loading}
     <div class="grid-5">
       {#each Array(15) as _}
-        <div class="artisan-card overflow-hidden">
-          <div class="skeleton w-full" style="aspect-ratio: 4/3; border-radius: 0;"></div>
+        <div class="panel" style="overflow: hidden;">
+          <div class="skeleton w-full" style="aspect-ratio: 1/1; border-radius: 0;"></div>
           <div class="p-3" style="display: flex; flex-direction: column; gap: 8px;">
             <div class="skeleton" style="height: 12px; width: 75%;"></div>
             <div class="skeleton" style="height: 10px; width: 50%;"></div>
@@ -121,7 +121,7 @@
   {:else}
     <div class="grid-5">
       {#each filtered as paint, i (paint.id)}
-        <div class="animate-artisan-fade" style="animation-delay: {Math.min(i * 20, 200)}ms;">
+        <div class="animate-rise" style="animation-delay: {Math.min(i * 20, 200)}ms;">
           <PaintCard {paint} onclick={() => openDetail(paint)} />
         </div>
       {/each}
@@ -129,68 +129,65 @@
 
     {#if filtered.length === 0}
       <div style="text-align: center; padding: 80px 0;">
-        <div class="stat-icon" style="width: 64px; height: 64px; margin: 0 auto 16px; background: var(--color-obsidian-800); border-radius: 16px; display: flex; align-items: center; justify-content: center;">
-          <span class="material-icons" style="color: var(--color-obsidian-600); font-size: 32px;">search_off</span>
-        </div>
-        <p class="font-medium" style="color: var(--color-obsidian-500);">Nenhuma tinta encontrada</p>
+        <div style="color: var(--ink-600); display: flex; justify-content: center; margin-bottom: 16px;"><Icon name="search-off" size={40} /></div>
+        <p class="font-medium" style="color: var(--ink-500);">Nenhuma tinta encontrada</p>
       </div>
     {/if}
   {/if}
 </div>
 
 <!-- Detail Dialog -->
-<Dialog bind:open={dialogOpen} surface$style="background: var(--color-obsidian-900); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; max-width: 560px; width: 100%;">
+<Dialog bind:open={dialogOpen} surface$style="background: var(--ink-900); border: 1px solid var(--ink-700); border-radius: 10px; max-width: 560px; width: 100%;">
   {#if selectedPaint}
     <!-- Color hero -->
-    <div class="color-hero" style="background: linear-gradient(135deg, rgb({selectedPaint.r}, {selectedPaint.g}, {selectedPaint.b}), rgb({Math.max(0,selectedPaint.r-30)}, {Math.max(0,selectedPaint.g-30)}, {Math.max(0,selectedPaint.b-30)}));">
-      <div class="color-hero-overlay"></div>
-      <IconButton onclick={() => dialogOpen = false} style="position: absolute; top: 12px; right: 12px; color: rgba(255,255,255,0.7);">
-        <span class="material-icons">close</span>
-      </IconButton>
+    <div class="color-hero" style="background: rgb({selectedPaint.r}, {selectedPaint.g}, {selectedPaint.b});">
+      <button class="close-btn" onclick={() => dialogOpen = false} aria-label="Fechar">
+        <Icon name="close" size={18} />
+      </button>
     </div>
 
     <DialogContent>
       <div class="mb-4">
         <h2 class="font-display text-3xl font-bold text-white mb-1">{selectedPaint.name}</h2>
-        <p style="font-size: 14px; color: var(--color-obsidian-400);">{selectedPaint.manufacturer} · {selectedPaint.productLine}</p>
+        <p style="font-size: 14px; color: var(--ink-500);">{selectedPaint.manufacturer} · {selectedPaint.productLine}</p>
       </div>
 
       <div class="flex items-center gap-2 mb-5">
-        <span class="font-mono text-xs font-medium" style="padding: 4px 10px; border-radius: 8px; background: var(--color-obsidian-800); color: var(--color-amber-glow); border: 1px solid rgba(255,255,255,0.06);">{selectedPaint.code}</span>
+        <span class="font-mono text-xs font-medium" style="padding: 4px 10px; border-radius: 5px; background: var(--ink-800); color: var(--lacquer-tint);">{selectedPaint.code}</span>
       </div>
 
       <div class="grid-2">
-        <div class="artisan-card p-3">
-          <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; margin-bottom: 4px; color: var(--color-obsidian-500);">RGB</div>
+        <div class="panel p-3">
+          <div class="detail-label">RGB</div>
           <div class="font-mono text-sm text-white">{selectedPaint.r}, {selectedPaint.g}, {selectedPaint.b}</div>
         </div>
         {#if selectedPaint.finishType}
-          <div class="artisan-card p-3">
-            <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; margin-bottom: 4px; color: var(--color-obsidian-500);">Acabamento</div>
+          <div class="panel p-3">
+            <div class="detail-label">Acabamento</div>
             <div class="text-sm text-white">{selectedPaint.finishType}</div>
           </div>
         {/if}
         {#if selectedPaint.paintType}
-          <div class="artisan-card p-3">
-            <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; margin-bottom: 4px; color: var(--color-obsidian-500);">Tipo</div>
+          <div class="panel p-3">
+            <div class="detail-label">Tipo</div>
             <div class="text-sm text-white">{selectedPaint.paintType}</div>
           </div>
         {/if}
         {#if selectedPaint.coverage}
-          <div class="artisan-card p-3">
-            <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; margin-bottom: 4px; color: var(--color-obsidian-500);">Cobertura</div>
+          <div class="panel p-3">
+            <div class="detail-label">Cobertura</div>
             <div class="text-sm text-white">{selectedPaint.coverage}</div>
           </div>
         {/if}
         {#if selectedPaint.opacity}
-          <div class="artisan-card p-3">
-            <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; margin-bottom: 4px; color: var(--color-obsidian-500);">Opacidade</div>
+          <div class="panel p-3">
+            <div class="detail-label">Opacidade</div>
             <div class="text-sm text-white">{selectedPaint.opacity}</div>
           </div>
         {/if}
         {#if selectedPaint.volume}
-          <div class="artisan-card p-3">
-            <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; margin-bottom: 4px; color: var(--color-obsidian-500);">Volume</div>
+          <div class="panel p-3">
+            <div class="detail-label">Volume</div>
             <div class="text-sm text-white">{selectedPaint.volume}</div>
           </div>
         {/if}
@@ -206,14 +203,37 @@
     position: relative;
   }
 
-  .color-hero-overlay {
+  .close-btn {
     position: absolute;
-    inset: 0;
-    background: linear-gradient(to top, rgba(0,0,0,0.3), transparent);
+    top: 12px;
+    right: 12px;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    background: rgba(15, 13, 18, 0.4);
+    color: rgba(255, 255, 255, 0.85);
+    cursor: pointer;
+  }
+
+  .close-btn:hover {
+    background: rgba(15, 13, 18, 0.6);
+  }
+
+  .detail-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--ink-500);
   }
 
   :global(.mdc-dialog__surface) {
-    border-radius: 16px !important;
+    border-radius: 10px !important;
     overflow: hidden;
   }
 </style>

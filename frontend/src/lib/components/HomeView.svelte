@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import Card, { Content, PrimaryAction } from '@smui/card';
-  import Button from '@smui/button';
+  import Icon from './Icon.svelte';
 
   type View = 'home' | 'catalog' | 'color-search' | 'compare' | 'mix';
 
@@ -19,13 +18,30 @@
     recipes: number;
   }
 
+  interface Paint {
+    id: number;
+    name: string;
+    manufacturer: string;
+    r: number;
+    g: number;
+    b: number;
+  }
+
   let stats: Stats | null = $state(null);
+  let shelf: Paint[] = $state([]);
   let loading = $state(true);
 
   onMount(async () => {
     try {
       const wailsjs = await import('../../../wailsjs/go/main/PaintService');
-      stats = await wailsjs.GetStats();
+      const [s, all] = await Promise.all([
+        wailsjs.GetStats(),
+        wailsjs.GetAllPaints(),
+      ]);
+      stats = s;
+      const pool = all || [];
+      const stride = Math.max(1, Math.floor(pool.length / 8));
+      shelf = pool.filter((_: Paint, i: number) => i % stride === 0).slice(0, 8);
     } catch (e) {
       console.error('Erro carregando stats:', e);
       stats = { manufacturers: 11, productLines: 32, paints: 45, equivalences: 0, recipes: 0 };
@@ -34,99 +50,89 @@
     }
   });
 
-  const quickActions: { view: View; title: string; desc: string; icon: string }[] = [
-    { view: 'catalog', title: 'Catálogo Completo', desc: 'Explore todas as tintas cadastradas por fabricante', icon: 'inventory_2' },
-    { view: 'color-search', title: 'Buscar por Cor', desc: 'Encontre tintas similares usando Delta E 2000', icon: 'colorize' },
-    { view: 'compare', title: 'Comparar Tintas', desc: 'Compare cores lado a lado visualmente', icon: 'compare_arrows' },
-    { view: 'mix', title: 'Receita de Mistura', desc: 'Descubra a fórmula perfeita para sua cor', icon: 'science' },
+  const quickActions: { view: View; title: string; desc: string; icon: 'grid' | 'pipette' | 'swap' | 'flask' }[] = [
+    { view: 'catalog', title: 'Catálogo completo', desc: 'Explore todas as tintas cadastradas por fabricante', icon: 'grid' },
+    { view: 'color-search', title: 'Buscar por cor', desc: 'Encontre tintas similares usando Delta E 2000', icon: 'pipette' },
+    { view: 'compare', title: 'Comparar tintas', desc: 'Compare cores lado a lado, até 6 por vez', icon: 'swap' },
+    { view: 'mix', title: 'Receita de mistura', desc: 'Descubra a fórmula pra chegar em qualquer cor', icon: 'flask' },
   ];
 
-  const statMeta = [
-    { key: 'manufacturers' as const, label: 'Fabricantes', color: 'var(--color-amber-glow)', icon: 'business' },
-    { key: 'productLines' as const, label: 'Linhas', color: 'var(--color-azure)', icon: 'category' },
-    { key: 'paints' as const, label: 'Tintas', color: 'var(--color-violet)', icon: 'palette' },
-    { key: 'equivalences' as const, label: 'Equivalências', color: 'var(--color-emerald)', icon: 'swap_horiz' },
-    { key: 'recipes' as const, label: 'Receitas', color: 'var(--color-coral)', icon: 'science' },
+  const ledger: { key: keyof Stats; label: string; icon: 'building' | 'layers' | 'palette' | 'swap' | 'flask' }[] = [
+    { key: 'manufacturers', label: 'Fabricantes', icon: 'building' },
+    { key: 'productLines', label: 'Linhas', icon: 'layers' },
+    { key: 'paints', label: 'Tintas', icon: 'palette' },
+    { key: 'equivalences', label: 'Equivalências', icon: 'swap' },
+    { key: 'recipes', label: 'Receitas', icon: 'flask' },
   ];
 </script>
 
 <div class="page-container">
   <!-- Hero -->
-  <div class="page-header animate-artisan-fade">
-    <div class="flex items-center gap-4 mb-3">
-      <div class="hero-icon">
-        <span class="material-icons" style="color: white; font-size: 24px;">palette</span>
-      </div>
+  <div class="page-header animate-rise">
+    <div class="eyebrow mb-2">Bancada de pintura</div>
+    <div class="flex items-center gap-4">
+      <div class="hero-mark"></div>
       <div>
-        <h1 class="page-title">Paint Match <span style="color: var(--color-amber-glow);">AI</span></h1>
-        <p class="page-subtitle">Base de conhecimento profissional para pintores de miniaturas</p>
+        <h1 class="page-title">Paint Match AI</h1>
+        <p class="page-subtitle">Base de conhecimento profissional pra pintores de miniaturas</p>
       </div>
     </div>
     <div class="page-divider"></div>
   </div>
 
-  <!-- Stats -->
-  <div class="grid-5 mb-10">
-    {#if loading}
-      {#each Array(5) as _}
-        <div class="artisan-card p-5">
-          <div class="skeleton" style="height: 32px; width: 56px; margin-bottom: 8px;"></div>
-          <div class="skeleton" style="height: 12px; width: 64px;"></div>
-        </div>
-      {/each}
-    {:else if stats}
-      {#each statMeta as meta, i}
-        <div class="artisan-card p-5 animate-artisan-fade" style="animation-delay: {i * 60}ms;">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="stat-icon" style="background: color-mix(in srgb, {meta.color} 12%, transparent);">
-              <span class="material-icons" style="color: {meta.color}; font-size: 18px;">{meta.icon}</span>
-            </div>
-          </div>
-          <div class="font-display text-3xl font-bold mb-1" style="color: {meta.color};">{stats[meta.key]}</div>
-          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-obsidian-500);">{meta.label}</div>
-        </div>
-      {/each}
-    {/if}
+  <!-- Ledger -->
+  <div class="ledger mb-10 animate-rise" style="animation-delay: 60ms;">
+    {#each ledger as item, i}
+      <div class="ledger-col" style={i > 0 ? 'border-left: 1px solid var(--ink-700);' : ''}>
+        <span class="ledger-icon"><Icon name={item.icon} size={15} /></span>
+        {#if loading}
+          <div class="skeleton" style="height: 30px; width: 40px; margin: 6px 0;"></div>
+        {:else if stats}
+          <div class="ledger-value">{stats[item.key]}</div>
+        {/if}
+        <div class="ledger-label">{item.label}</div>
+      </div>
+    {/each}
   </div>
 
-  <!-- Quick Actions -->
+  <!-- Shelf -->
+  {#if shelf.length > 0}
+    <div class="mb-10 animate-rise" style="animation-delay: 100ms;">
+      <h2 class="section-title">Na prateleira</h2>
+      <div class="shelf">
+        {#each shelf as paint, i}
+          <button class="shelf-swatch swatch-flat" style="background: rgb({paint.r}, {paint.g}, {paint.b}); animation-delay: {i * 30}ms;" title="{paint.name} — {paint.manufacturer}" onclick={() => onNavigate('catalog')}></button>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  <!-- Quick actions -->
   <div class="mb-8">
-    <h2 class="font-display text-lg font-semibold text-white mb-5 flex items-center gap-3">
-      <span>Ações Rápidas</span>
-      <div style="flex: 1; height: 1px; background: linear-gradient(90deg, rgba(255,255,255,0.06), transparent);"></div>
-    </h2>
-    <div class="grid-2">
+    <h2 class="section-title">Ferramentas</h2>
+    <div class="actions-list">
       {#each quickActions as action, i}
-        <Card variant="outlined" class="artisan-card animate-artisan-fade" style="animation-delay: {200 + i * 60}ms;">
-          <PrimaryAction onclick={() => onNavigate(action.view)}>
-            <Content>
-              <div class="flex items-start gap-4">
-                <div class="action-icon">
-                  <span class="material-icons" style="color: var(--color-amber-glow); font-size: 22px;">{action.icon}</span>
-                </div>
-                <div>
-                  <div class="font-semibold text-white text-sm mb-1">{action.title}</div>
-                  <div style="font-size: 13px; color: var(--color-obsidian-400);">{action.desc}</div>
-                </div>
-              </div>
-            </Content>
-          </PrimaryAction>
-        </Card>
+        <button class="row-card animate-rise" style="animation-delay: {140 + i * 50}ms;" onclick={() => onNavigate(action.view)}>
+          <div class="action-icon"><Icon name={action.icon} size={20} /></div>
+          <div class="flex-1">
+            <div class="action-title">{action.title}</div>
+            <div class="action-desc">{action.desc}</div>
+          </div>
+          <div class="action-arrow"><Icon name="chevron-left" size={16} /></div>
+        </button>
       {/each}
     </div>
   </div>
 
-  <!-- Info Footer -->
-  <div class="artisan-card p-4 animate-artisan-fade" style="animation-delay: 500ms;">
+  <!-- Info footer -->
+  <div class="panel p-4 animate-rise" style="animation-delay: 380ms;">
     <div class="flex items-center gap-3">
-      <div class="stat-icon" style="background: rgba(212,160,83,0.1);">
-        <span class="material-icons" style="color: var(--color-amber-glow); font-size: 18px;">info</span>
-      </div>
+      <span style="color: var(--ink-500);"><Icon name="info" size={18} /></span>
       <div>
-        <span class="text-sm font-semibold text-white">Sistema 100% Offline</span>
-        <span style="font-size: 13px; color: var(--color-obsidian-400); margin-left: 8px;">
+        <span class="text-sm font-semibold text-white">Sistema 100% offline</span>
+        <span style="font-size: 13px; color: var(--ink-500); margin-left: 8px;">
           Dados locais em SQLite. Seed:
-          <code class="font-mono" style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--color-obsidian-800); color: var(--color-amber-glow);">rtk go run ./cmd/seed</code>
+          <code class="font-mono" style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--ink-800); color: var(--lacquer-tint);">rtk go run ./cmd/seed</code>
         </span>
       </div>
     </div>
@@ -134,49 +140,118 @@
 </div>
 
 <style>
-  .hero-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, var(--color-amber-glow), var(--color-amber-warm));
-    box-shadow: 0 4px 20px rgba(212, 160, 83, 0.3);
+  .hero-mark {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--lacquer);
+    box-shadow: inset 0 -4px 7px rgba(0, 0, 0, 0.25), inset 0 3px 4px rgba(255, 255, 255, 0.18);
   }
 
-  .stat-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
+  .ledger {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    background: var(--ink-900);
+    border: 1px solid var(--ink-700);
+    border-radius: 10px;
+  }
+
+  .ledger-col {
+    padding: 18px 20px;
+  }
+
+  .ledger-icon {
+    display: inline-flex;
+    color: var(--ink-500);
+    margin-bottom: 10px;
+  }
+
+  .ledger-value {
+    font-family: var(--font-display);
+    font-size: 1.875rem;
+    font-weight: 600;
+    color: var(--paper);
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  .ledger-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-500);
+  }
+
+  .section-title {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--paper);
+    margin-bottom: 16px;
+  }
+
+  .shelf {
     display: flex;
-    align-items: center;
-    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .shelf-swatch {
+    width: 46px;
+    height: 46px;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: transform 0.15s ease;
+    animation: rise-in 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
+  .shelf-swatch:hover {
+    transform: translateY(-3px);
+  }
+
+  .actions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .action-icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
     flex-shrink: 0;
-    background: var(--color-obsidian-800);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--ink-800);
+    color: var(--lacquer);
   }
 
-  :global(.smui-card--outlined.artisan-card) {
-    background: linear-gradient(145deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01));
-    border-color: rgba(255, 255, 255, 0.06);
-    border-radius: 14px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  .action-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--paper);
+    margin-bottom: 2px;
   }
 
-  :global(.smui-card--outlined.artisan-card:hover) {
-    background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025));
-    border-color: rgba(212, 160, 83, 0.15);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(212,160,83,0.08);
-    transform: translateY(-1px);
+  .action-desc {
+    font-size: 12.5px;
+    color: var(--ink-500);
+  }
+
+  .action-arrow {
+    display: flex;
+    flex-shrink: 0;
+    color: var(--ink-600);
+    transform: rotate(180deg);
+    transition: transform 0.15s ease, color 0.15s ease;
+  }
+
+  :global(.row-card:hover) .action-arrow {
+    transform: rotate(180deg) translateX(3px);
+    color: var(--lacquer);
   }
 </style>
