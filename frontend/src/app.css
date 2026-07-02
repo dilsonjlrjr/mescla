@@ -234,6 +234,7 @@ body {
   border: 1px solid var(--ink-700);
   border-radius: 8px;
   overflow: visible;
+  min-width: 0;
   cursor: pointer;
   text-align: left;
   transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s ease;
@@ -445,8 +446,16 @@ input[type="range"]::-webkit-slider-thumb:hover {
 /* ── Grid helpers ── */
 .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-.grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+
+/* Grades de cards são responsivas: a coluna se repete o quanto couber na
+   largura atual (auto-fill), então a mesma tela preenche quando maximizada e
+   reduz colunas — sem cortar — quando a janela encolhe. */
+.grid-4 { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.grid-5 { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
+
+/* Sem isto o filho da grade herda min-width:auto (min-content) e o nome de
+   tinta em nowrap estoura a coluna, empurrando o card pra fora da tela. */
+.grid-4 > *, .grid-5 > * { min-width: 0; }
 
 /* ── Flex helpers ── */
 .flex { display: flex; }
