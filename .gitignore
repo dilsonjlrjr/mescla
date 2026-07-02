@@ -31,3 +31,4 @@ Thumbs.db
 # Claude Code local config
 .claude/
 dist/
+db/embedded/*.db

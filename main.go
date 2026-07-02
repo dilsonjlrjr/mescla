@@ -14,8 +14,14 @@ var assets embed.FS
 //go:embed assets/tray/icon.png
 var trayIcon []byte
 
+// Banco de catálogo embutido no binário (gerado pelo scripts/build-all.sh).
+// Em dev o diretório fica vazio e o app usa o paint_knowledge.db do CWD.
+//go:embed all:db/embedded
+var embeddedDB embed.FS
+
 func main() {
-	paintService, err := NewPaintService()
+	seed, _ := embeddedDB.ReadFile("db/embedded/paint_knowledge.db")
+	paintService, err := NewPaintService(seed)
 	if err != nil {
 		log.Fatalf("Erro inicializando PaintService: %v", err)
 	}

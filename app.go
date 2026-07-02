@@ -21,11 +21,33 @@ type PaintService struct {
 	sim *similarity.Engine
 }
 
-func NewPaintService() (*PaintService, error) {
+// NewPaintService abre o banco de catálogo. Ordem de resolução:
+//  1. paint_knowledge.db no diretório atual (fluxo de desenvolvimento);
+//  2. banco já instalado no diretório de dados do usuário;
+//  3. primeiro boot: extrai o banco embutido no binário (embeddedSeed)
+//     para o diretório de dados — o app é auto-suficiente, sem instalador.
+func NewPaintService(embeddedSeed []byte) (*PaintService, error) {
 	dbPath := "paint_knowledge.db"
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		home, _ := os.UserHomeDir()
-		dbPath = filepath.Join(home, ".paint-match-ai", "paint_knowledge.db")
+		cfgDir, err := os.UserConfigDir()
+		if err != nil {
+			home, _ := os.UserHomeDir()
+			cfgDir = home
+		}
+		dataDir := filepath.Join(cfgDir, "Mescla")
+		dbPath = filepath.Join(dataDir, "paint_knowledge.db")
+
+		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+			if len(embeddedSeed) == 0 {
+				return nil, fmt.Errorf("banco de catálogo não encontrado (nem no diretório atual, nem em %s, nem embutido no binário)", dataDir)
+			}
+			if err := os.MkdirAll(dataDir, 0o755); err != nil {
+				return nil, fmt.Errorf("criando diretório de dados: %w", err)
+			}
+			if err := os.WriteFile(dbPath, embeddedSeed, 0o644); err != nil {
+				return nil, fmt.Errorf("instalando banco de catálogo: %w", err)
+			}
+		}
 	}
 
 	db, err := sql.Open("sqlite", dbPath)

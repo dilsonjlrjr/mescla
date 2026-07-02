@@ -35,6 +35,20 @@ build_frontend() {
   ok "frontend/dist pronto"
 }
 
+# Banco de catálogo fresco, embutido no binário — o app instala sozinho
+# no primeiro boot (auto-suficiente, sem passo de seed pro usuário).
+build_database() {
+  say "Banco de catálogo (migração + seed)…"
+  local db="db/embedded/paint_knowledge.db"
+  rm -f "$db" "$db-wal" "$db-shm"
+  mkdir -p db/embedded
+  sqlite3 "$db" < db/migrations/001_initial_schema.sql
+  go run ./cmd/seed -db "$db" -import-catalog >/dev/null
+  sqlite3 "$db" "PRAGMA journal_mode=DELETE; VACUUM;" >/dev/null
+  rm -f "$db-wal" "$db-shm"
+  ok "banco embutível pronto ($(du -h "$db" | cut -f1 | tr -d ' '), $(sqlite3 "$db" 'SELECT COUNT(*) FROM paints') tintas)"
+}
+
 build_mac() {
   say "macOS arm64…"
   GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 \
@@ -83,6 +97,16 @@ build_mac() {
 </dict></plist>
 PLIST
   ok "macOS: ${APP}-darwin-{arm64,amd64,universal} + Mescla.app"
+
+  say "DMG…"
+  local staging; staging="$(mktemp -d)"
+  cp -R "$DIST/Mescla.app" "$staging/"
+  ln -s /Applications "$staging/Applications"
+  rm -f "$DIST/Mescla-${VERSION}.dmg"
+  hdiutil create -volname "Mescla" -srcfolder "$staging" -ov -format UDZO \
+    "$DIST/Mescla-${VERSION}.dmg" >/dev/null
+  rm -rf "$staging"
+  ok "DMG: Mescla-${VERSION}.dmg (arraste pro Applications)"
 }
 
 build_windows() {
@@ -126,6 +150,7 @@ mkdir -p "$DIST"
 
 say "Mescla ${VERSION} → ${TARGET}"
 build_frontend
+build_database
 
 case "$TARGET" in
   mac|darwin)  build_mac ;;
