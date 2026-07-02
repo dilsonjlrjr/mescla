@@ -54,18 +54,56 @@
     }
   });
 
-  let availableTargets = $derived(
-    manufacturers.filter(m => !sourcePaint || m.name !== sourcePaint.manufacturer)
-  );
+  // Todas as marcas, incluindo a própria da tinta de origem: dá pra montar um tom
+  // que a marca não tem a partir de outras tintas dela (a tinta-alvo é excluída
+  // do cálculo no backend).
+  let availableTargets = $derived(manufacturers);
 
   // Passo atual da jornada — guia o olho pro próximo campo
   let step = $derived(!sourcePaint ? 1 : !targetManufacturerId ? 2 : 3);
 
+  // Faixas de ΔE pra legenda visível (mesmos cortes do DeltaBadge). max é o
+  // teto exclusivo da faixa; a última pega tudo acima de 12.
+  const deltaBands = [
+    { range: '0–1',  label: 'idêntica',      cls: 'excellent', max: 1 },
+    { range: '1–3',  label: 'muito próxima', cls: 'excellent', max: 3 },
+    { range: '3–6',  label: 'próxima',       cls: 'good',      max: 6 },
+    { range: '6–12', label: 'visível',       cls: 'fair',      max: 12 },
+    { range: '12+',  label: 'diferente',     cls: 'poor',      max: Infinity },
+  ];
+  let activeBandIdx = $derived(result ? deltaBands.findIndex(b => result.deltaE < b.max) : -1);
+
+  // Medir a receita em % ou em gotas. Pintor dosa na bancada por gota. As gotas
+  // são só a indicação da proporção — não uma interação: o app mostra a menor
+  // receita de gotas inteiras que mantém as proporções.
+  let unit: 'percent' | 'drops' = $state('percent');
+
+  function gcd(a: number, b: number): number {
+    return b === 0 ? a : gcd(b, a % b);
+  }
+
+  // Converte os percentuais na menor proporção de gotas inteiras. Arredonda pra
+  // inteiros que somam 100 (método do maior resto) e divide pelo MDC — assim
+  // 30/60/10% vira 3/6/1 gotas, 25/75% vira 1/3, etc.
+  function computeDrops(ingredients: any[]): number[] {
+    const raw = ingredients.map(i => i.percentage);
+    const ints = raw.map(Math.floor);
+    let left = 100 - ints.reduce((a, b) => a + b, 0);
+    const byFrac = raw
+      .map((v, idx) => ({ idx, frac: v - Math.floor(v) }))
+      .sort((a, b) => b.frac - a.frac);
+    for (let k = 0; left > 0 && byFrac.length; k++, left--) {
+      ints[byFrac[k % byFrac.length].idx]++;
+    }
+    const g = ints.filter(v => v > 0).reduce((acc, v) => gcd(acc, v), 0) || 1;
+    return ints.map(v => Math.round(v / g));
+  }
+
+  let drops = $derived(result?.ingredients ? computeDrops(result.ingredients) : []);
+  let totalDrops = $derived(drops.reduce((a, b) => a + b, 0));
+
   function selectSource(paint: Paint) {
     sourcePaint = paint;
-    if (targetManufacturerId && manufacturers.find(m => m.id === targetManufacturerId)?.name === paint.manufacturer) {
-      targetManufacturerId = '';
-    }
     result = null;
     errorMsg = '';
   }
@@ -94,9 +132,14 @@
 
   function copyRecipe() {
     if (!result?.ingredients) return;
+    const measure = (i: any, idx: number) =>
+      unit === 'drops'
+        ? `${drops[idx]} ${drops[idx] === 1 ? 'gota' : 'gotas'}`
+        : `${i.percentage.toFixed(1)}%`;
     const lines = [
       `${result.sourceName} (${result.sourceManufacturer}) → ${result.targetManufacturer}`,
-      ...result.ingredients.map((i: any) => `${i.percentage.toFixed(1)}%  ${i.name}`),
+      ...(unit === 'drops' ? [`Mistura de ${totalDrops} gotas`] : []),
+      ...result.ingredients.map((i: any, idx: number) => `${measure(i, idx)}  ${i.name}${i.code ? ` (${i.code})` : ''}`),
       `ΔE2000 ${result.deltaE.toFixed(2)}`,
     ];
     navigator.clipboard.writeText(lines.join('\n'));
@@ -191,6 +234,22 @@
               <span class="verdict-tag">sua mistura · {result.targetManufacturer}</span>
             </div>
           </div>
+
+          <!-- Legenda: explica o par de cores e o ΔE pra quem nunca viu o termo -->
+          <div class="verdict-legend">
+            <p class="legend-desc">
+              À <strong>esquerda</strong>, a cor que você quer; à <strong>direita</strong>, o que a sua mistura produz.
+              O <strong>ΔE</strong> mede o quanto elas se diferenciam — quanto menor, mais parecidas (<strong>0 = idênticas</strong>).
+            </p>
+            <div class="delta-scale" role="img" aria-label="Escala de diferença de cor, ΔE {result.deltaE.toFixed(1)}">
+              {#each deltaBands as band, i}
+                <span class="scale-seg {band.cls}" class:active={activeBandIdx === i}>
+                  <span class="scale-range">{band.range}</span>
+                  <span class="scale-lbl">{band.label}</span>
+                </span>
+              {/each}
+            </div>
+          </div>
         </div>
 
         <!-- Ingredients -->
@@ -204,6 +263,17 @@
             </button>
           </div>
 
+          <!-- Medir em % ou gotas: pintor dosa na bancada por gota -->
+          <div class="recipe-controls">
+            <div class="unit-toggle" role="group" aria-label="Unidade de medida">
+              <button class:active={unit === 'percent'} onclick={() => unit = 'percent'}>%</button>
+              <button class:active={unit === 'drops'} onclick={() => unit = 'drops'}>gotas</button>
+            </div>
+            {#if unit === 'drops'}
+              <span class="drops-cap">mistura de {totalDrops} {totalDrops === 1 ? 'gota' : 'gotas'} — dá pra multiplicar (2×, 3×…) pra fazer mais</span>
+            {/if}
+          </div>
+
           {#if result.ingredients}
             <div style="display: flex; flex-direction: column; gap: 12px;">
               {#each result.ingredients as ing, i}
@@ -212,9 +282,17 @@
                     <PaintBottle r={ing.r} g={ing.g} b={ing.b} size={46} />
                     <div style="flex: 1; min-width: 0;">
                       <div class="font-semibold text-sm text-white truncate">{ing.name}</div>
+                      {#if ing.code}
+                        <span class="ing-code font-mono">{ing.code}</span>
+                      {/if}
                     </div>
                     <div style="text-align: right; flex-shrink: 0;">
-                      <div class="font-mono font-bold text-white" style="font-size: 16px;">{ing.percentage.toFixed(1)}%</div>
+                      {#if unit === 'drops'}
+                        <div class="font-mono font-bold text-white" style="font-size: 16px;">{drops[i]} <span style="font-size: 11px; font-weight: 500; color: var(--ink-500);">{drops[i] === 1 ? 'gota' : 'gotas'}</span></div>
+                        <div style="font-size: 11px; color: var(--ink-500);">{ing.percentage.toFixed(1)}%</div>
+                      {:else}
+                        <div class="font-mono font-bold text-white" style="font-size: 16px;">{ing.percentage.toFixed(1)}%</div>
+                      {/if}
                     </div>
                   </div>
                   <div style="margin-top: 10px; height: 3px; border-radius: 999px; background: var(--ink-700); overflow: hidden;">
@@ -309,6 +387,71 @@
     position: relative;
   }
 
+  /* Legenda do par + escala de ΔE */
+  .verdict-legend {
+    margin-top: 14px;
+  }
+
+  .legend-desc {
+    margin: 0 0 12px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--ink-400);
+  }
+
+  .legend-desc strong {
+    color: var(--ink-200);
+    font-weight: 600;
+  }
+
+  .delta-scale {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+  }
+
+  .scale-seg {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 4px;
+    border-radius: 6px;
+    text-align: center;
+    background: var(--ink-800);
+    border: 1px solid transparent;
+    opacity: 0.55;
+    transition: opacity 0.15s ease;
+  }
+
+  /* Faixa onde o ΔE atual cai — destacada, o resto esmaecido */
+  .scale-seg.active {
+    opacity: 1;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+    border-color: color-mix(in srgb, currentColor 40%, transparent);
+  }
+
+  .scale-seg.excellent { color: var(--delta-excellent); }
+  .scale-seg.good      { color: var(--delta-good); }
+  .scale-seg.fair      { color: var(--delta-fair); }
+  .scale-seg.poor      { color: var(--delta-poor); }
+
+  .scale-range {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .scale-lbl {
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-500);
+  }
+
+  .scale-seg.active .scale-lbl {
+    color: currentColor;
+  }
+
   .verdict-tag {
     position: absolute;
     bottom: 8px;
@@ -331,6 +474,58 @@
     padding: 12px;
     border: 1px solid var(--ink-700);
     border-radius: 8px;
+  }
+
+  /* Barra de medida: alternador %/gotas + total de gotas */
+  .recipe-controls {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .unit-toggle {
+    display: inline-flex;
+    padding: 2px;
+    border-radius: 8px;
+    background: var(--ink-800);
+    border: 1px solid var(--ink-700);
+  }
+
+  .unit-toggle button {
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 5px 14px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink-400);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .unit-toggle button.active {
+    background: var(--lacquer);
+    color: #fff;
+  }
+
+  .drops-cap {
+    font-size: 12px;
+    color: var(--ink-500);
+  }
+
+  /* Referência do pote — sem o código não dá pra comprar/achar a tinta na loja */
+  .ing-code {
+    display: inline-block;
+    margin-top: 3px;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 1px 7px;
+    border-radius: 4px;
+    background: var(--ink-800);
+    color: var(--lacquer-tint);
   }
 
   .warn-banner {

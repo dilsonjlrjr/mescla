@@ -2,16 +2,28 @@ package mix
 
 import "math"
 
-// SuggestBestSubset testa combinações de 1 a maxIngredients tintas dentre os
-// candidatos e retorna a melhor Recipe (menor DeltaE), usando o Engine.SuggestRecipe
-// já existente pra cada combinação — ele já funciona corretamente para conjuntos
-// de até 4 tintas, só não escolhe sozinho QUAIS tintas usar dentre N candidatas.
-func SuggestBestSubset(target [3]float64, candidates []PaintInput, maxIngredients int) Recipe {
+// SuggestBestSubset testa combinações de minIngredients a maxIngredients tintas
+// dentre os candidatos e retorna a melhor Recipe (menor DeltaE), usando o
+// Engine.SuggestRecipe já existente pra cada combinação — ele já funciona
+// corretamente para conjuntos de até 4 tintas, só não escolhe sozinho QUAIS
+// tintas usar dentre N candidatas.
+//
+// minIngredients força um piso de tintas na receita: com 1, aceita "use só a
+// tinta X" (equivalência 1:1, boa entre marcas diferentes); com 2, obriga uma
+// mistura de verdade (usado na mesma marca, onde devolver ~100% de uma tinta é
+// inútil). É rebaixado se o pool for menor que o piso.
+func SuggestBestSubset(target [3]float64, candidates []PaintInput, minIngredients, maxIngredients int) Recipe {
 	if len(candidates) == 0 {
 		return Recipe{Method: "none"}
 	}
 	if maxIngredients <= 0 || maxIngredients > 4 {
 		maxIngredients = 4 // Engine.SuggestRecipe só suporta até 4
+	}
+	if minIngredients < 1 {
+		minIngredients = 1
+	}
+	if minIngredients > maxIngredients {
+		minIngredients = maxIngredients
 	}
 
 	pool := candidates
@@ -24,11 +36,15 @@ func SuggestBestSubset(target [3]float64, candidates []PaintInput, maxIngredient
 	if maxK > len(pool) {
 		maxK = len(pool)
 	}
+	minK := minIngredients
+	if minK > len(pool) {
+		minK = len(pool) // pool menor que o piso: usa o que tem
+	}
 
 	engine := NewEngine()
 	best := Recipe{Method: "none", DeltaE: math.MaxFloat64}
 
-	for k := 1; k <= maxK; k++ {
+	for k := minK; k <= maxK; k++ {
 		forEachCombination(pool, k, func(combo []PaintInput) {
 			candidateCopy := make([]PaintInput, len(combo))
 			copy(candidateCopy, combo)

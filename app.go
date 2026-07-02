@@ -113,6 +113,7 @@ type SearchResultDTO struct {
 type RecipeIngredientDTO struct {
 	PaintID    int64   `json:"paintId"`
 	Name       string  `json:"name"`
+	Code       string  `json:"code"`
 	Percentage float64 `json:"percentage"`
 	R          uint8   `json:"r"`
 	G          uint8   `json:"g"`
@@ -403,14 +404,42 @@ func (s *PaintService) SuggestEquivalentRecipe(sourcePaintID int64, targetManufa
 		return EquivalentRecipeDTO{}, fmt.Errorf("fabricante de destino não possui tintas cadastradas com cor")
 	}
 
+	// Nunca usar a própria tinta-alvo como ingrediente. Quando a marca de destino
+	// é a mesma da origem (ex.: montar um azul-marinho que a marca não tem, a
+	// partir de preto + azul dela), a tinta-alvo estaria no pool e a "receita"
+	// viraria 100% dela mesma (ΔE 0), inútil. Em marcas diferentes os ids nunca
+	// coincidem, então isto não tem efeito lá.
+	kept := candidates[:0]
+	for _, c := range candidates {
+		if c.ID != source.ID {
+			kept = append(kept, c)
+		}
+	}
+	candidates = kept
+	if len(candidates) == 0 {
+		return EquivalentRecipeDTO{}, fmt.Errorf("essa marca não tem outras tintas com cor pra montar a mistura")
+	}
+
+	var targetMfrName string
+	s.db.QueryRow("SELECT name FROM manufacturers WHERE id = ?", targetManufacturerID).Scan(&targetMfrName)
+
+	// Mesma marca: obrigar mistura de 2+ tintas. Devolver "quase 100% de uma
+	// tinta só" da própria marca não ajuda — o usuário já sabe que aquela tinta
+	// existe; ele quer o tom que NÃO tem, feito com as que tem.
+	minIngredients := 1
+	if targetMfrName != "" && targetMfrName == source.Manufacturer {
+		minIngredients = 2
+	}
+
 	targetL, targetA, targetB := color.RGBToLab(source.R, source.G, source.B)
-	recipe := mix.SuggestBestSubset([3]float64{targetL, targetA, targetB}, candidates, 3)
+	recipe := mix.SuggestBestSubset([3]float64{targetL, targetA, targetB}, candidates, minIngredients, 3)
 
 	ingredients := make([]RecipeIngredientDTO, 0, len(recipe.Ingredients))
 	for _, ing := range recipe.Ingredients {
 		ingredients = append(ingredients, RecipeIngredientDTO{
 			PaintID:    ing.Paint.ID,
 			Name:       ing.Paint.Name,
+			Code:       ing.Paint.Code,
 			Percentage: ing.Percentage,
 			R:          ing.Paint.R,
 			G:          ing.Paint.G,
@@ -419,9 +448,6 @@ func (s *PaintService) SuggestEquivalentRecipe(sourcePaintID int64, targetManufa
 	}
 
 	tips := mix.GenerateTips(source.R, source.G, source.B, recipe)
-
-	var targetMfrName string
-	s.db.QueryRow("SELECT name FROM manufacturers WHERE id = ?", targetManufacturerID).Scan(&targetMfrName)
 
 	return EquivalentRecipeDTO{
 		SourcePaintID:      source.ID,
@@ -448,7 +474,7 @@ func (s *PaintService) SuggestEquivalentRecipe(sourcePaintID int64, targetManufa
 // não deve virar candidato "preto" silencioso numa receita de mistura.
 func (s *PaintService) loadPaintsByManufacturerID(manufacturerID int64) ([]mix.PaintInput, error) {
 	query := `
-		SELECT p.id, p.name, pc.rgb_r, pc.rgb_g, pc.rgb_b
+		SELECT p.id, p.name, p.code, pc.rgb_r, pc.rgb_g, pc.rgb_b
 		FROM paints p
 		JOIN paint_colors pc ON pc.paint_id = p.id
 		WHERE p.manufacturer_id = ?
@@ -462,7 +488,7 @@ func (s *PaintService) loadPaintsByManufacturerID(manufacturerID int64) ([]mix.P
 	var paints []mix.PaintInput
 	for rows.Next() {
 		var p mix.PaintInput
-		if err := rows.Scan(&p.ID, &p.Name, &p.R, &p.G, &p.B); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Code, &p.R, &p.G, &p.B); err != nil {
 			return nil, err
 		}
 		paints = append(paints, p)

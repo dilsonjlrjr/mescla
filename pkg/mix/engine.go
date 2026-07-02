@@ -7,6 +7,7 @@ import (
 type PaintInput struct {
 	ID      int64
 	Name    string
+	Code    string
 	R, G, B uint8
 }
 

@@ -7,7 +7,7 @@ func TestSuggestBestSubsetSingleCandidate(t *testing.T) {
 		{ID: 1, Name: "Salmão", R: 240, G: 130, B: 100},
 	}
 
-	recipe := SuggestBestSubset([3]float64{60, 30, 20}, candidates, 3)
+	recipe := SuggestBestSubset([3]float64{60, 30, 20}, candidates, 1, 3)
 
 	if len(recipe.Ingredients) != 1 {
 		t.Fatalf("Expected 1 ingredient, got %d", len(recipe.Ingredients))
@@ -25,7 +25,7 @@ func TestSuggestBestSubsetUsesAllWhenFew(t *testing.T) {
 	}
 
 	target := [3]float64{50, 40, -10}
-	recipe := SuggestBestSubset(target, candidates, 3)
+	recipe := SuggestBestSubset(target, candidates, 1, 3)
 
 	if len(recipe.Ingredients) == 0 {
 		t.Fatal("Expected at least 1 ingredient")
@@ -51,7 +51,7 @@ func TestSuggestBestSubsetPicksBestNotFirst(t *testing.T) {
 	}
 
 	targetL, targetA, targetB := 100.0, 0.0, 0.0 // branco em Lab
-	recipe := SuggestBestSubset([3]float64{targetL, targetA, targetB}, candidates, 1)
+	recipe := SuggestBestSubset([3]float64{targetL, targetA, targetB}, candidates, 1, 1)
 
 	if len(recipe.Ingredients) != 1 {
 		t.Fatalf("Expected 1 ingredient, got %d", len(recipe.Ingredients))
@@ -73,7 +73,7 @@ func TestSuggestBestSubsetSafetyLimit(t *testing.T) {
 		}
 	}
 
-	recipe := SuggestBestSubset([3]float64{50, 10, 10}, candidates, 3)
+	recipe := SuggestBestSubset([3]float64{50, 10, 10}, candidates, 1, 3)
 
 	if len(recipe.Ingredients) == 0 {
 		t.Fatal("Expected a recipe even with many candidates")
@@ -84,9 +84,40 @@ func TestSuggestBestSubsetSafetyLimit(t *testing.T) {
 }
 
 func TestSuggestBestSubsetEmptyCandidates(t *testing.T) {
-	recipe := SuggestBestSubset([3]float64{50, 50, 50}, nil, 3)
+	recipe := SuggestBestSubset([3]float64{50, 50, 50}, nil, 1, 3)
 
 	if recipe.Method != "none" {
 		t.Errorf("Expected method 'none', got '%s'", recipe.Method)
+	}
+}
+
+// minIngredients=2 (caso mesma marca) deve obrigar receita de 2+ tintas mesmo
+// quando uma tinta sozinha seria a melhor aproximação.
+func TestSuggestBestSubsetMinIngredientsForcesMix(t *testing.T) {
+	// Branco puro está no pool e sozinho zeraria o ΔE pro alvo branco; com piso 2
+	// o algoritmo é obrigado a misturar.
+	candidates := []PaintInput{
+		{ID: 1, Name: "White", R: 255, G: 255, B: 255},
+		{ID: 2, Name: "Black", R: 0, G: 0, B: 0},
+		{ID: 3, Name: "Red", R: 255, G: 0, B: 0},
+	}
+
+	recipe := SuggestBestSubset([3]float64{100, 0, 0}, candidates, 2, 3)
+
+	if len(recipe.Ingredients) < 2 {
+		t.Fatalf("Expected at least 2 ingredients with minIngredients=2, got %d", len(recipe.Ingredients))
+	}
+}
+
+// Piso maior que o pool não deve travar: rebaixa pro que houver.
+func TestSuggestBestSubsetMinClampedToPool(t *testing.T) {
+	candidates := []PaintInput{
+		{ID: 1, Name: "Only", R: 120, G: 120, B: 120},
+	}
+
+	recipe := SuggestBestSubset([3]float64{50, 0, 0}, candidates, 2, 3)
+
+	if len(recipe.Ingredients) != 1 {
+		t.Fatalf("Expected 1 ingredient (pool tem só 1), got %d", len(recipe.Ingredients))
 	}
 }
