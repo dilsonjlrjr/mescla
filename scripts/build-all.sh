@@ -98,6 +98,23 @@ build_mac() {
 PLIST
   ok "macOS: ${APP}-darwin-{arm64,amd64,universal} + Mescla.app"
 
+  # Assinatura: usa Developer ID se houver um no keychain; senão ad-hoc.
+  # Ad-hoc não passa no Gatekeeper (botão direito → Abrir na 1ª vez), mas
+  # evita o "app danificado" em Apple Silicon, que exige código assinado.
+  local identity
+  identity="$(security find-identity -v -p codesigning 2>/dev/null \
+    | { grep -o '"Developer ID Application[^"]*"' || true; } | head -1 | tr -d '"')"
+  if [ -n "$identity" ]; then
+    say "Assinando com: $identity"
+    codesign --force --deep --options runtime --sign "$identity" "$DIST/Mescla.app"
+    warn "Pra distribuir sem aviso do Gatekeeper, falta notarizar (xcrun notarytool)."
+  else
+    say "Assinando ad-hoc (nenhum Developer ID no keychain)…"
+    codesign --force --deep --sign - "$DIST/Mescla.app"
+    warn "Ad-hoc: em outro Mac, abrir com botão direito → Abrir na primeira vez."
+  fi
+  codesign --verify --deep "$DIST/Mescla.app" && ok "assinatura válida"
+
   say "DMG…"
   local staging; staging="$(mktemp -d)"
   cp -R "$DIST/Mescla.app" "$staging/"
