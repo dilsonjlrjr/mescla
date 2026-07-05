@@ -28,6 +28,32 @@ destino — detalhes em [Manutenção / Correções](#manutenção--correções)
 
 ---
 
+## Mescla Mobile (PWA Android)
+
+Wails não compila pra mobile — o app Android é um **segundo frontend** (`frontend-mobile/`,
+Svelte 5 + Vite, sem SMUI) empacotado como **PWA offline-first** (fase futura: APK via Capacitor).
+A lógica de cor continua no Go, compilada pra **WebAssembly**; o catálogo vai como JSON em memória.
+
+- **`pkg/equivalence`** — orquestração pura da receita equivalente extraída de `app.go`
+  (exclusão da tinta-alvo, mistura forçada 2+ na mesma marca, tips, `MaxViableDeltaE`).
+  **Fonte única**: desktop (`app.go`, via SQL) e mobile (`cmd/wasm`, via JSON) chamam a mesma
+  função e produzem receita/ΔE idênticos (paridade verificada).
+- **`cmd/export`** — `paint_knowledge.db` → `catalog.json` compacto (~736 KB / ~200 KB gzip).
+- **`cmd/wasm`** — `GOOS=js GOARCH=wasm`; expõe `window.__mescla`: `init`, `findSimilar`,
+  `suggestEquivalentRecipe`, `compareToAnchor`, `bestBrandsFor`. Binário ~3,3 MB, precacheado.
+- **UX mobile:** 4 abas (Mesclar=inicial, Catálogo, Cor, Mais), sem Home; busca de tinta em
+  tela cheia (nunca dropdown); "minha estante" (marcas em localStorage) — receita calculada
+  por marca da estante, melhor primeiro; gotas por padrão; **Modo Bancada** (gotas gigantes,
+  ×1×2×3, Wake Lock); back do Android integrado via pilha de History API (`nav.svelte.ts`);
+  Comparar = lista-âncora em Mais; catálogo virtualizado (11.932 itens, ~12 renderizados).
+- **Regra de mistura:** proporções 0% são descartadas da receita (`nonZeroIngredients`) — se a
+  marca tem outra tinta idêntica, a resposta colapsa honestamente pra "use essa tinta" (ΔE 0).
+- **Build:** `scripts/build-mobile.sh` (db → export → wasm → vite build) → `frontend-mobile/dist/`.
+  Dev: `npm run dev` em `frontend-mobile` (launch configs `mescla-mobile` e `mescla-mobile-prod`).
+  Artefatos gerados (wasm, catalog.json, wasm_exec.js, dist) são gitignorados.
+
+---
+
 ## Estrutura do Projeto
 
 ```
