@@ -93,15 +93,12 @@ func (e *Engine) SuggestRecipe(target [3]float64, available []PaintInput) Recipe
 		}
 
 		return Recipe{
-			Ingredients: []Ingredient{
-				{Paint: available[0], Percentage: bestProportions[0]},
-				{Paint: available[1], Percentage: bestProportions[1]},
-			},
-			ResultR: bestR,
-			ResultG: bestG,
-			ResultB: bestB,
-			DeltaE:  bestDeltaE,
-			Method:  "binary-search",
+			Ingredients: nonZeroIngredients(available, bestProportions),
+			ResultR:     bestR,
+			ResultG:     bestG,
+			ResultB:     bestB,
+			DeltaE:      bestDeltaE,
+			Method:      "binary-search",
 		}
 	}
 
@@ -143,20 +140,28 @@ func (e *Engine) SuggestRecipe(target [3]float64, available []PaintInput) Recipe
 		}
 	}
 
-	ingredients := make([]Ingredient, len(available))
-	for i, a := range available {
-		ingredients[i] = Ingredient{
-			Paint:      a,
-			Percentage: bestProportions[i],
-		}
-	}
-
 	return Recipe{
-		Ingredients: ingredients,
+		Ingredients: nonZeroIngredients(available, bestProportions),
 		ResultR:     bestR,
 		ResultG:     bestG,
 		ResultB:     bestB,
 		DeltaE:      bestDeltaE,
 		Method:      "exhaustive",
 	}
+}
+
+// nonZeroIngredients monta a lista de ingredientes descartando proporções 0%.
+// A busca de proporções inclui extremos como 0/100 — uma linha "0% de X" na
+// receita é ruído (e vira "0 gotas" na conversão), então some. Efeito colateral
+// intencional: uma mistura "forçada" de 2 tintas pode colapsar pra 1 quando o
+// catálogo tem outra tinta de cor idêntica — e essa É a resposta certa
+// ("use essa tinta"), não uma mistura fantasma.
+func nonZeroIngredients(paints []PaintInput, proportions []float64) []Ingredient {
+	ingredients := make([]Ingredient, 0, len(paints))
+	for i, p := range paints {
+		if proportions[i] > 0 {
+			ingredients = append(ingredients, Ingredient{Paint: p, Percentage: proportions[i]})
+		}
+	}
+	return ingredients
 }

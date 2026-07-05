@@ -91,11 +91,34 @@ func TestSuggestBestSubsetEmptyCandidates(t *testing.T) {
 	}
 }
 
-// minIngredients=2 (caso mesma marca) deve obrigar receita de 2+ tintas mesmo
-// quando uma tinta sozinha seria a melhor aproximação.
+// minIngredients=2 (caso mesma marca) deve obrigar mistura de verdade quando
+// nenhuma tinta sozinha resolve.
 func TestSuggestBestSubsetMinIngredientsForcesMix(t *testing.T) {
-	// Branco puro está no pool e sozinho zeraria o ΔE pro alvo branco; com piso 2
-	// o algoritmo é obrigado a misturar.
+	// Alvo azul-marinho com pool sem nada parecido pronto: a resposta é uma
+	// mistura real (preto + azul), nunca uma tinta só.
+	candidates := []PaintInput{
+		{ID: 1, Name: "Black", R: 10, G: 10, B: 10},
+		{ID: 2, Name: "Blue", R: 30, G: 60, B: 200},
+		{ID: 3, Name: "Red", R: 255, G: 0, B: 0},
+	}
+	// azul-marinho (20, 30, 80) em Lab
+	l, a, b := 14.0, 15.0, -35.0
+
+	recipe := SuggestBestSubset([3]float64{l, a, b}, candidates, 2, 3)
+
+	if len(recipe.Ingredients) < 2 {
+		t.Fatalf("Expected at least 2 ingredients with minIngredients=2, got %d", len(recipe.Ingredients))
+	}
+	for _, ing := range recipe.Ingredients {
+		if ing.Percentage <= 0 {
+			t.Fatalf("ingrediente com %.1f%% não deveria aparecer na receita", ing.Percentage)
+		}
+	}
+}
+
+// Proporções 0% nunca aparecem na receita; se outra tinta do pool tem a cor
+// exata do alvo, a mistura "forçada" colapsa pra ela — resposta honesta.
+func TestSuggestBestSubsetDropsZeroPercentages(t *testing.T) {
 	candidates := []PaintInput{
 		{ID: 1, Name: "White", R: 255, G: 255, B: 255},
 		{ID: 2, Name: "Black", R: 0, G: 0, B: 0},
@@ -104,8 +127,13 @@ func TestSuggestBestSubsetMinIngredientsForcesMix(t *testing.T) {
 
 	recipe := SuggestBestSubset([3]float64{100, 0, 0}, candidates, 2, 3)
 
-	if len(recipe.Ingredients) < 2 {
-		t.Fatalf("Expected at least 2 ingredients with minIngredients=2, got %d", len(recipe.Ingredients))
+	for _, ing := range recipe.Ingredients {
+		if ing.Percentage <= 0 {
+			t.Fatalf("ingrediente com 0%% vazou pra receita: %s", ing.Paint.Name)
+		}
+	}
+	if len(recipe.Ingredients) != 1 || recipe.Ingredients[0].Paint.ID != 1 {
+		t.Fatalf("esperava colapso honesto pra White (100%%), veio %+v", recipe.Ingredients)
 	}
 }
 

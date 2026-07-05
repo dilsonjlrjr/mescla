@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"paint-match-ai/pkg/ai"
 	"paint-match-ai/pkg/color"
+	"paint-match-ai/pkg/equivalence"
 	"paint-match-ai/pkg/mix"
 	"paint-match-ai/pkg/similarity"
 
@@ -141,11 +143,6 @@ type EquivalentRecipeDTO struct {
 	Reproducible bool     `json:"reproducible"`
 	Tips         []string `json:"tips"`
 }
-
-// maxViableDeltaE é o limite de ΔE2000 acima do qual uma cor é considerada
-// irreproduzível com o catálogo de destino. ΔE ~10 já é uma diferença de cor
-// óbvia a olho nu; acima disso a "receita" não replica a cor, só a aproxima.
-const maxViableDeltaE = 10.0
 
 type ManufacturerDTO struct {
 	ID         int64  `json:"id"`
@@ -404,35 +401,21 @@ func (s *PaintService) SuggestEquivalentRecipe(sourcePaintID int64, targetManufa
 		return EquivalentRecipeDTO{}, fmt.Errorf("fabricante de destino não possui tintas cadastradas com cor")
 	}
 
-	// Nunca usar a própria tinta-alvo como ingrediente. Quando a marca de destino
-	// é a mesma da origem (ex.: montar um azul-marinho que a marca não tem, a
-	// partir de preto + azul dela), a tinta-alvo estaria no pool e a "receita"
-	// viraria 100% dela mesma (ΔE 0), inútil. Em marcas diferentes os ids nunca
-	// coincidem, então isto não tem efeito lá.
-	kept := candidates[:0]
-	for _, c := range candidates {
-		if c.ID != source.ID {
-			kept = append(kept, c)
-		}
-	}
-	candidates = kept
-	if len(candidates) == 0 {
-		return EquivalentRecipeDTO{}, fmt.Errorf("essa marca não tem outras tintas com cor pra montar a mistura")
-	}
-
 	var targetMfrName string
 	s.db.QueryRow("SELECT name FROM manufacturers WHERE id = ?", targetManufacturerID).Scan(&targetMfrName)
 
-	// Mesma marca: obrigar mistura de 2+ tintas. Devolver "quase 100% de uma
-	// tinta só" da própria marca não ajuda — o usuário já sabe que aquela tinta
-	// existe; ele quer o tom que NÃO tem, feito com as que tem.
-	minIngredients := 1
-	if targetMfrName != "" && targetMfrName == source.Manufacturer {
-		minIngredients = 2
+	// Toda a regra de negócio (exclusão da tinta-alvo, mistura forçada na mesma
+	// marca, dicas, reproduzível) vive em pkg/equivalence — compartilhada com o
+	// módulo WASM do app mobile, que deve produzir a mesma receita.
+	sourceInput := mix.PaintInput{ID: source.ID, Name: source.Name, Code: source.Code, R: source.R, G: source.G, B: source.B}
+	res, err := equivalence.Suggest(sourceInput, source.Manufacturer, targetMfrName, candidates)
+	if err != nil {
+		if errors.Is(err, equivalence.ErrNoCandidates) {
+			return EquivalentRecipeDTO{}, fmt.Errorf("essa marca não tem outras tintas com cor pra montar a mistura")
+		}
+		return EquivalentRecipeDTO{}, err
 	}
-
-	targetL, targetA, targetB := color.RGBToLab(source.R, source.G, source.B)
-	recipe := mix.SuggestBestSubset([3]float64{targetL, targetA, targetB}, candidates, minIngredients, 3)
+	recipe := res.Recipe
 
 	ingredients := make([]RecipeIngredientDTO, 0, len(recipe.Ingredients))
 	for _, ing := range recipe.Ingredients {
@@ -446,8 +429,6 @@ func (s *PaintService) SuggestEquivalentRecipe(sourcePaintID int64, targetManufa
 			B:          ing.Paint.B,
 		})
 	}
-
-	tips := mix.GenerateTips(source.R, source.G, source.B, recipe)
 
 	return EquivalentRecipeDTO{
 		SourcePaintID:      source.ID,
@@ -463,8 +444,8 @@ func (s *PaintService) SuggestEquivalentRecipe(sourcePaintID int64, targetManufa
 		ResultB:            recipe.ResultB,
 		DeltaE:             recipe.DeltaE,
 		Method:             recipe.Method,
-		Reproducible:       recipe.DeltaE <= maxViableDeltaE,
-		Tips:               tips,
+		Reproducible:       res.Reproducible,
+		Tips:               res.Tips,
 	}, nil
 }
 
