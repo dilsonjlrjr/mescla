@@ -6,11 +6,20 @@
 # Go build artifacts
 /bin/
 *.exe
+*.syso
 
 # Frontend build artifacts
 frontend/dist/
 frontend/node_modules/
 frontend/bindings/
+
+# Mobile (PWA) — artefatos gerados pelo scripts/build-mobile.sh
+frontend-mobile/dist/
+frontend-mobile/dev-dist/
+frontend-mobile/node_modules/
+frontend-mobile/public/mescla.wasm
+frontend-mobile/public/wasm_exec.js
+frontend-mobile/public/data/catalog.json
 
 # Task runner cache
 .task/

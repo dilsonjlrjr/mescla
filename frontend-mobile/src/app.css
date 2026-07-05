@@ -1,0 +1,356 @@
+/* ── MESCLA MOBILE — Bancada Theme (claro) ──
+   Tokens copiados de frontend/src/app.css (desktop) — mesma identidade
+   Artisan: cartela de tinta física, cor chapada, furo de catálogo, etiqueta
+   mono. Aqui sem SMUI: os controles são próprios, pensados pra toque. */
+
+:root {
+  /* Ink (neutros quentes claros, tom de papel/bancada) */
+  --ink-950: #f6f4f0;
+  --ink-900: #ffffff;
+  --ink-850: #faf8f4;
+  --ink-800: #efeae1;
+  --ink-700: #e2ddd0;
+  --ink-600: #cec4b1;
+  --ink-500: #857a68;
+  --ink-400: #a89c88;
+  --ink-300: #6b6152;
+  --ink-100: #211d16;
+
+  --paper: #1a1712;
+
+  /* Lacre — acento único (laca cádmio) */
+  --lacquer: #e8542c;
+  --lacquer-deep: #b53d1f;
+  --lacquer-tint: #c2451f;
+
+  /* Delta E — família separada do acento */
+  --delta-excellent: #2f7d49;
+  --delta-good: #96760f;
+  --delta-fair: #a85a1f;
+  --delta-poor: #a13328;
+
+  /* Canais RGB */
+  --chan-r: #c0392b;
+  --chan-g: #2f7d49;
+  --chan-b: #2f5f9e;
+
+  /* Fontes */
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  /* Métricas mobile */
+  --tab-bar-h: 60px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  height: 100%;
+  /* Sem pull-to-refresh nem bounce: dados são locais, o gesto só causaria
+     acidente com a mão suja de tinta. */
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: 16px; /* inputs <16px disparam zoom automático no mobile */
+  line-height: 1.5;
+  color: var(--ink-100);
+  background: var(--ink-950);
+  -webkit-font-smoothing: antialiased;
+  touch-action: manipulation; /* mata o delay de double-tap-zoom */
+  user-select: none;
+}
+
+input,
+textarea {
+  user-select: text;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+/* ── Feedback de toque (não existe hover no celular) ── */
+.pressable {
+  transition: transform 80ms ease, filter 80ms ease;
+}
+
+.pressable:active {
+  transform: scale(0.97);
+  filter: brightness(0.92);
+}
+
+/* ── Superfícies ── */
+.panel {
+  background: var(--ink-900);
+  border: 1px solid var(--ink-700);
+  border-radius: 12px;
+}
+
+.hairline {
+  height: 1px;
+  background: var(--ink-700);
+  border: none;
+}
+
+/* ── Botões ── */
+.btn-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 56px; /* alvo de toque generoso — é O botão do app */
+  border-radius: 12px;
+  background: var(--lacquer);
+  color: white;
+  font-size: 17px;
+  font-weight: 600;
+  transition: transform 80ms ease, opacity 0.2s ease, filter 80ms ease;
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+  filter: brightness(0.92);
+}
+
+.btn-primary:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 18px;
+  border: 1px solid var(--ink-700);
+  border-radius: 12px;
+  background: var(--ink-900);
+  color: var(--ink-300);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.btn-ghost:active {
+  border-color: var(--lacquer);
+  color: var(--lacquer-deep);
+}
+
+/* ── Tipografia ── */
+.font-display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.screen-title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--ink-100);
+  letter-spacing: -0.01em;
+}
+
+/* ── Par de cores (motivo de marca) ── */
+.color-pair {
+  display: inline-flex;
+  border-radius: 7px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+}
+
+.color-pair > span {
+  display: block;
+  width: 50%;
+  height: 100%;
+}
+
+/* ── Badge de ΔE humanizado (copiado do desktop) ── */
+.delta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.delta-badge .delta-value {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.delta-badge.excellent { background: color-mix(in srgb, var(--delta-excellent) 14%, transparent); color: var(--delta-excellent); }
+.delta-badge.good      { background: color-mix(in srgb, var(--delta-good) 16%, transparent);      color: var(--delta-good); }
+.delta-badge.fair      { background: color-mix(in srgb, var(--delta-fair) 14%, transparent);      color: var(--delta-fair); }
+.delta-badge.poor      { background: color-mix(in srgb, var(--delta-poor) 12%, transparent);      color: var(--delta-poor); }
+
+/* Badge clicável (abre o sheet da escala): fundo translúcido em cima da cor
+   da tinta fica lavado e não parece botão — aqui vira um chip ELEVADO, com
+   superfície sólida, borda na cor do grau, sombra e rótulo "o que é?". */
+.delta-badge.tappable {
+  background: var(--ink-900);
+  border: 1.5px solid color-mix(in srgb, currentColor 45%, transparent);
+  box-shadow: 0 3px 12px rgba(26, 23, 18, 0.18);
+  min-height: 44px;
+  padding: 8px 8px 8px 16px;
+}
+
+.delta-badge.tappable .delta-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 3px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ── Swatch com furo de catálogo (assinatura visual) ── */
+.swatch-flat {
+  position: relative;
+  border-radius: 8px;
+  /* borda hairline pra swatch claro não sumir no fundo paper */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink-100) 15%, transparent);
+  flex-shrink: 0;
+}
+
+.swatch-flat::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-950);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* ── Toasts (acima da tab bar) ── */
+.toast-region {
+  position: fixed;
+  bottom: calc(var(--tab-bar-h) + var(--safe-bottom) + 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink-950);
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
+  animation: rise-in 0.25s cubic-bezier(0.4, 0, 0.2, 1) both;
+  pointer-events: auto;
+}
+
+.toast.error {
+  background: var(--delta-poor);
+  color: white;
+}
+
+.toast .toast-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lacquer);
+  flex-shrink: 0;
+}
+
+.toast.error .toast-dot {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+/* ── Estados vazios ── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 48px 24px;
+  gap: 8px;
+}
+
+.empty-state .empty-icon {
+  color: var(--ink-600);
+  margin-bottom: 8px;
+}
+
+.empty-state .empty-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink-300);
+}
+
+.empty-state .empty-hint {
+  font-size: 14px;
+  color: var(--ink-500);
+  max-width: 280px;
+}
+
+/* ── Skeleton ── */
+.skeleton {
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--ink-800) 25%, var(--ink-700) 50%, var(--ink-800) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ── Animações ── */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+.animate-rise {
+  animation: rise-in 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
