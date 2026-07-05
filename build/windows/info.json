@@ -1,0 +1,16 @@
+{
+  "fixed": {
+    "file_version": "1.0.0.0",
+    "product_version": "1.0.0.0"
+  },
+  "info": {
+    "0409": {
+      "ProductName": "Mescla",
+      "ProductVersion": "1.0.0",
+      "FileDescription": "Mescla — cor certa, qualquer marca",
+      "CompanyName": "Mescla",
+      "LegalCopyright": "",
+      "Comments": "Equivalência de tintas para pintores de miniaturas"
+    }
+  }
+}

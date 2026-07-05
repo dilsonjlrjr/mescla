@@ -128,8 +128,21 @@ PLIST
 
 build_windows() {
   say "Windows amd64 (cross-compile, CGO off)…"
+  # Ícone, manifest (DPI aware) e info de versão viram um recurso .syso que o
+  # go build linka sozinho no PE quando o arquivo está na raiz do pacote —
+  # sem ele o exe sai sem ícone no Explorer/barra de tarefas.
+  if command -v wails3 >/dev/null 2>&1; then
+    wails3 generate syso -arch amd64 \
+      -icon build/windows/icon.ico \
+      -manifest build/windows/wails.exe.manifest \
+      -info build/windows/info.json \
+      -out rsrc_windows_amd64.syso
+  else
+    warn "wails3 CLI ausente — exe sairá SEM ícone (go install github.com/wailsapp/wails/v3/cmd/wails3@latest)"
+  fi
   GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
     go build -ldflags "$LDFLAGS -H windowsgui" -o "$DIST/${APP}-windows-amd64.exe" .
+  rm -f rsrc_windows_amd64.syso
   ok "Windows: ${APP}-windows-amd64.exe"
 }
 
