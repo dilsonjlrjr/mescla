@@ -13,8 +13,9 @@
   import BenchMode from '../components/BenchMode.svelte';
   import { pushLayer, switchTab } from '../nav.svelte';
   import { allManufacturers, allPaints, paintById, type Paint } from '../services/catalog';
-  import { suggestEquivalentRecipe, bestBrandsFor, type EquivalentRecipe, type BrandBest } from '../services/engine';
+  import { suggestEquivalentRecipe, suggestFromStock, bestBrandsFor, type EquivalentRecipe, type BrandBest } from '../services/engine';
   import { shelf, toggleShelf } from '../services/shelf.svelte';
+  import { stock } from '../services/stock.svelte';
   import { appState } from '../appState.svelte';
   import { recents, rememberMescla, rememberPaint } from '../recents.svelte';
   import { toast } from '../toast.svelte';
@@ -31,6 +32,9 @@
   let unit: 'drops' | 'percent' = $state('drops'); // bancada mede em gotas
   let bestBrands: BrandBest[] = $state([]);
   let firstResultHintSeen = $state(localStorage.getItem('mescla.hint.deltae') === '1');
+  // Priorizar o estoque próprio: quando ligado, a receita feita só com as tintas
+  // que o pintor tem entra na disputa (e, se alcança a cor, aparece primeiro).
+  let stockPriority = $state(stock.paints.length > 0);
 
   let closeResultLayer: (() => void) | null = null;
 
@@ -47,7 +51,8 @@
   let shelfNames = $derived(
     allManufacturers().filter(m => shelf.manufacturerIds.includes(m.id)).map(m => m.name)
   );
-  let canMesclar = $derived(sourcePaint !== null && shelf.manufacturerIds.length > 0);
+  let usingStock = $derived(stockPriority && stock.paints.length > 0);
+  let canMesclar = $derived(sourcePaint !== null && (shelf.manufacturerIds.length > 0 || usingStock));
   let sameBrand = $derived(active !== null && active.targetManufacturer === active.sourceManufacturer);
 
   function openResult() {
@@ -64,11 +69,20 @@
   }
 
   async function mesclar() {
-    if (!sourcePaint || shelf.manufacturerIds.length === 0 || computing) return;
+    if (!sourcePaint || !canMesclar || computing) return;
     computing = true;
     bestBrands = [];
     try {
       const found: EquivalentRecipe[] = [];
+      // O "pulo do gato": a receita feita só com o estoque entra primeiro na
+      // disputa. Se alcança a cor (menor ΔE), o sort a deixa no topo.
+      if (usingStock) {
+        try {
+          found.push(await suggestFromStock(sourcePaint.id, stock.paints));
+        } catch {
+          /* estoque não montou receita — segue com as marcas da estante */
+        }
+      }
       for (const brandId of shelf.manufacturerIds) {
         try {
           found.push(await suggestEquivalentRecipe(sourcePaint.id, brandId));
@@ -77,7 +91,7 @@
         }
       }
       if (found.length === 0) {
-        toast('Nenhuma marca da estante tem tintas pra essa mistura.', 'error');
+        toast('Nada pra mesclar — escolha marcas ou cadastre tintas no estoque.', 'error');
         return;
       }
       found.sort((a, b) => a.deltaE - b.deltaE);
@@ -389,6 +403,22 @@
       <Icon name="chevron-down" size={16} />
     </button>
 
+    {#if stock.paints.length > 0}
+      <button
+        class="stock-toggle pressable"
+        class:on={stockPriority}
+        onclick={() => (stockPriority = !stockPriority)}
+        aria-pressed={stockPriority}
+      >
+        <span class="stock-toggle-icon"><Icon name="box" size={18} /></span>
+        <span class="stock-toggle-text">
+          <span class="stock-toggle-title">Priorizar meu estoque</span>
+          <span class="stock-toggle-sub">{stockPriority ? `usando as ${stock.paints.length} tintas que você tem` : `${stock.paints.length} tintas cadastradas`}</span>
+        </span>
+        <span class="stock-switch" class:on={stockPriority}><span class="stock-knob"></span></span>
+      </button>
+    {/if}
+
     <button class="btn-primary" style="margin-top: 22px;" disabled={!canMesclar || computing} onclick={mesclar}>
       {#if computing}
         Calculando mistura…
@@ -438,6 +468,83 @@
 <style>
   .mesclar {
     padding: 16px 16px 24px;
+  }
+
+  /* Toggle "priorizar meu estoque" */
+  .stock-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    margin-top: 16px;
+    padding: 12px 14px;
+    border: 1px solid var(--ink-700);
+    border-radius: 12px;
+    background: var(--ink-900);
+    text-align: left;
+  }
+
+  .stock-toggle.on {
+    border-color: color-mix(in srgb, var(--lacquer) 55%, transparent);
+    background: color-mix(in srgb, var(--lacquer) 10%, transparent);
+  }
+
+  .stock-toggle-icon {
+    display: flex;
+    color: var(--ink-500);
+    flex-shrink: 0;
+  }
+
+  .stock-toggle.on .stock-toggle-icon {
+    color: var(--lacquer);
+  }
+
+  .stock-toggle-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .stock-toggle-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink-100);
+  }
+
+  .stock-toggle-sub {
+    font-size: 12px;
+    color: var(--ink-500);
+  }
+
+  .stock-switch {
+    flex-shrink: 0;
+    width: 40px;
+    height: 23px;
+    border-radius: 999px;
+    background: var(--ink-700);
+    position: relative;
+    transition: background 0.18s ease;
+  }
+
+  .stock-switch.on {
+    background: var(--lacquer);
+  }
+
+  .stock-knob {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.18s ease;
+  }
+
+  .stock-switch.on .stock-knob {
+    transform: translateX(17px);
   }
 
   .mesclar-head {

@@ -5,6 +5,7 @@
   import MesclarView from './lib/views/MesclarView.svelte';
   import CatalogoView from './lib/views/CatalogoView.svelte';
   import CorView from './lib/views/CorView.svelte';
+  import RodaView from './lib/views/RodaView.svelte';
   import MaisView from './lib/views/MaisView.svelte';
   import { nav, initNav } from './lib/nav.svelte';
   import { loadCatalog } from './lib/services/catalog';
@@ -47,6 +48,7 @@
     <div class="view" class:hidden={nav.tab !== 'mesclar'}><MesclarView /></div>
     <div class="view" class:hidden={nav.tab !== 'catalogo'}><CatalogoView /></div>
     <div class="view" class:hidden={nav.tab !== 'cor'}><CorView /></div>
+    <div class="view" class:hidden={nav.tab !== 'roda'}><RodaView /></div>
     <div class="view" class:hidden={nav.tab !== 'mais'}><MaisView /></div>
   </main>
   <TabBar />

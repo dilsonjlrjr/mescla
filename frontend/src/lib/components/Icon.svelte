@@ -3,7 +3,8 @@
     name:
       | 'home' | 'grid' | 'pipette' | 'swap' | 'flask' | 'chevron-left'
       | 'search' | 'close' | 'info' | 'search-off' | 'building' | 'layers'
-      | 'palette' | 'flag';
+      | 'palette' | 'flag' | 'wheel' | 'book' | 'chevron-down'
+      | 'box' | 'plus' | 'trash' | 'edit' | 'upload' | 'download' | 'check';
     size?: number;
   }
 
@@ -74,5 +75,41 @@
   {:else if name === 'flag'}
     <path d="M6 21V4" />
     <path d="M6 4.5h11l-2.8 3.5L17 11.5H6" />
+  {:else if name === 'wheel'}
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 3.5v17" />
+    <path d="M4.64 7.75 19.36 16.25" />
+    <path d="M4.64 16.25 19.36 7.75" />
+    <circle cx="12" cy="12" r="2.1" fill="currentColor" stroke="none" />
+  {:else if name === 'book'}
+    <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15H5.5A1.5 1.5 0 0 0 4 20.5z" />
+    <path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v15h5.5a1.5 1.5 0 0 1 1.5 1.5z" />
+  {:else if name === 'chevron-down'}
+    <path d="M5 9.5 12 16l7-6.5" />
+  {:else if name === 'box'}
+    <path d="M12 3 4 7v10l8 4 8-4V7z" />
+    <path d="M4 7l8 4 8-4" />
+    <path d="M12 11v10" />
+  {:else if name === 'plus'}
+    <path d="M12 5v14" />
+    <path d="M5 12h14" />
+  {:else if name === 'trash'}
+    <path d="M4 6.5h16" />
+    <path d="M9 6.5V4.5h6v2" />
+    <path d="M6.5 6.5 7.3 20a1 1 0 0 0 1 .9h7.4a1 1 0 0 0 1-.9l.8-13.5" />
+    <path d="M10 10.5v6M14 10.5v6" />
+  {:else if name === 'edit'}
+    <path d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17.2z" />
+    <path d="M14.5 5.5l4 4" />
+  {:else if name === 'upload'}
+    <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+    <path d="M12 16V4" />
+    <path d="M7.5 8.5 12 4l4.5 4.5" />
+  {:else if name === 'download'}
+    <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+    <path d="M12 4v12" />
+    <path d="M7.5 11.5 12 16l4.5-4.5" />
+  {:else if name === 'check'}
+    <path d="M5 12.5 10 17.5 19 6.5" />
   {/if}
 </svg>

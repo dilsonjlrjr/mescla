@@ -67,6 +67,13 @@ func NewPaintService(embeddedSeed []byte) (*PaintService, error) {
 		}
 	}
 
+	// O estoque do usuário vive no mesmo banco (já no diretório de dados dele),
+	// mas numa tabela própria criada sob demanda — o catálogo embutido é
+	// read-only e reseedado pelo dev, então não pode carregar dados do usuário.
+	if err := ensureUserSchema(db); err != nil {
+		return nil, fmt.Errorf("preparando estoque do usuário: %w", err)
+	}
+
 	return &PaintService{
 		db:  db,
 		ret: ai.NewRetrieval(db),
@@ -437,6 +444,65 @@ func (s *PaintService) SuggestEquivalentRecipe(sourcePaintID int64, targetManufa
 		SourceR:            source.R,
 		SourceG:            source.G,
 		SourceB:            source.B,
+		TargetManufacturer: targetMfrName,
+		Ingredients:        ingredients,
+		ResultR:            recipe.ResultR,
+		ResultG:            recipe.ResultG,
+		ResultB:            recipe.ResultB,
+		DeltaE:             recipe.DeltaE,
+		Method:             recipe.Method,
+		Reproducible:       res.Reproducible,
+		Tips:               res.Tips,
+	}, nil
+}
+
+// SuggestRecipeForColor monta a receita equivalente para uma COR ARBITRÁRIA
+// (r,g,b) dentro do catálogo de um fabricante de destino — usada pela Roda
+// cromática, onde o "alvo" é um passo calculado da rampa (não uma tinta do
+// catálogo). Reaproveita a mesma orquestração de equivalence.Suggest; a origem
+// é sintética (ID 0, sem marca), então nada é excluído do pool de candidatos.
+func (s *PaintService) SuggestRecipeForColor(r, g, b uint8, targetManufacturerID int64) (EquivalentRecipeDTO, error) {
+	candidates, err := s.loadPaintsByManufacturerID(targetManufacturerID)
+	if err != nil {
+		return EquivalentRecipeDTO{}, err
+	}
+	if len(candidates) == 0 {
+		return EquivalentRecipeDTO{}, fmt.Errorf("fabricante de destino não possui tintas cadastradas com cor")
+	}
+
+	var targetMfrName string
+	s.db.QueryRow("SELECT name FROM manufacturers WHERE id = ?", targetManufacturerID).Scan(&targetMfrName)
+
+	sourceInput := mix.PaintInput{ID: 0, Name: "cor alvo", Code: "", R: r, G: g, B: b}
+	res, err := equivalence.Suggest(sourceInput, "", targetMfrName, candidates)
+	if err != nil {
+		if errors.Is(err, equivalence.ErrNoCandidates) {
+			return EquivalentRecipeDTO{}, fmt.Errorf("essa marca não tem tintas com cor pra montar a mistura")
+		}
+		return EquivalentRecipeDTO{}, err
+	}
+	recipe := res.Recipe
+
+	ingredients := make([]RecipeIngredientDTO, 0, len(recipe.Ingredients))
+	for _, ing := range recipe.Ingredients {
+		ingredients = append(ingredients, RecipeIngredientDTO{
+			PaintID:    ing.Paint.ID,
+			Name:       ing.Paint.Name,
+			Code:       ing.Paint.Code,
+			Percentage: ing.Percentage,
+			R:          ing.Paint.R,
+			G:          ing.Paint.G,
+			B:          ing.Paint.B,
+		})
+	}
+
+	return EquivalentRecipeDTO{
+		SourcePaintID:      0,
+		SourceName:         "cor alvo",
+		SourceManufacturer: "",
+		SourceR:            r,
+		SourceG:            g,
+		SourceB:            b,
 		TargetManufacturer: targetMfrName,
 		Ingredients:        ingredients,
 		ResultR:            recipe.ResultR,

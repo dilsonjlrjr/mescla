@@ -144,3 +144,31 @@ func TestSuggestGeneratesTips(t *testing.T) {
 		t.Fatal("esperava a dica de pigmento faltante para alvo saturado com pool neutro")
 	}
 }
+
+func TestSuggestFromStockAllowsSingleTwin(t *testing.T) {
+	// O estoque já tem a cor exata: a resposta certa é "use essa tinta" (1:1),
+	// não uma mistura forçada — e a origem NÃO é excluída por ID.
+	source := mix.PaintInput{ID: 2, Name: "Branco Alvo", R: 255, G: 255, B: 255}
+	stock := []mix.PaintInput{
+		{ID: 2, Name: "Meu Branco", R: 255, G: 255, B: 255}, // ID coincide com a origem de propósito
+		{ID: 7, Name: "Meu Preto", R: 0, G: 0, B: 0},
+	}
+
+	res, err := SuggestFromStock(source, stock)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.Reproducible {
+		t.Fatalf("branco idêntico no estoque deveria ser reproduzível (ΔE %.2f)", res.Recipe.DeltaE)
+	}
+	if len(res.Recipe.Ingredients) != 1 || res.Recipe.Ingredients[0].Paint.ID != 2 {
+		t.Fatalf("esperava 1:1 com a tinta do estoque (ID 2), veio %+v", res.Recipe.Ingredients)
+	}
+}
+
+func TestSuggestFromStockEmpty(t *testing.T) {
+	source := mix.PaintInput{ID: 1, Name: "Qualquer", R: 100, G: 100, B: 100}
+	if _, err := SuggestFromStock(source, nil); !errors.Is(err, ErrNoCandidates) {
+		t.Fatalf("estoque vazio deveria dar ErrNoCandidates, veio %v", err)
+	}
+}

@@ -7,15 +7,17 @@
   import DeltaBadge from '../components/DeltaBadge.svelte';
   import DeltaScaleSheet from '../components/DeltaScaleSheet.svelte';
   import FullScreenSearch from '../components/FullScreenSearch.svelte';
+  import StockManager from '../components/StockManager.svelte';
   import { pushLayer, switchTab } from '../nav.svelte';
   import { allManufacturers, paintById, type Paint } from '../services/catalog';
   import { compareToAnchor, type SearchResult } from '../services/engine';
   import { appState, addToCompare, removeFromCompare } from '../appState.svelte';
+  import { stock } from '../services/stock.svelte';
   import { recents } from '../recents.svelte';
   import { pwa, promptInstall } from '../pwa.svelte';
   import { toast } from '../toast.svelte';
 
-  let subView: 'menu' | 'comparar' | 'marcas' = $state('menu');
+  let subView: 'menu' | 'comparar' | 'marcas' | 'estoque' = $state('menu');
   let deltaSheetOpen = $state(false);
   let searchOpen = $state(false);
   let anchorId: number | null = $state(null);
@@ -23,7 +25,7 @@
 
   let closeSubLayer: (() => void) | null = null;
 
-  function openSub(view: 'comparar' | 'marcas') {
+  function openSub(view: 'comparar' | 'marcas' | 'estoque') {
     subView = view;
     closeSubLayer = pushLayer(() => {
       closeSubLayer = null;
@@ -93,6 +95,16 @@
       <span class="menu-text">Comparar tintas</span>
       {#if appState.compareIds.length > 0}
         <span class="menu-badge font-mono">{appState.compareIds.length}</span>
+      {/if}
+    </button>
+
+    <button class="menu-row pressable" onclick={() => openSub('estoque')}>
+      <span class="menu-icon"><Icon name="box" size={20} /></span>
+      <span class="menu-text">Meu estoque</span>
+      {#if stock.paints.length > 0}
+        <span class="menu-badge font-mono">{stock.paints.length}</span>
+      {:else}
+        <span class="menu-hint">cadastre suas tintas</span>
       {/if}
     </button>
 
@@ -177,6 +189,15 @@
         Adicionar tinta ({appState.compareIds.length}/6)
       </button>
     {/if}
+  {:else if subView === 'estoque'}
+    <header class="sub-head">
+      <button class="sub-back pressable" onclick={backToMenu} aria-label="Voltar">
+        <Icon name="chevron-left" size={20} />
+      </button>
+      <h1 class="screen-title">Meu estoque</h1>
+    </header>
+
+    <StockManager />
   {:else if subView === 'marcas'}
     <header class="sub-head">
       <button class="sub-back pressable" onclick={backToMenu} aria-label="Voltar">

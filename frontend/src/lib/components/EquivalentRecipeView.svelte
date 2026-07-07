@@ -8,6 +8,7 @@
   import DeltaBadge from './DeltaBadge.svelte';
   import { toast } from '../toast.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
+  import type { UserPaintDTO } from '../../../bindings/paint-match-ai/models';
 
   interface Paint {
     id: number;
@@ -31,20 +32,31 @@
 
   let allPaints: Paint[] = $state([]);
   let manufacturers: Manufacturer[] = $state([]);
+  let userPaints: UserPaintDTO[] = $state([]);
   let sourcePaint: Paint | null = $state(null);
   let targetManufacturerId: number | '' = $state('');
   let result: any = $state(null);
   let loading = $state(false);
   let errorMsg = $state('');
 
+  // Priorizar o estoque do próprio pintor: quando ligado, a receita sai primeiro
+  // do que ele tem; se o estoque não alcança a cor, cai na marca de reserva.
+  let useStock = $state(false);
+  // Como o resultado atual foi montado — muda os banners e os selos de "no meu estoque".
+  let fromStock = $state(false);
+  let stockFellBack = $state(false);
+
   onMount(async () => {
     try {
-      const [paints, mfrs] = await Promise.all([
+      const [paints, mfrs, stock] = await Promise.all([
         PaintService.GetAllPaints(),
         PaintService.GetManufacturers(),
+        PaintService.GetUserPaints(),
       ]);
       allPaints = paints || [];
       manufacturers = mfrs || [];
+      userPaints = stock || [];
+      useStock = userPaints.length > 0; // se ele tem estoque, o mais útil já vem ligado
       if (initialSourcePaintId) {
         sourcePaint = allPaints.find(p => p.id === initialSourcePaintId) || null;
       }
@@ -54,13 +66,37 @@
     }
   });
 
+  // Índices do estoque: por id (pra achar a marca de cada ingrediente de uma
+  // receita de estoque) e por marca+código (pra marcar, numa receita por
+  // fabricante, os ingredientes que o pintor já tem).
+  let stockById = $derived(new Map(userPaints.map(p => [p.id, p])));
+  let stockKeys = $derived(
+    new Set(userPaints.filter(p => p.code.trim()).map(p => `${p.manufacturer.toLowerCase()}|${p.code.trim().toLowerCase()}`))
+  );
+
+  // Um ingrediente "é do meu estoque" quando a receita saiu do estoque (todos
+  // são), ou quando casa marca+código com alguma tinta cadastrada.
+  function ingredientInStock(ing: any): boolean {
+    if (fromStock) return true;
+    if (!result || !ing.code) return false;
+    return stockKeys.has(`${result.targetManufacturer.toLowerCase()}|${String(ing.code).trim().toLowerCase()}`);
+  }
+
+  function ingredientBrand(ing: any): string {
+    if (fromStock) return stockById.get(ing.paintId)?.manufacturer ?? '';
+    return result?.targetManufacturer ?? '';
+  }
+
   // Todas as marcas, incluindo a própria da tinta de origem: dá pra montar um tom
   // que a marca não tem a partir de outras tintas dela (a tinta-alvo é excluída
   // do cálculo no backend).
   let availableTargets = $derived(manufacturers);
 
-  // Passo atual da jornada — guia o olho pro próximo campo
-  let step = $derived(!sourcePaint ? 1 : !targetManufacturerId ? 2 : 3);
+  // Passo atual da jornada — guia o olho pro próximo campo. Com o estoque
+  // priorizado, a marca de destino é opcional (só reserva), então o passo 2
+  // não trava a jornada.
+  let step = $derived(!sourcePaint ? 1 : (!targetManufacturerId && !useStock) ? 2 : 3);
+  let canSuggest = $derived(!!sourcePaint && !loading && (useStock || !!targetManufacturerId));
 
   // Faixas de ΔE pra legenda visível (mesmos cortes do DeltaBadge). max é o
   // teto exclusivo da faixa; a última pega tudo acima de 12.
@@ -115,15 +151,33 @@
   }
 
   async function suggest() {
-    if (!sourcePaint || !targetManufacturerId) return;
+    if (!sourcePaint || !canSuggest) return;
     loading = true;
     errorMsg = '';
     result = null;
+    fromStock = false;
+    stockFellBack = false;
     try {
-      result = await PaintService.SuggestEquivalentRecipe(sourcePaint.id, Number(targetManufacturerId));
+      if (useStock && userPaints.length > 0) {
+        const fromStockRes = await PaintService.SuggestEquivalentFromStock(sourcePaint.id);
+        if (fromStockRes.reproducible || !targetManufacturerId) {
+          // Ou o estoque alcança a cor, ou não há marca de reserva pra tentar:
+          // mostramos a melhor do estoque (o banner avisa se é só aproximação).
+          result = fromStockRes;
+          fromStock = true;
+        } else {
+          // Estoque não alcança e há marca de reserva: cai no fluxo por fabricante.
+          result = await PaintService.SuggestEquivalentRecipe(sourcePaint.id, Number(targetManufacturerId));
+          stockFellBack = true;
+        }
+      } else {
+        result = await PaintService.SuggestEquivalentRecipe(sourcePaint.id, Number(targetManufacturerId));
+      }
     } catch (e) {
       console.error('Erro sugerindo receita equivalente:', e);
-      errorMsg = 'O cálculo falhou. Escolha a tinta e a marca de novo e tente outra vez.';
+      errorMsg = String(e).includes('estoque está vazio')
+        ? 'Seu estoque está vazio — cadastre tintas ou desligue a priorização.'
+        : 'O cálculo falhou. Escolha a tinta e a marca de novo e tente outra vez.';
       toast('O cálculo falhou. Tente de novo.', 'error');
     } finally {
       loading = false;
@@ -169,12 +223,28 @@
         label="Nome, código ou marca…"
       />
 
+      {#if userPaints.length > 0}
+        <button
+          class="stock-toggle"
+          class:on={useStock}
+          onclick={() => { useStock = !useStock; result = null; }}
+          aria-pressed={useStock}
+        >
+          <span class="stock-toggle-icon"><Icon name="box" size={17} /></span>
+          <span class="stock-toggle-text">
+            <span class="stock-toggle-title">Priorizar meu estoque</span>
+            <span class="stock-toggle-sub">{useStock ? `usando as ${userPaints.length} tintas que você tem` : `você tem ${userPaints.length} tintas cadastradas`}</span>
+          </span>
+          <span class="stock-switch" class:on={useStock}><span class="stock-knob"></span></span>
+        </button>
+      {/if}
+
       <div class="form-step" class:current={step === 2} class:done={step > 2} style="margin-top: 24px;">
         <span class="step-n">2</span>
-        <h3 class="form-step-title font-display">Marca que você tem</h3>
+        <h3 class="form-step-title font-display">{useStock ? 'Marca de reserva (opcional)' : 'Marca que você tem'}</h3>
       </div>
-      <Select variant="outlined" bind:value={targetManufacturerId} label="Marca" style="width: 100%;" disabled={!sourcePaint}>
-        <Option value="">Selecione…</Option>
+      <Select variant="outlined" bind:value={targetManufacturerId} label={useStock ? 'Se faltar no estoque…' : 'Marca'} style="width: 100%;" disabled={!sourcePaint}>
+        <Option value="">{useStock ? 'Nenhuma' : 'Selecione…'}</Option>
         {#each availableTargets as mfr}
           <Option value={mfr.id}>{mfr.name}</Option>
         {/each}
@@ -183,7 +253,7 @@
       <button
         class="btn-primary"
         onclick={suggest}
-        disabled={!sourcePaint || !targetManufacturerId || loading}
+        disabled={!canSuggest}
         style="margin-top: 20px;"
       >
         {loading ? 'Calculando…' : 'Encontrar equivalência'}
@@ -202,16 +272,44 @@
           <span style="font-size: 12.5px; color: var(--ink-500);">Testando misturas de até 3 tintas…</span>
         </div>
       {:else if result}
+        <!-- Estoque priorizado: alcançou a cor -->
+        {#if fromStock && result.reproducible}
+          <div class="ok-banner mb-5 animate-rise">
+            <span class="ok-icon"><Icon name="box" size={18} /></span>
+            <div>
+              <div class="ok-title">Dá pra fazer com o seu estoque</div>
+              <p class="warn-text">Todas as tintas da receita abaixo são suas — nada de comprar pote novo.</p>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Estoque não alcançou, mas caímos numa marca de reserva -->
+        {#if stockFellBack}
+          <div class="warn-banner mb-5 animate-rise" style="border-color: color-mix(in srgb, var(--delta-fair) 45%, transparent); background: color-mix(in srgb, var(--delta-fair) 12%, transparent);">
+            <span class="warn-icon" style="color: var(--delta-fair);"><Icon name="info" size={18} /></span>
+            <div>
+              <div class="warn-title" style="color: var(--delta-fair);">Seu estoque não alcança essa cor</div>
+              <p class="warn-text">Montamos a receita pela <strong>{result.targetManufacturer}</strong> (marca de reserva). Os potes que você já tem estão marcados abaixo.</p>
+            </div>
+          </div>
+        {/if}
+
         <!-- Aviso: cor irreproduzível com o catálogo de destino -->
         {#if !result.reproducible}
           <div class="warn-banner mb-5 animate-rise">
             <span class="warn-icon"><Icon name="info" size={18} /></span>
             <div>
-              <div class="warn-title">Esta cor não sai com as tintas da {result.targetManufacturer}</div>
+              <div class="warn-title">
+                {fromStock ? 'Seu estoque não alcança essa cor' : `Esta cor não sai com as tintas da ${result.targetManufacturer}`}
+              </div>
               <p class="warn-text">
-                Falta pigmento no catálogo dela pra chegar neste tom. A mistura abaixo é a
-                <strong>aproximação mais próxima possível</strong> — compare o par de cores
-                antes de decidir usar.
+                {#if fromStock}
+                  As tintas que você tem não chegam nesse tom. A mistura abaixo é a <strong>aproximação mais próxima</strong> com o seu estoque — escolha uma marca de reserva pra ver outras opções.
+                {:else}
+                  Falta pigmento no catálogo dela pra chegar neste tom. A mistura abaixo é a
+                  <strong>aproximação mais próxima possível</strong> — compare o par de cores
+                  antes de decidir usar.
+                {/if}
               </p>
             </div>
           </div>
@@ -281,10 +379,20 @@
                   <div class="flex items-center gap-4">
                     <PaintBottle r={ing.r} g={ing.g} b={ing.b} size={46} />
                     <div style="flex: 1; min-width: 0;">
-                      <div class="font-semibold text-sm text-white truncate">{ing.name}</div>
-                      {#if ing.code}
-                        <span class="ing-code font-mono">{ing.code}</span>
-                      {/if}
+                      <div class="flex items-center gap-2">
+                        <span class="font-semibold text-sm text-white truncate">{ing.name}</span>
+                        {#if ingredientInStock(ing)}
+                          <span class="stock-chip" title="Você tem esta tinta"><Icon name="box" size={11} /> no estoque</span>
+                        {/if}
+                      </div>
+                      <div class="flex items-center gap-2" style="margin-top: 3px;">
+                        {#if ingredientBrand(ing)}
+                          <span class="ing-brand">{ingredientBrand(ing)}</span>
+                        {/if}
+                        {#if ing.code}
+                          <span class="ing-code font-mono">{ing.code}</span>
+                        {/if}
+                      </div>
                     </div>
                     <div style="text-align: right; flex-shrink: 0;">
                       {#if unit === 'drops'}
@@ -321,10 +429,10 @@
         <div class="panel empty-state">
           <span class="empty-icon"><Icon name="flask" size={40} /></span>
           <p class="empty-title">
-            {step === 1 ? 'Comece buscando a tinta que você quer' : 'Agora escolha a marca que você tem'}
+            {step === 1 ? 'Comece buscando a tinta que você quer' : useStock ? 'Pronto — é só calcular' : 'Agora escolha a marca que você tem'}
           </p>
           <p class="empty-hint">
-            {step === 1 ? 'Digite o nome no campo ao lado — ou venha do Catálogo pelo botão da tinta.' : 'A receita usa só as tintas dessa marca.'}
+            {step === 1 ? 'Digite o nome no campo ao lado — ou venha do Catálogo pelo botão da tinta.' : useStock ? 'A receita vai priorizar as tintas do seu estoque.' : 'A receita usa só as tintas dessa marca.'}
           </p>
         </div>
       {/if}
@@ -556,5 +664,128 @@
     color: var(--ink-300);
     line-height: 1.55;
     margin: 0;
+  }
+
+  /* Toggle "priorizar meu estoque" */
+  .stock-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    margin-top: 18px;
+    padding: 12px 14px;
+    border: 1px solid var(--ink-700);
+    border-radius: 10px;
+    background: var(--ink-800);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  .stock-toggle.on {
+    border-color: color-mix(in srgb, var(--lacquer) 55%, transparent);
+    background: color-mix(in srgb, var(--lacquer) 10%, transparent);
+  }
+
+  .stock-toggle-icon {
+    display: flex;
+    color: var(--ink-400);
+    flex-shrink: 0;
+  }
+
+  .stock-toggle.on .stock-toggle-icon {
+    color: var(--lacquer);
+  }
+
+  .stock-toggle-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .stock-toggle-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--paper);
+  }
+
+  .stock-toggle-sub {
+    font-size: 11.5px;
+    color: var(--ink-500);
+  }
+
+  .stock-switch {
+    flex-shrink: 0;
+    width: 38px;
+    height: 22px;
+    border-radius: 999px;
+    background: var(--ink-700);
+    position: relative;
+    transition: background 0.18s ease;
+  }
+
+  .stock-switch.on {
+    background: var(--lacquer);
+  }
+
+  .stock-knob {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.18s ease;
+  }
+
+  .stock-switch.on .stock-knob {
+    transform: translateX(16px);
+  }
+
+  /* Selo "no meu estoque" no ingrediente */
+  .stock-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--lacquer) 16%, transparent);
+    color: var(--lacquer-tint);
+    white-space: nowrap;
+  }
+
+  .ing-brand {
+    font-size: 11px;
+    color: var(--ink-500);
+  }
+
+  /* Banner positivo: dá pra fazer com o estoque */
+  .ok-banner {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 16px 18px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--delta-excellent) 45%, transparent);
+    background: color-mix(in srgb, var(--delta-excellent) 12%, transparent);
+  }
+
+  .ok-icon {
+    color: var(--delta-excellent);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .ok-title {
+    font-weight: 600;
+    font-size: 13.5px;
+    color: var(--delta-excellent);
+    margin-bottom: 4px;
   }
 </style>

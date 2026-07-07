@@ -2,10 +2,11 @@
   import Icon from './Icon.svelte';
   import { nav, switchTab, type Tab } from '../nav.svelte';
 
-  const tabs: { id: Tab; label: string; icon: 'droplet' | 'grid' | 'pipette' | 'dots' }[] = [
+  const tabs: { id: Tab; label: string; icon: 'droplet' | 'grid' | 'pipette' | 'wheel' | 'dots' }[] = [
     { id: 'mesclar', label: 'Mesclar', icon: 'droplet' },
     { id: 'catalogo', label: 'Catálogo', icon: 'grid' },
     { id: 'cor', label: 'Cor', icon: 'pipette' },
+    { id: 'roda', label: 'Roda', icon: 'wheel' },
     { id: 'mais', label: 'Mais', icon: 'dots' },
   ];
 
@@ -37,7 +38,7 @@
     right: 0;
     z-index: 50;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     height: calc(var(--tab-bar-h) + var(--safe-bottom));
     padding-bottom: var(--safe-bottom);
     background: var(--ink-900);

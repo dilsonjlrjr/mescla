@@ -7,10 +7,12 @@
   import ColorSearchView from './lib/components/ColorSearchView.svelte';
   import CompareView from './lib/components/CompareView.svelte';
   import EquivalentRecipeView from './lib/components/EquivalentRecipeView.svelte';
+  import ColorWheelView from './lib/components/ColorWheelView.svelte';
+  import MyStockView from './lib/components/MyStockView.svelte';
   import ToastRegion from './lib/components/ToastRegion.svelte';
   import GuideDialog from './lib/components/GuideDialog.svelte';
 
-  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix';
+  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock';
 
   let currentView: View = $state('home');
   let sidebarCollapsed = $state(false);
@@ -56,6 +58,10 @@
       <ColorSearchView />
     {:else if currentView === 'compare'}
       <CompareView />
+    {:else if currentView === 'wheel'}
+      <ColorWheelView />
+    {:else if currentView === 'stock'}
+      <MyStockView />
     {:else if currentView === 'mix'}
       <EquivalentRecipeView initialSourcePaintId={recipeSourcePaintId} />
     {/if}

@@ -57,10 +57,41 @@ export interface BrandBest {
   deltaE: number;
 }
 
+/** Uma tinta do estoque do usuário, no formato que o WASM entende (espelha
+ *  pkg/stock.Paint). O `id` local é atribuído pelo serviço de estoque. */
+export interface StockPaint {
+  id: number;
+  manufacturerId: number;
+  manufacturer: string;
+  name: string;
+  code: string;
+  r: number;
+  g: number;
+  b: number;
+  volume: string;
+  notes: string;
+}
+
+export interface StockRowError {
+  line: number;
+  message: string;
+  raw: string;
+}
+
+export interface StockCSVResult {
+  paints: StockPaint[];
+  errors: StockRowError[];
+}
+
 interface MesclaWasm {
   init(catalogJSON: string): string;
   findSimilar(r: number, g: number, b: number, maxDeltaE: number, maxResults: number): string;
   suggestEquivalentRecipe(paintId: number, targetManufacturerId: number): string;
+  suggestRecipeForColor(r: number, g: number, b: number, targetManufacturerId: number): string;
+  suggestFromStock(sourcePaintId: number, stockJSON: string): string;
+  parseStockCSV(csvText: string): string;
+  stockCSVTemplate(): string;
+  stockToCSV(stockJSON: string): string;
   compareToAnchor(anchorId: number, ids: number[]): string;
   bestBrandsFor(paintId: number): string;
 }
@@ -136,6 +167,50 @@ export async function suggestEquivalentRecipe(
   return call<EquivalentRecipe>(() =>
     window.__mescla!.suggestEquivalentRecipe(paintId, targetManufacturerId),
   );
+}
+
+export async function suggestRecipeForColor(
+  r: number,
+  g: number,
+  b: number,
+  targetManufacturerId: number,
+): Promise<EquivalentRecipe> {
+  await engineReady();
+  return call<EquivalentRecipe>(() =>
+    window.__mescla!.suggestRecipeForColor(r, g, b, targetManufacturerId),
+  );
+}
+
+/** Receita da cor de origem usando SÓ o estoque do pintor. O estoque vai como
+ *  JSON (vive no localStorage, não no catálogo em memória). */
+export async function suggestFromStock(
+  sourcePaintId: number,
+  stock: StockPaint[],
+): Promise<EquivalentRecipe> {
+  await engineReady();
+  return call<EquivalentRecipe>(() =>
+    window.__mescla!.suggestFromStock(sourcePaintId, JSON.stringify(stock)),
+  );
+}
+
+/** Valida um CSV de importação contra os fabricantes do catálogo (mesma crítica
+ *  do desktop). Devolve as tintas boas e os erros por linha. */
+export async function parseStockCSV(csvText: string): Promise<StockCSVResult> {
+  await engineReady();
+  const res = call<StockCSVResult>(() => window.__mescla!.parseStockCSV(csvText));
+  return { paints: res.paints ?? [], errors: res.errors ?? [] };
+}
+
+/** Conteúdo do CSV-modelo para download. */
+export async function stockCSVTemplate(): Promise<string> {
+  await engineReady();
+  return call<{ csv: string }>(() => window.__mescla!.stockCSVTemplate()).csv;
+}
+
+/** Serializa o estoque no formato de importação (backup/exportação). */
+export async function stockToCSV(stock: StockPaint[]): Promise<string> {
+  await engineReady();
+  return call<{ csv: string }>(() => window.__mescla!.stockToCSV(JSON.stringify(stock))).csv;
 }
 
 export async function compareToAnchor(anchorId: number, ids: number[]): Promise<SearchResult[]> {

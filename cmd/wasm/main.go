@@ -21,6 +21,7 @@ import (
 	"paint-match-ai/pkg/color"
 	"paint-match-ai/pkg/equivalence"
 	"paint-match-ai/pkg/mix"
+	"paint-match-ai/pkg/stock"
 )
 
 // paintRec é uma tinta do catálogo em memória, com Lab precomputado no init
@@ -46,6 +47,11 @@ func main() {
 		"init":                    js.FuncOf(jsInit),
 		"findSimilar":             js.FuncOf(jsFindSimilar),
 		"suggestEquivalentRecipe": js.FuncOf(jsSuggestEquivalentRecipe),
+		"suggestRecipeForColor":   js.FuncOf(jsSuggestRecipeForColor),
+		"suggestFromStock":        js.FuncOf(jsSuggestFromStock),
+		"parseStockCSV":           js.FuncOf(jsParseStockCSV),
+		"stockCSVTemplate":        js.FuncOf(jsStockCSVTemplate),
+		"stockToCSV":              js.FuncOf(jsStockToCSV),
 		"compareToAnchor":         js.FuncOf(jsCompareToAnchor),
 		"bestBrandsFor":           js.FuncOf(jsBestBrandsFor),
 	}))
@@ -253,6 +259,202 @@ func jsSuggestEquivalentRecipe(_ js.Value, args []js.Value) any {
 		"reproducible":       res.Reproducible,
 		"tips":               tips,
 	})
+}
+
+// jsSuggestRecipeForColor(r, g, b, targetMfrId) — receita equivalente para uma
+// COR ARBITRÁRIA (passo da rampa da Roda) dentro de uma marca. Origem sintética
+// (sem marca) → nada é excluído do pool. Mesma forma JSON do EquivalentRecipeDTO.
+func jsSuggestRecipeForColor(_ js.Value, args []js.Value) any {
+	if len(paints) == 0 {
+		return errJSON("catálogo não inicializado — chame init primeiro")
+	}
+	if len(args) != 4 {
+		return errJSON("suggestRecipeForColor espera (r, g, b, targetManufacturerId)")
+	}
+	r, g, b := clamp8(args[0].Float()), clamp8(args[1].Float()), clamp8(args[2].Float())
+	targetMfrID := int64(args[3].Float())
+
+	targetName, ok := mfrName[targetMfrID]
+	if !ok {
+		return errJSON("fabricante de destino não encontrado: %d", targetMfrID)
+	}
+
+	candidates := make([]mix.PaintInput, 0, 512)
+	for _, p := range paints {
+		if p.MfrID == targetMfrID {
+			candidates = append(candidates, mix.PaintInput{ID: p.ID, Name: p.Name, Code: p.Code, R: p.R, G: p.G, B: p.B})
+		}
+	}
+	if len(candidates) == 0 {
+		return errJSON("fabricante de destino não possui tintas cadastradas com cor")
+	}
+
+	sourceInput := mix.PaintInput{ID: 0, Name: "cor alvo", Code: "", R: r, G: g, B: b}
+	res, err := equivalence.Suggest(sourceInput, "", targetName, candidates)
+	if err != nil {
+		return errJSON("%v", err)
+	}
+	recipe := res.Recipe
+
+	type ingredientJSON struct {
+		PaintID    int64   `json:"paintId"`
+		Name       string  `json:"name"`
+		Code       string  `json:"code"`
+		Percentage float64 `json:"percentage"`
+		R          uint8   `json:"r"`
+		G          uint8   `json:"g"`
+		B          uint8   `json:"b"`
+	}
+	ingredients := make([]ingredientJSON, 0, len(recipe.Ingredients))
+	for _, ing := range recipe.Ingredients {
+		ingredients = append(ingredients, ingredientJSON{
+			PaintID: ing.Paint.ID, Name: ing.Paint.Name, Code: ing.Paint.Code,
+			Percentage: ing.Percentage, R: ing.Paint.R, G: ing.Paint.G, B: ing.Paint.B,
+		})
+	}
+	tips := res.Tips
+	if tips == nil {
+		tips = []string{}
+	}
+
+	return toJSON(map[string]any{
+		"sourcePaintId":      int64(0),
+		"sourceName":         "cor alvo",
+		"sourceManufacturer": "",
+		"sourceR":            r,
+		"sourceG":            g,
+		"sourceB":            b,
+		"targetManufacturer": targetName,
+		"ingredients":        ingredients,
+		"resultR":            recipe.ResultR,
+		"resultG":            recipe.ResultG,
+		"resultB":            recipe.ResultB,
+		"deltaE":             recipe.DeltaE,
+		"method":             recipe.Method,
+		"reproducible":       res.Reproducible,
+		"tips":               tips,
+	})
+}
+
+// jsSuggestFromStock(sourcePaintId, stockJSON) — receita da cor de origem
+// usando SÓ o estoque do pintor (as tintas que ele cadastrou, de qualquer
+// marca). É o "priorize o que eu tenho" do mobile; a regra vive em
+// pkg/equivalence.SuggestFromStock, a mesma do desktop. O estoque chega como
+// JSON porque vive no localStorage do app, não no catálogo em memória.
+func jsSuggestFromStock(_ js.Value, args []js.Value) any {
+	if len(paints) == 0 {
+		return errJSON("catálogo não inicializado — chame init primeiro")
+	}
+	if len(args) != 2 {
+		return errJSON("suggestFromStock espera (sourcePaintId, stockJSON)")
+	}
+	sourceID := int64(args[0].Float())
+
+	idx, ok := byID[sourceID]
+	if !ok {
+		return errJSON("tinta de origem não encontrada: %d", sourceID)
+	}
+	source := paints[idx]
+
+	var stockPaints []stock.Paint
+	if err := json.Unmarshal([]byte(args[1].String()), &stockPaints); err != nil {
+		return errJSON("estoque inválido: %v", err)
+	}
+	pool := stock.ToMixInputs(stockPaints)
+	if len(pool) == 0 {
+		return errJSON("seu estoque está vazio — cadastre tintas primeiro")
+	}
+
+	sourceInput := mix.PaintInput{ID: source.ID, Name: source.Name, Code: source.Code, R: source.R, G: source.G, B: source.B}
+	res, err := equivalence.SuggestFromStock(sourceInput, pool)
+	if err != nil {
+		return errJSON("%v", err)
+	}
+	recipe := res.Recipe
+
+	type ingredientJSON struct {
+		PaintID    int64   `json:"paintId"`
+		Name       string  `json:"name"`
+		Code       string  `json:"code"`
+		Percentage float64 `json:"percentage"`
+		R          uint8   `json:"r"`
+		G          uint8   `json:"g"`
+		B          uint8   `json:"b"`
+	}
+	ingredients := make([]ingredientJSON, 0, len(recipe.Ingredients))
+	for _, ing := range recipe.Ingredients {
+		ingredients = append(ingredients, ingredientJSON{
+			PaintID: ing.Paint.ID, Name: ing.Paint.Name, Code: ing.Paint.Code,
+			Percentage: ing.Percentage, R: ing.Paint.R, G: ing.Paint.G, B: ing.Paint.B,
+		})
+	}
+	tips := res.Tips
+	if tips == nil {
+		tips = []string{}
+	}
+
+	return toJSON(map[string]any{
+		"sourcePaintId":      source.ID,
+		"sourceName":         source.Name,
+		"sourceManufacturer": mfrName[source.MfrID],
+		"sourceR":            source.R,
+		"sourceG":            source.G,
+		"sourceB":            source.B,
+		"targetManufacturer": "Meu estoque",
+		"ingredients":        ingredients,
+		"resultR":            recipe.ResultR,
+		"resultG":            recipe.ResultG,
+		"resultB":            recipe.ResultB,
+		"deltaE":             recipe.DeltaE,
+		"method":             recipe.Method,
+		"reproducible":       res.Reproducible,
+		"tips":               tips,
+	})
+}
+
+// jsParseStockCSV(csvText) — valida um CSV de importação contra os fabricantes
+// do catálogo em memória (mesma crítica do desktop, via pkg/stock). Retorna
+// {"paints":[...], "errors":[...]} — o TS insere as tintas boas no localStorage
+// e mostra os erros por linha.
+func jsParseStockCSV(_ js.Value, args []js.Value) any {
+	if len(mfrName) == 0 {
+		return errJSON("catálogo não inicializado — chame init primeiro")
+	}
+	if len(args) != 1 {
+		return errJSON("parseStockCSV espera (csvText)")
+	}
+
+	mfrs := make([]stock.Manufacturer, 0, len(mfrName))
+	for id, name := range mfrName {
+		mfrs = append(mfrs, stock.Manufacturer{ID: id, Name: name})
+	}
+
+	paintsOut, rowErrs := stock.ParseCSV(args[0].String(), mfrs)
+	if paintsOut == nil {
+		paintsOut = []stock.Paint{}
+	}
+	if rowErrs == nil {
+		rowErrs = []stock.RowError{}
+	}
+	return toJSON(map[string]any{"paints": paintsOut, "errors": rowErrs})
+}
+
+// jsStockCSVTemplate() — conteúdo do CSV-modelo, para o app oferecer o download.
+func jsStockCSVTemplate(_ js.Value, _ []js.Value) any {
+	return toJSON(map[string]any{"csv": stock.CSVTemplate()})
+}
+
+// jsStockToCSV(stockJSON) — serializa o estoque no formato de importação
+// (backup/exportação). Mesma função do desktop (stock.ToCSV).
+func jsStockToCSV(_ js.Value, args []js.Value) any {
+	if len(args) != 1 {
+		return errJSON("stockToCSV espera (stockJSON)")
+	}
+	var stockPaints []stock.Paint
+	if err := json.Unmarshal([]byte(args[0].String()), &stockPaints); err != nil {
+		return errJSON("estoque inválido: %v", err)
+	}
+	return toJSON(map[string]any{"csv": stock.ToCSV(stockPaints)})
 }
 
 // jsCompareToAnchor(anchorId, ids[]) — ΔE de cada tinta em relação à âncora,

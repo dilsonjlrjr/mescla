@@ -2,12 +2,13 @@
 
 ## Resumo
 
-App desktop para pintores de miniaturas. Wails 2 + Go + Svelte 5 + TypeScript + TailwindCSS + SQLite.
+App desktop para pintores de miniaturas. Wails 3 (alpha) + Go + Svelte 5 + TypeScript + TailwindCSS + SQLite.
 
-10 requisitos (RF-001 a RF-010), todos concluídos. Projeto migrou de Wails 3 (alpha) para
-Wails 2 (estável), passou por uma correção crítica de dados de cor no seed, e trocou a
-mistura genérica por uma "receita equivalente" restrita ao catálogo de um fabricante de
-destino — detalhes em [Manutenção / Correções](#manutenção--correções) e [Branches](#branches).
+11 requisitos (RF-001 a RF-011), todos concluídos. O projeto passou por uma correção crítica de
+dados de cor no seed, trocou a mistura genérica por uma "receita equivalente" restrita ao catálogo
+de um fabricante de destino, e fechou a 1.0 com o **banco de tintas do usuário** ("Meu estoque")
+integrado à mistura — detalhes em [Banco de Tintas do Usuário](#banco-de-tintas-do-usuário-meu-estoque)
+e [Manutenção / Correções](#manutenção--correções).
 
 ---
 
@@ -22,9 +23,11 @@ destino — detalhes em [Manutenção / Correções](#manutenção--correções)
   (clareador, pigmento faltante, matiz)
 - **AI Retrieval:** pipeline IntentPaintInfo → FindEquivalent → FindSimilar → MixRecipe → Compare → ManufacturerInfo → General
 - **Tipos:** `color.RGB{R,G,B uint8}`, `color.Lab{L,A,B float64}` — structs no pacote `color`
-- **Desktop:** Wails v2 (v2.12.0) + Svelte 5 (runes: $state, $derived, $effect) + TailwindCSS v4
+- **Desktop:** Wails v3 (v3.0.0-alpha) + Svelte 5 (runes: $state, $derived, $effect) + TailwindCSS v4.
+  `main.go` usa `application.New`; o `PaintService` é registrado como service em `Options.Services`
 - **Design:** tema "Artisan" — dark luxury, Playfair Display (display) + DM Sans (body), amber accent
-- **Build:** `go build` + `npm run build` + `wails generate module` (bindings gerados em `frontend/wailsjs/`, gitignorado)
+- **Build:** `go build` + `npm run build` + `wails3 generate bindings -ts` (bindings gerados em
+  `frontend/bindings/paint-match-ai/`, gitignorado — importados como `* as PaintService from '../../../bindings/paint-match-ai/paintservice'`)
 
 ---
 
@@ -40,7 +43,8 @@ A lógica de cor continua no Go, compilada pra **WebAssembly**; o catálogo vai 
   função e produzem receita/ΔE idênticos (paridade verificada).
 - **`cmd/export`** — `paint_knowledge.db` → `catalog.json` compacto (~736 KB / ~200 KB gzip).
 - **`cmd/wasm`** — `GOOS=js GOARCH=wasm`; expõe `window.__mescla`: `init`, `findSimilar`,
-  `suggestEquivalentRecipe`, `compareToAnchor`, `bestBrandsFor`. Binário ~3,3 MB, precacheado.
+  `suggestEquivalentRecipe`, `suggestRecipeForColor`, `suggestFromStock`, `parseStockCSV`,
+  `stockCSVTemplate`, `stockToCSV`, `compareToAnchor`, `bestBrandsFor`. Binário ~3,5 MB, precacheado.
 - **UX mobile:** 4 abas (Mesclar=inicial, Catálogo, Cor, Mais), sem Home; busca de tinta em
   tela cheia (nunca dropdown); "minha estante" (marcas em localStorage) — receita calculada
   por marca da estante, melhor primeiro; gotas por padrão; **Modo Bancada** (gotas gigantes,
@@ -51,6 +55,37 @@ A lógica de cor continua no Go, compilada pra **WebAssembly**; o catálogo vai 
 - **Build:** `scripts/build-mobile.sh` (db → export → wasm → vite build) → `frontend-mobile/dist/`.
   Dev: `npm run dev` em `frontend-mobile` (launch configs `mescla-mobile` e `mescla-mobile-prod`).
   Artefatos gerados (wasm, catalog.json, wasm_exec.js, dist) são gitignorados.
+
+---
+
+## Banco de Tintas do Usuário (Meu Estoque) — RF-011
+
+O "Meu estoque" é o banco das tintas que o **próprio pintor** tem em casa. Uma tinta de estoque é
+**livre** (nome, código, cor em hex, volume, notas) vinculada a um **fabricante que precisa existir**
+no catálogo — não referencia uma tinta do catálogo (pode ser um tom que nem está lá). Sem quantidade:
+só posse. Existe nos **dois** frontends.
+
+- **`pkg/stock`** — fonte única, neutra de plataforma: `ParseCSV` (crítica linha a linha —
+  fabricante existe, hex válido, nome obrigatório; nunca aborta no 1º erro), `CSVTemplate`,
+  `ToCSV` (export — inverso exato de `ParseCSV`, round-trip garantido), `ToMixInputs`. Desktop e
+  mobile usam a mesma (de)serialização de CSV.
+- **`pkg/equivalence.SuggestFromStock(source, stock)`** — o "pulo do gato": receita usando SÓ o
+  estoque. Difere de `Suggest` — não exclui por ID (espaços de ID distintos; cor idêntica no estoque
+  vira 1:1 "você já tem essa tinta") e nunca força 2+ ingredientes. O **fallback** (estoque não
+  alcança → algoritmo normal por fabricante) vive na UI.
+- **Desktop:** tabela `user_paints` criada idempotente no boot (`ensureUserSchema`, FK →
+  `manufacturers`, **não** toca no catálogo read-only). `userstock.go`: `GetUserPaints`,
+  `AddUserPaint`, `UpdateUserPaint`, `DeleteUserPaint`, `ImportUserPaintsCSV`, `UserPaintCSVTemplate`,
+  `SuggestEquivalentFromStock`. UI: `MyStockView.svelte` (CRUD + filtro + importar/baixar CSV);
+  toggle "Priorizar meu estoque" em `EquivalentRecipeView` (com marca de reserva de fallback + selo
+  "no meu estoque" nos ingredientes que o pintor já tem).
+- **Mobile:** `stock.svelte.ts` guarda as tintas inteiras em localStorage (`mescla.stock.v1`) com
+  **IDs locais negativos** (nunca colidem com o catálogo, positivo). `StockManager.svelte` (CRUD +
+  CSV) numa sub-tela de "Mais". Na `MesclarView`, o toggle "priorizar meu estoque" injeta a receita
+  do estoque na disputa — se alcança a cor (menor ΔE), aparece primeiro.
+- **Match do selo "no meu estoque":** por `fabricante + código` (a tinta de estoque é livre); numa
+  receita feita a partir do estoque, todos os ingredientes já são marcados.
+- **CSV:** colunas `fabricante,nome,codigo,hex,volume,notas` (hex `#RRGGBB`), cabeçalho opcional.
 
 ---
 
@@ -73,10 +108,13 @@ paint-match-ai/
 │   ├── ai/                  # context.go, retrieval.go, retrieval_test.go
 │   ├── color/               # converter.go, deltae.go, converter_test.go
 │   ├── mix/                 # engine.go, proportions.go, subset.go, tips.go (+ testes)
+│   ├── equivalence/         # Suggest + SuggestFromStock (fonte única desktop/mobile)
+│   ├── stock/               # Paint, ParseCSV, CSVTemplate, ToMixInputs (+ testes) — CSV compartilhado
 │   └── similarity/          # engine.go, ranking.go, engine_test.go
 ├── cmd/seed/main.go         # Seed runner (--import-paints, --download-logos, etc.)
-├── main.go                  # Wails 2 entry point
-├── app.go                   # PaintService (11 Go→TS binding methods)
+├── main.go                  # Wails 3 entry point (application.New, PaintService como service)
+├── app.go                   # PaintService (catálogo + receita equivalente)
+├── userstock.go             # PaintService: estoque do usuário (CRUD, CSV, receita de estoque) + testes
 ├── frontend/
 │   ├── index.html           # Playfair Display + DM Sans + JetBrains Mono
 │   ├── package.json
@@ -91,7 +129,8 @@ paint-match-ai/
 │           ├── PaintCard.svelte
 │           ├── ColorSearchView.svelte
 │           ├── CompareView.svelte
-│           ├── EquivalentRecipeView.svelte  # substitui MixView.svelte
+│           ├── EquivalentRecipeView.svelte  # + toggle "Priorizar meu estoque"
+│           ├── MyStockView.svelte           # CRUD do estoque + importação CSV (RF-011)
 │           ├── PaintSearchInput.svelte      # autocomplete de tintas, reutilizável
 │           └── Icon.svelte   # componente de ícone compartilhado
 ├── setup.sh                 # RTK: schema → manufacturers → download → paints → swatches
@@ -120,6 +159,12 @@ paint-match-ai/
 | `SuggestEquivalentRecipe(paintID, targetManufacturerID, maxPaints)` | EquivalentRecipeDTO |
 | `CompareColors(paintIDs)` | []SearchResultDTO |
 | `ProcessQuery(text)` | ai.Response |
+| `GetUserPaints()` | []UserPaintDTO |
+| `AddUserPaint(dto)` / `UpdateUserPaint(dto)` | UserPaintDTO |
+| `DeleteUserPaint(id)` | error |
+| `ImportUserPaintsCSV(csvText)` | CSVImportResultDTO |
+| `ExportUserPaintsCSV()` / `UserPaintCSVTemplate()` | string |
+| `SuggestEquivalentFromStock(paintID)` | EquivalentRecipeDTO |
 
 `EquivalentRecipeDTO`: SourcePaintID, SourceName, SourceR/G/B, TargetManufacturer, Ingredients[],
 ResultR/G/B, DeltaE, Method, Tips[]. Substituiu o `RecipeDTO` genérico — a receita agora é sempre
@@ -135,7 +180,8 @@ calculada dentro do catálogo de um fabricante de destino específico (`FindByCo
 | CatalogView | Grid 5 colunas, busca/filtro, modal detalhe |
 | ColorSearchView | Sliders RGB, busca DeltaE |
 | CompareView | Seleção múltipla, comparação par-a-par |
-| EquivalentRecipeView | Tinta de origem (via `PaintSearchInput` ou deep-link do Catálogo) + fabricante de destino → receita com ingredientes, DeltaE e dicas de ajuste |
+| EquivalentRecipeView | Tinta de origem + fabricante de destino → receita; toggle "Priorizar meu estoque" (marca de reserva no fallback, selo "no meu estoque" nos ingredientes) |
+| MyStockView | CRUD do estoque do usuário: busca/filtro por marca, form (fabricante, nome, código, cor, volume, notas), importar/exportar/baixar-modelo CSV |
 
 ---
 
@@ -153,6 +199,7 @@ calculada dentro do catálogo de um fabricante de destino específico (`FindByCo
 | RF-008 | Similarity Engine | f86bb4d |
 | RF-009 | AI Retrieval | 80dfe0e |
 | RF-010 | Desktop Interface | df8232f + 93c70c7 + 42b337f |
+| RF-011 | Banco de tintas do usuário (Meu estoque) — desktop + mobile | (não commitado) |
 
 ---
 

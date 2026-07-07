@@ -6,7 +6,7 @@
 // da aba inicial cria UMA entrada, então o back de qualquer aba volta pra
 // Mesclar, e um segundo back sai do app (convenção Android).
 
-export type Tab = 'mesclar' | 'catalogo' | 'cor' | 'mais';
+export type Tab = 'mesclar' | 'catalogo' | 'cor' | 'roda' | 'mais';
 
 const HOME: Tab = 'mesclar';
 

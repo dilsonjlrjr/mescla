@@ -65,3 +65,31 @@ func Suggest(source mix.PaintInput, sourceManufacturer, targetManufacturer strin
 		Reproducible: recipe.DeltaE <= MaxViableDeltaE,
 	}, nil
 }
+
+// SuggestFromStock monta a receita equivalente da cor de source usando o
+// estoque do próprio pintor (tintas de qualquer marca que ele possui). É o
+// "priorize o que eu tenho": se sai da estante do usuário, essa é a melhor
+// resposta; caso contrário a UI cai no fluxo por fabricante (Suggest).
+//
+// Difere de Suggest em dois pontos, por o estoque ser multi-marca e livre:
+//   - Não exclui nada por ID: a origem vem do catálogo e o estoque tem espaço
+//     de IDs próprio, então excluir por ID removeria tinta legítima por acaso.
+//     Se o estoque já contém a cor exata, a equivalência 1:1 ("você já tem
+//     essa tinta") é justamente a resposta desejada.
+//   - Nunca força 2+ ingredientes: usar uma única tinta que o pintor possui é
+//     um resultado válido, não uma marca a esgotar.
+func SuggestFromStock(source mix.PaintInput, stock []mix.PaintInput) (Result, error) {
+	if len(stock) == 0 {
+		return Result{}, ErrNoCandidates
+	}
+
+	l, a, b := color.RGBToLab(source.R, source.G, source.B)
+	recipe := mix.SuggestBestSubset([3]float64{l, a, b}, stock, 1, 3)
+	tips := mix.GenerateTips(source.R, source.G, source.B, recipe)
+
+	return Result{
+		Recipe:       recipe,
+		Tips:         tips,
+		Reproducible: recipe.DeltaE <= MaxViableDeltaE,
+	}, nil
+}
