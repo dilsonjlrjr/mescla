@@ -294,3 +294,11 @@ substituídos por `SuggestEquivalentRecipe`/`EquivalentRecipeDTO`.
 - usar sempre o plugin caveman;
 - usar sempre o plugin context-mode;
 - usar sempre o plugin rtk-ai
+
+---
+
+## Convenção de commit
+
+- Formato: `tipo(escopo): descrição` (conventional commit simples)
+- **Nunca** usar `[AZDE-000000]` ou qualquer `[AZDE-NNNN]` — padrão herdado de outro contexto, abolido em 2026-07-09 (commits antigos permanecem como estão)
+- Sem autoria/co-autoria de IA (sem "Co-Authored-By: Claude")
