@@ -286,3 +286,11 @@ substituídos por `SuggestEquivalentRecipe`/`EquivalentRecipeDTO`.
 - **A11y:** warnings no build (labels sem aria)
 - **`paint_knowledge.db` local:** se foi gerado antes de `25d57db`, precisa rodar o seed de novo (ver "Como Executar")
 - **Receita equivalente:** mudanças de `app.go`, `pkg/mix` e componentes do frontend ainda não commitadas — ver item 4 de Manutenção
+
+---
+
+## Premissas (Obrigatórias em cada interação)
+
+- usar sempre o plugin caveman;
+- usar sempre o plugin context-mode;
+- usar sempre o plugin rtk-ai
