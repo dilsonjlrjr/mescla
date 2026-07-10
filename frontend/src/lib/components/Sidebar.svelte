@@ -64,10 +64,6 @@
     {/if}
   </button>
 
-  {#if !collapsed}
-    <div class="sidebar-version">v1.0.0</div>
-  {/if}
-
   <button class="sidebar-toggle" onclick={onToggle} aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'}>
     <span class="toggle-icon" class:flipped={collapsed}><Icon name="chevron-left" size={16} /></span>
   </button>
@@ -130,24 +126,32 @@
     overflow-y: auto;
   }
 
+  /* Item horizontal (ícone à esquerda, label à direita) com "costura" de
+     laca à esquerda no ativo — o mesmo traço vertical do ícone da marca. */
   .nav-item {
+    position: relative;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    justify-content: center;
-    gap: 6px;
+    justify-content: flex-start;
+    gap: 11px;
     width: 100%;
-    padding: 12px 6px 10px;
+    padding: 10px 12px;
     border: none;
-    border-radius: 10px;
+    border-radius: var(--radius-control);
     background: transparent;
     color: var(--ink-500);
     font-family: var(--font-body);
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 500;
-    text-align: center;
+    text-align: left;
     cursor: pointer;
     transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .sidebar.collapsed .nav-item {
+    justify-content: center;
+    padding: 12px 6px;
   }
 
   .nav-item:hover {
@@ -159,6 +163,21 @@
     background: var(--ink-800);
     color: var(--paper);
     font-weight: 600;
+  }
+
+  .nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 9px;
+    bottom: 9px;
+    width: 3px;
+    border-radius: var(--radius-pill);
+    background: var(--lacquer);
+  }
+
+  .sidebar.collapsed .nav-item.active::before {
+    display: none;
   }
 
   .nav-icon {
@@ -183,14 +202,6 @@
     border-top: 1px solid var(--ink-700);
     border-radius: 0;
     padding-top: 14px;
-  }
-
-  .sidebar-version {
-    padding: 12px 16px;
-    font-size: 10px;
-    font-family: var(--font-mono);
-    color: var(--ink-600);
-    text-align: center;
   }
 
   .sidebar-toggle {

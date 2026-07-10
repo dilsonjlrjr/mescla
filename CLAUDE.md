@@ -25,7 +25,12 @@ e [Manutenção / Correções](#manutenção--correções).
 - **Tipos:** `color.RGB{R,G,B uint8}`, `color.Lab{L,A,B float64}` — structs no pacote `color`
 - **Desktop:** Wails v3 (v3.0.0-alpha) + Svelte 5 (runes: $state, $derived, $effect) + TailwindCSS v4.
   `main.go` usa `application.New`; o `PaintService` é registrado como service em `Options.Services`
-- **Design:** tema "Artisan" — dark luxury, Playfair Display (display) + DM Sans (body), amber accent
+- **Design:** tema "Rótulo" (claro, nos dois frontends) — rótulo industrial de lata de tinta:
+  Archivo Variable (display expandido `font-stretch: 122%` + body) + IBM Plex Mono (etiquetas),
+  neutros stone, acento único laca `#e8542c` + grafite `#1a1712` (cores do ícone), raios
+  padronizados (botões/badges = pílula, superfícies = 12px, swatches/inputs = 8px).
+  Fontes self-hosted via `@fontsource` (sem Google Fonts — PWA offline e desktop sem rede).
+  Claro-only de propósito: avaliar cor de tinta exige superfície clara consistente
 - **Build:** `go build` + `npm run build` + `wails3 generate bindings -ts` (bindings gerados em
   `frontend/bindings/paint-match-ai/`, gitignorado — importados como `* as PaintService from '../../../bindings/paint-match-ai/paintservice'`)
 
@@ -120,7 +125,7 @@ paint-match-ai/
 │   ├── package.json
 │   ├── vite.config.ts
 │   └── src/
-│       ├── app.css          # Artisan theme: obsidian palette, amber accent
+│       ├── app.css          # Rótulo theme: stone neutrals, laca accent, Archivo
 │       ├── App.svelte       # Sidebar + router (repassa paintId pré-selecionado entre rotas)
 │       └── lib/components/
 │           ├── Sidebar.svelte

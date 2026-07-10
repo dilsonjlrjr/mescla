@@ -16,5 +16,9 @@
     "typescript": "~5.2.2",
     "vite": "^6.0.0",
     "vite-plugin-pwa": "^0.21.0"
+  },
+  "dependencies": {
+    "@fontsource-variable/archivo": "^5.2.8",
+    "@fontsource/ibm-plex-mono": "^5.2.7"
   }
 }

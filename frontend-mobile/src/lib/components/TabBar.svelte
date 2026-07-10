@@ -24,8 +24,8 @@
       onclick={() => tap(t.id)}
       aria-current={nav.tab === t.id ? 'page' : undefined}
     >
-      <Icon name={t.icon} size={22} />
-      <span>{t.label}</span>
+      <span class="tab-ico"><Icon name={t.icon} size={22} /></span>
+      <span class="tab-label">{t.label}</span>
     </button>
   {/each}
 </nav>
@@ -50,11 +50,23 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 3px;
+    gap: 2px;
     font-size: 11px;
     font-weight: 500;
     color: var(--ink-500);
     transition: color 0.15s ease;
+  }
+
+  /* Pílula atrás do ícone: a aba ativa ganha um "rótulo" de laca — mesma
+     linguagem dos botões, sem depender só da cor pra indicar estado. */
+  .tab-ico {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 27px;
+    border-radius: var(--radius-pill);
+    transition: background 0.18s ease, color 0.15s ease;
   }
 
   .tab-item:active {
@@ -62,7 +74,12 @@
   }
 
   .tab-item.active {
-    color: var(--lacquer);
+    color: var(--ink-100);
     font-weight: 600;
+  }
+
+  .tab-item.active .tab-ico {
+    background: color-mix(in srgb, var(--lacquer) 15%, transparent);
+    color: var(--lacquer-deep);
   }
 </style>

@@ -157,10 +157,10 @@
 
   .hero-thesis {
     font-size: clamp(1.9rem, 4.5vw, 2.9rem);
-    font-weight: 600;
+    font-weight: 680;
     line-height: 1.14;
     color: var(--paper);
-    letter-spacing: -0.015em;
+    letter-spacing: -0.02em;
     margin-bottom: 14px;
     max-width: 640px;
   }

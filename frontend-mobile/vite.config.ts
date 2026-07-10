@@ -11,20 +11,10 @@ export default defineConfig({
       // (o cenário-alvo é dentro de loja, onde sinal ruim é comum).
       includeAssets: ['wasm_exec.js', 'mescla.wasm', 'data/catalog.json'],
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,wasm,json}'],
+        // woff2 no precache: fontes agora são self-hosted (@fontsource),
+        // então o app abre offline já com a tipografia certa desde o boot.
+        globPatterns: ['**/*.{js,css,html,svg,png,wasm,json,woff2}'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024, // mescla.wasm ~3.3MB
-        runtimeCaching: [
-          {
-            // Google Fonts: cache-first com fallback — depois da primeira
-            // visita as fontes funcionam offline.
-            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts',
-              expiration: { maxEntries: 24, maxAgeSeconds: 60 * 60 * 24 * 365 },
-            },
-          },
-        ],
       },
       manifest: {
         name: 'Mescla',
@@ -34,8 +24,8 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
-        background_color: '#f6f4f0',
-        theme_color: '#f6f4f0',
+        background_color: '#f5f5f4',
+        theme_color: '#f5f5f4',
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
