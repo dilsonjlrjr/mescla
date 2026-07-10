@@ -1,0 +1,14 @@
+# Contexto de build enxuto — os gerados são recriados dentro do container.
+.git
+bin
+**/node_modules
+**/dist
+**/dev-dist
+*.db
+*.db-shm
+*.db-wal
+db/embedded
+frontend-mobile/public/mescla.wasm
+frontend-mobile/public/wasm_exec.js
+frontend-mobile/public/data/catalog.json
+build/bin

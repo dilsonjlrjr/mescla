@@ -1,0 +1,33 @@
+# Mescla PWA — deploy estático (lab-dilson).
+#   docker compose up -d --build
+# O `builder` gera banco→catálogo→wasm→PWA (uma vez) e publica no volume
+# mescla-web; o `web` (nginx) serve na porta 50444. O banco vive no volume
+# mescla-db e é reaproveitado entre deploys.
+name: mescla
+
+services:
+  builder:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.build
+    image: mescla-builder:latest
+    volumes:
+      - mescla-db:/data
+      - mescla-web:/out
+    restart: "no"
+
+  web:
+    image: nginx:alpine
+    depends_on:
+      builder:
+        condition: service_completed_successfully
+    volumes:
+      - mescla-web:/usr/share/nginx/html:ro
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "50444:80"
+    restart: unless-stopped
+
+volumes:
+  mescla-db:
+  mescla-web:
