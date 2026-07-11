@@ -1,10 +1,10 @@
 <script lang="ts">
-  import Textfield from '@smui/textfield';
-  import Icon from './Icon.svelte';
-
+  // Autocomplete de tinta (Tintômetro): input raio 8 + dropdown papel com
+  // hairline; busca por nome, código ou marca no catálogo já carregado.
   interface PaintOption {
     id: number;
     name: string;
+    code?: string;
     manufacturer: string;
     r: number;
     g: number;
@@ -19,7 +19,7 @@
     label?: string;
   }
 
-  let { paints, selected, onSelect, onClear, label = 'Buscar tinta...' }: Props = $props();
+  let { paints, selected, onSelect, onClear, label = 'Buscar tinta' }: Props = $props();
 
   let query = $state('');
 
@@ -28,7 +28,11 @@
       ? paints
           .filter(p => {
             const q = query.toLowerCase();
-            return p.name.toLowerCase().includes(q) || p.manufacturer.toLowerCase().includes(q);
+            return (
+              p.name.toLowerCase().includes(q) ||
+              p.manufacturer.toLowerCase().includes(q) ||
+              (p.code ?? '').toLowerCase().includes(q)
+            );
           })
           .slice(0, 6)
       : []
@@ -41,36 +45,41 @@
 </script>
 
 {#if selected}
-  <div class="paint-search-chip">
+  <div class="paint-chip">
     <span class="swatch-flat" style="width: 40px; height: 40px; background: rgb({selected.r}, {selected.g}, {selected.b});"></span>
     <div style="flex: 1; min-width: 0;">
-      <div class="font-semibold text-sm text-white truncate">{selected.name}</div>
-      <div class="font-mono" style="font-size: 10.5px; color: var(--ink-500);">{selected.manufacturer}</div>
+      <div class="chip-name">{selected.name}</div>
+      <div class="chip-meta font-mono">{selected.manufacturer}</div>
     </div>
-    <button class="paint-search-swap" onclick={onClear}>Trocar</button>
+    <button class="chip-swap" onclick={onClear}>Trocar</button>
   </div>
 {:else}
-  <div class="paint-search" style="position: relative;">
-    <Textfield variant="outlined" bind:value={query} {label} style="width: 100%;">
-      {#snippet leadingIcon()}
-        <span class="mdc-text-field__icon mdc-text-field__icon--leading" style="color: var(--ink-500); display: flex;"><Icon name="search" size={17} /></span>
-      {/snippet}
-    </Textfield>
+  <div class="paint-search">
+    <input
+      type="search"
+      bind:value={query}
+      placeholder={label}
+      aria-label={label}
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      spellcheck="false"
+    />
 
     {#if query.trim()}
-      <div class="paint-search-results panel">
+      <div class="search-results">
         {#if results.length > 0}
           {#each results as p (p.id)}
-            <button class="paint-search-result" onclick={() => pick(p)}>
+            <button class="search-result" onclick={() => pick(p)}>
               <span class="swatch-flat" style="width: 30px; height: 30px; background: rgb({p.r}, {p.g}, {p.b});"></span>
               <div style="flex: 1; min-width: 0;">
-                <div class="font-medium text-sm text-white truncate">{p.name}</div>
-                <div class="font-mono" style="font-size: 10.5px; color: var(--ink-500);">{p.manufacturer}</div>
+                <div class="result-name">{p.name}</div>
+                <div class="result-meta font-mono">{p.code ? `${p.code} · ` : ''}{p.manufacturer}</div>
               </div>
             </button>
           {/each}
         {:else}
-          <div style="padding: 14px; font-size: 12.5px; color: var(--ink-500);">Nenhuma tinta encontrada</div>
+          <div class="search-empty">Nenhuma tinta encontrada</div>
         {/if}
       </div>
     {/if}
@@ -78,7 +87,19 @@
 {/if}
 
 <style>
-  .paint-search-results {
+  .paint-search {
+    position: relative;
+  }
+
+  .paint-search input {
+    width: 100%;
+    height: 46px;
+    padding: 0 16px;
+    font: inherit;
+    font-size: 14px;
+  }
+
+  .search-results {
     position: absolute;
     top: calc(100% + 6px);
     left: 0;
@@ -87,51 +108,88 @@
     max-height: 260px;
     overflow-y: auto;
     padding: 6px;
-    background: var(--ink-900);
-    border: 1px solid var(--ink-700);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+    background: var(--papel);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-surface);
+    box-shadow: 0 16px 40px rgba(26, 23, 18, 0.12);
   }
 
-  .paint-search-result {
+  .search-result {
     display: flex;
     align-items: center;
     gap: 10px;
     width: 100%;
     padding: 8px;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-control);
     background: transparent;
     cursor: pointer;
     text-align: left;
+    font: inherit;
     transition: background 0.15s ease;
   }
 
-  .paint-search-result:hover {
-    background: var(--ink-800);
+  .search-result:hover {
+    background: color-mix(in srgb, var(--laca) 7%, transparent);
   }
 
-  .paint-search-chip {
+  .result-name {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--grafite);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .result-meta {
+    font-size: 10.5px;
+    color: var(--text-2);
+  }
+
+  .search-empty {
+    padding: 14px;
+    font-size: 12.5px;
+    color: var(--text-2);
+  }
+
+  .paint-chip {
     display: flex;
     align-items: center;
     gap: 12px;
     padding: 10px 12px;
-    border: 1px solid var(--ink-700);
+    border: 1px solid var(--hairline);
     border-radius: var(--radius-control);
-    background: var(--ink-900);
+    background: var(--papel);
   }
 
-  .paint-search-swap {
+  .chip-name {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--grafite);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chip-meta {
+    font-size: 10.5px;
+    color: var(--text-2);
+  }
+
+  .chip-swap {
     flex-shrink: 0;
     border: none;
     background: transparent;
-    color: var(--lacquer-tint);
+    color: var(--laca-deep);
+    font: inherit;
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     padding: 6px 8px;
   }
 
-  .paint-search-swap:hover {
+  .chip-swap:hover {
     text-decoration: underline;
   }
 </style>

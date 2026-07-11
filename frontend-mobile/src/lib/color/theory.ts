@@ -282,7 +282,7 @@ export const HARMONY_LABEL: Record<HarmonyKind, string> = {
 /** Descrição pedagógica de cada harmonia. */
 export const HARMONY_HINT: Record<HarmonyKind, string> = {
   complementary:
-    'Opostos na roda. Contraste máximo — e a chave pra escurecer: um toque do complementar tira o brilho sem sujar como o preto.',
+    'Opostos na roda. Contraste máximo, e a chave pra escurecer: um toque do complementar tira o brilho sem sujar como o preto.',
   analogous: 'Vizinhas na roda. Combinam de forma calma e natural, ótimas pra transições suaves.',
   triad: 'Três cores igualmente espaçadas. Paleta vibrante e equilibrada.',
   split: 'A cor e as duas vizinhas do seu complementar. Contraste forte, porém mais harmônico.',

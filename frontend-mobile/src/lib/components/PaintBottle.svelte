@@ -1,16 +1,18 @@
 <script lang="ts">
-  // Frasco conta-gotas sintético (SVG) preenchido com a cor real da tinta.
-  // Usado como "thumbnail de frasco" em todo o app — cobre o catálogo inteiro
-  // sem depender de foto de produto por SKU.
+  // Garrafinha do Tintômetro (SVG): silhueta de frasco conta-gotas com tampa,
+  // contorno grafite, corpo na cor da tinta e etiqueta branca quadrada com um
+  // ponto da cor no meio — o traço dos boards do Penpot. Cobre o catálogo
+  // inteiro sem depender de foto de produto por SKU.
   interface Props {
     r: number;
     g: number;
     b: number;
-    size?: number;      // altura em px (largura = 60% disso)
-    label?: string;     // texto curto no rótulo (ex: código)
+    size?: number; // altura em px (largura = 60% disso)
+    /** aceito por compatibilidade; o traço atual usa só o ponto de cor */
+    label?: string;
   }
 
-  let { r, g, b, size = 64, label = '' }: Props = $props();
+  let { r, g, b, size = 64 }: Props = $props();
 
   let fill = $derived(`rgb(${r}, ${g}, ${b})`);
 </script>
@@ -25,31 +27,12 @@
   style="display: block; flex-shrink: 0;"
 >
   <!-- bico conta-gotas -->
-  <path d="M27 2 L33 2 L36 15 L24 15 Z" fill="#3a3a40" />
+  <path d="M26 4 L34 4 L37 18 L23 18 Z" fill="#1a1712" />
   <!-- anel da tampa -->
-  <rect x="21" y="14" width="18" height="9" rx="2.5" fill="#2c2c32" />
-  <!-- corpo do frasco (a tinta) -->
-  <rect x="13" y="23" width="34" height="73" rx="8" fill={fill} />
-  <!-- contorno sutil pro corpo não sumir em cores escuras -->
-  <rect x="13" y="23" width="34" height="73" rx="8" fill="none" stroke="rgba(0,0,0,0.28)" stroke-width="1" />
-  <!-- reflexo -->
-  <rect x="18" y="28" width="5" height="62" rx="2.5" fill="rgba(255,255,255,0.30)" />
-  <!-- rótulo -->
-  <rect x="13" y="57" width="34" height="28" fill="#f3f0e8" />
-  <rect x="13" y="57" width="34" height="28" fill="none" stroke="rgba(0,0,0,0.15)" stroke-width="0.75" />
-  <!-- faixa da cor no rótulo -->
-  <rect x="17" y="61" width="26" height="9" rx="1.5" fill={fill} stroke="rgba(0,0,0,0.2)" stroke-width="0.5" />
-  {#if label}
-    <text
-      x="30" y="79"
-      text-anchor="middle"
-      font-family="ui-monospace, monospace"
-      font-size="7.5"
-      fill="#4a4640"
-    >{label.length > 8 ? label.slice(0, 8) : label}</text>
-  {:else}
-    <!-- linhas de "texto" decorativas -->
-    <rect x="18" y="74" width="24" height="2.5" rx="1.25" fill="#c9c4b8" />
-    <rect x="21" y="79" width="18" height="2.5" rx="1.25" fill="#d6d2c6" />
-  {/if}
+  <rect x="20" y="17" width="20" height="8" rx="2.5" fill="#1a1712" />
+  <!-- corpo do frasco (a tinta), contorno grafite -->
+  <rect x="12" y="25" width="36" height="71" rx="9" fill={fill} stroke="#1a1712" stroke-width="3" />
+  <!-- etiqueta branca quadrada com o ponto da cor -->
+  <rect x="21" y="52" width="18" height="18" rx="2" fill="#ffffff" stroke="#1a1712" stroke-width="1.5" />
+  <rect x="26" y="57" width="8" height="8" rx="1.5" fill={fill} stroke="rgba(26,23,18,0.25)" stroke-width="0.75" />
 </svg>

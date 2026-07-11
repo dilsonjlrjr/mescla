@@ -1,20 +1,31 @@
 <script lang="ts">
-  // Meu estoque — o banco de tintas do próprio pintor. CRUD + importação CSV.
+  // Meu estoque (Tintômetro) — master-detail: grid de cards à esquerda,
+  // painel da tinta selecionada à direita. CRUD + importação/exportação CSV.
   // As tintas daqui alimentam a opção "priorizar meu estoque" na Equivalência.
   import { onMount } from 'svelte';
   import Textfield from '@smui/textfield';
   import Select, { Option } from '@smui/select';
   import Dialog, { Content as DialogContent, Title as DialogTitle } from '@smui/dialog';
-  import Icon from './Icon.svelte';
+  import PaintBottle from './PaintBottle.svelte';
   import { toast } from '../toast.svelte';
+  import { recipesWithIngredient } from '../recipes.svelte';
+  import { hexOf } from '../ui';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
   import type { UserPaintDTO, CSVImportResultDTO } from '../../../bindings/paint-match-ai/models';
+
+  interface Props {
+    // vindo da busca global: "Adicionar {tinta} ao meu estoque"
+    prefillPaintId?: number | null;
+  }
+
+  let { prefillPaintId = null }: Props = $props();
 
   let paints: UserPaintDTO[] = $state([]);
   let manufacturers: { id: number; name: string }[] = $state([]);
   let loading = $state(true);
   let searchQuery = $state('');
   let selectedManufacturer = $state('');
+  let selectedId: number | null = $state(null);
 
   // Form (add/editar)
   let formOpen = $state(false);
@@ -32,7 +43,25 @@
   let importResult: CSVImportResultDTO | null = $state(null);
   let fileInput: HTMLInputElement;
 
-  onMount(load);
+  onMount(async () => {
+    await load();
+    if (prefillPaintId) {
+      try {
+        const p = await PaintService.GetPaintByID(prefillPaintId);
+        const mfr = manufacturers.find(m => m.name === p.manufacturer);
+        editingId = null;
+        fMfr = mfr?.id ?? manufacturers[0]?.id ?? '';
+        fName = p.name;
+        fCode = p.code;
+        fHex = hexOf(p.r, p.g, p.b).toLowerCase();
+        fVolume = p.volume || '';
+        fNotes = '';
+        formOpen = true;
+      } catch (e) {
+        console.error('Erro pré-preenchendo tinta:', e);
+      }
+    }
+  });
 
   async function load() {
     loading = true;
@@ -43,6 +72,9 @@
       ]);
       paints = stock || [];
       manufacturers = (mfrs || []).map(m => ({ id: m.id, name: m.name }));
+      if (selectedId === null || !paints.some(p => p.id === selectedId)) {
+        selectedId = paints[0]?.id ?? null;
+      }
     } catch (e) {
       console.error('Erro carregando estoque:', e);
       toast('Não consegui carregar seu estoque.', 'error');
@@ -64,19 +96,19 @@
     })
   );
 
-  // Marcas que o pintor realmente tem em estoque — resumo no topo.
   let ownedBrands = $derived([...new Set(paints.map(p => p.manufacturer))].sort());
+
+  let selected = $derived(paints.find(p => p.id === selectedId) ?? null);
+
+  let selectedRecipeCount = $derived(
+    selected ? recipesWithIngredient(selected.manufacturer, selected.code, selected.name) : 0
+  );
 
   function hexToRgb(hex: string): { r: number; g: number; b: number } {
     const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
     if (!m) return { r: 138, g: 138, b: 138 };
     const n = parseInt(m[1], 16);
     return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
-  }
-
-  function rgbToHex(r: number, g: number, b: number): string {
-    const h = (n: number) => n.toString(16).padStart(2, '0');
-    return `#${h(r)}${h(g)}${h(b)}`;
   }
 
   function openAdd() {
@@ -95,7 +127,7 @@
     fMfr = p.manufacturerId;
     fName = p.name;
     fCode = p.code;
-    fHex = rgbToHex(p.r, p.g, p.b);
+    fHex = hexOf(p.r, p.g, p.b).toLowerCase();
     fVolume = p.volume;
     fNotes = p.notes;
     formOpen = true;
@@ -126,8 +158,9 @@
     };
     try {
       if (editingId === null) {
-        await PaintService.AddUserPaint(dto);
+        const created = await PaintService.AddUserPaint(dto);
         toast('Tinta adicionada ao estoque.');
+        selectedId = created?.id ?? selectedId;
       } else {
         await PaintService.UpdateUserPaint(dto);
         toast('Tinta atualizada.');
@@ -147,6 +180,7 @@
     try {
       await PaintService.DeleteUserPaint(p.id);
       toast('Tinta removida.');
+      if (selectedId === p.id) selectedId = null;
       await load();
     } catch (e) {
       console.error('Erro removendo tinta:', e);
@@ -208,162 +242,188 @@
 </script>
 
 <div class="page-container">
-  <div class="page-header animate-rise">
-    <h1 class="page-title">Meu estoque</h1>
-    <p class="page-subtitle">
-      {#if paints.length === 0}
-        Cadastre as tintas que você tem em casa — depois a Equivalência pode priorizar o que já é seu.
-      {:else}
-        {filtered.length.toLocaleString('pt-BR')} de {paints.length.toLocaleString('pt-BR')} tintas · {ownedBrands.length} {ownedBrands.length === 1 ? 'marca' : 'marcas'}
-      {/if}
-    </p>
-    <div class="page-divider"></div>
+  <!-- Header -->
+  <div class="stock-head animate-rise">
+    <div>
+      <h1 class="page-title">Meu estoque</h1>
+      <p class="stock-count font-mono">
+        {paints.length.toLocaleString('pt-BR')} tintas&nbsp;&nbsp;·&nbsp;&nbsp;{ownedBrands.length} {ownedBrands.length === 1 ? 'fabricante' : 'fabricantes'}
+      </p>
+    </div>
+    <div class="stock-cta">
+      <button class="text-link" onclick={downloadTemplate}>Baixar modelo</button>
+      <button class="text-link" onclick={exportCsv} disabled={paints.length === 0}>Exportar CSV</button>
+      <button class="pill-light" onclick={pickFile}>Importar CSV</button>
+      <button class="pill-dark" onclick={openAdd}>+ Nova tinta</button>
+    </div>
   </div>
 
-  <!-- Ações -->
-  <div class="panel p-3 mb-6 animate-rise stock-toolbar" style="animation-delay: 60ms; position: relative; z-index: 1;">
-    <div class="stock-filters">
-      <div class="flex-1" style="min-width: 200px;">
-        <Textfield variant="outlined" bind:value={searchQuery} label="Buscar no meu estoque..." style="width: 100%;">
-          {#snippet leadingIcon()}
-            <span class="mdc-text-field__icon mdc-text-field__icon--leading" style="color: var(--ink-500); display: flex;"><Icon name="search" size={17} /></span>
-          {/snippet}
-        </Textfield>
-      </div>
-      <div style="min-width: 200px;">
-        <Select variant="outlined" bind:value={selectedManufacturer} label="Fabricante" style="width: 100%;">
-          <Option value="">Todas as marcas</Option>
-          {#each ownedBrands as name}
-            <Option value={name}>{name}</Option>
-          {/each}
-        </Select>
-      </div>
-    </div>
-
-    <div class="stock-actions">
-      <button class="btn-primary stock-add" onclick={openAdd}>
-        <Icon name="plus" size={17} /> Adicionar tinta
-      </button>
-      <div class="stock-csv-buttons">
-        <button class="btn-ghost" onclick={pickFile} title="Importar tintas de um CSV">
-          <Icon name="upload" size={15} /> Importar
-        </button>
-        <button class="btn-ghost" onclick={exportCsv} disabled={paints.length === 0} title="Exportar seu estoque (backup)">
-          <Icon name="download" size={15} /> Exportar
-        </button>
-        <button class="btn-ghost" onclick={downloadTemplate} title="Baixar CSV de exemplo">
-          <Icon name="book" size={15} /> Modelo
-        </button>
-      </div>
-    </div>
-
-    <input
-      bind:this={fileInput}
-      type="file"
-      accept=".csv,text/csv"
-      style="display: none;"
-      onchange={onFileChosen}
-    />
-  </div>
+  <input
+    bind:this={fileInput}
+    type="file"
+    accept=".csv,text/csv"
+    style="display: none;"
+    onchange={onFileChosen}
+  />
 
   {#if loading}
-    <div class="stock-list">
-      {#each Array(6) as _}
-        <div class="panel p-3" style="display: flex; gap: 12px; align-items: center;">
-          <div class="skeleton" style="width: 46px; height: 46px; border-radius: var(--radius-control);"></div>
-          <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
-            <div class="skeleton" style="height: 12px; width: 40%;"></div>
-            <div class="skeleton" style="height: 10px; width: 25%;"></div>
+    <div class="stock-body">
+      <div class="stock-grid">
+        {#each Array(8) as _, i (i)}
+          <div>
+            <div class="skeleton" style="aspect-ratio: 4/3; margin-bottom: 10px;"></div>
+            <div class="skeleton" style="height: 12px; width: 70%;"></div>
           </div>
-        </div>
-      {/each}
+        {/each}
+      </div>
     </div>
   {:else if paints.length === 0}
-    <div class="empty-state">
-      <div class="empty-icon"><Icon name="box" size={40} /></div>
-      <p class="empty-title">Seu estoque está vazio</p>
-      <p class="empty-hint">Adicione uma tinta ou importe um CSV. Depois, na Equivalência, ligue "priorizar meu estoque" pra montar a receita só com o que você tem.</p>
-    </div>
-  {:else if filtered.length === 0}
-    <div class="empty-state">
-      <div class="empty-icon"><Icon name="search-off" size={40} /></div>
-      <p class="empty-title">Nada com esse filtro</p>
-      <p class="empty-hint">Limpe a busca ou o filtro de marca.</p>
+    <!-- Estado vazio (board Estados) -->
+    <div class="stock-empty animate-rise">
+      <div class="empty-visual" aria-hidden="true">
+        <span class="empty-swatch"></span>
+        <PaintBottle r={234} g={230} b={220} size={92} />
+      </div>
+      <p class="empty-big font-display">Sua estante ainda está vazia</p>
+      <p class="empty-sub">Cadastre a primeira tinta ou importe um CSV com tudo de uma vez.</p>
+      <div class="empty-actions">
+        <button class="pill-dark" onclick={openAdd}>+ Nova tinta</button>
+        <button class="pill-light" onclick={pickFile}>Importar CSV</button>
+      </div>
     </div>
   {:else}
-    <div class="stock-list">
-      {#each filtered as p, i (p.id)}
-        <div class="stock-row panel p-3 animate-rise" style="animation-delay: {Math.min(i * 15, 180)}ms;">
-          <span class="swatch-flat" style="width: 46px; height: 46px; background: rgb({p.r}, {p.g}, {p.b});"></span>
-          <div class="stock-main">
-            <div class="stock-name">{p.name}</div>
-            <div class="stock-meta">
-              <span>{p.manufacturer}</span>
-              {#if p.code}<span class="dot">·</span><span class="font-mono">{p.code}</span>{/if}
-              {#if p.volume}<span class="dot">·</span><span>{p.volume}</span>{/if}
-            </div>
-            {#if p.notes}<div class="stock-notes">{p.notes}</div>{/if}
+    <!-- Filtros -->
+    <div class="stock-filters animate-rise" style="animation-delay: 60ms;">
+      <div class="brand-pills">
+        <button class="filter-pill" class:active={selectedManufacturer === ''} onclick={() => (selectedManufacturer = '')}>Todas</button>
+        {#each ownedBrands as name (name)}
+          <button class="filter-pill" class:active={selectedManufacturer === name} onclick={() => (selectedManufacturer = selectedManufacturer === name ? '' : name)}>{name}</button>
+        {/each}
+      </div>
+      <input type="search" class="stock-search" bind:value={searchQuery} placeholder="Buscar no estoque" aria-label="Buscar no estoque" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+    </div>
+
+    <div class="stock-body animate-rise" style="animation-delay: 120ms;">
+      <!-- Master: grid de cards -->
+      <div class="stock-master">
+        {#if filtered.length === 0}
+          <div class="empty-state">
+            <p class="empty-title">Nada com esse filtro</p>
+            <p class="empty-hint">Limpe a busca ou o filtro de marca.</p>
           </div>
-          <div class="stock-actions">
-            <button class="icon-btn" onclick={() => openEdit(p)} aria-label="Editar" title="Editar"><Icon name="edit" size={16} /></button>
-            <button class="icon-btn danger" onclick={() => remove(p)} aria-label="Remover" title="Remover"><Icon name="trash" size={16} /></button>
+        {:else}
+          <div class="stock-grid">
+            {#each filtered as p (p.id)}
+              <button class="stock-card" class:selected={selectedId === p.id} onclick={() => (selectedId = p.id)}>
+                <span class="stock-visual">
+                  <span class="stock-swatch" style="background: rgb({p.r}, {p.g}, {p.b});">
+                    {#if p.volume}
+                      <span class="vol-badge font-mono">{p.volume}</span>
+                    {/if}
+                  </span>
+                  <PaintBottle r={p.r} g={p.g} b={p.b} size={64} />
+                </span>
+                <span class="stock-card-name">{p.name}</span>
+                <span class="stock-card-meta font-mono">{p.code ? `${p.code} · ` : ''}{p.manufacturer}</span>
+              </button>
+            {/each}
           </div>
-        </div>
-      {/each}
+        {/if}
+      </div>
+
+      <!-- Detail -->
+      <aside class="stock-detail">
+        {#if selected}
+          <span class="label-mono">Tinta selecionada</span>
+          <div class="detail-visual">
+            <span class="detail-swatch" style="background: rgb({selected.r}, {selected.g}, {selected.b});"></span>
+            <PaintBottle r={selected.r} g={selected.g} b={selected.b} size={96} />
+          </div>
+          <h2 class="detail-name font-display">{selected.name}</h2>
+          <div class="detail-meta font-mono">
+            <span>{selected.manufacturer}{selected.code ? ` · código ${selected.code}` : ''}</span>
+            <span>{hexOf(selected.r, selected.g, selected.b)}</span>
+            <span>RGB {selected.r} {selected.g} {selected.b}</span>
+          </div>
+
+          {#if selected.volume}
+            <span class="label-mono detail-sec">Volume</span>
+            <p class="detail-text">{selected.volume}</p>
+          {/if}
+
+          {#if selected.notes}
+            <span class="label-mono detail-sec">Notas</span>
+            <p class="detail-text">{selected.notes}</p>
+          {/if}
+
+          <div class="hairline detail-line"></div>
+
+          {#if selectedRecipeCount > 0}
+            <p class="detail-recipes">Aparece em {selectedRecipeCount} {selectedRecipeCount === 1 ? 'receita salva' : 'receitas salvas'}</p>
+          {/if}
+
+          <div class="detail-actions">
+            <button class="pill-light" onclick={() => openEdit(selected!)}>Editar</button>
+            <button class="pill-light" onclick={() => remove(selected!)}>Excluir</button>
+          </div>
+        {:else}
+          <span class="label-mono">Tinta selecionada</span>
+          <p class="detail-none">Escolha uma tinta na estante pra ver os detalhes aqui.</p>
+        {/if}
+      </aside>
     </div>
   {/if}
 </div>
 
 <!-- Form add/editar -->
-<Dialog bind:open={formOpen} surface$style="background: var(--ink-900); border: 1px solid var(--ink-700); border-radius: var(--radius-surface); max-width: 480px; width: 100%;">
-  <DialogTitle>{editingId === null ? 'Adicionar tinta' : 'Editar tinta'}</DialogTitle>
+<Dialog bind:open={formOpen} surface$style="background: var(--papel); border-radius: var(--radius-surface); max-width: 480px; width: 100%;">
+  <DialogTitle>{editingId === null ? 'Nova tinta' : 'Editar tinta'}</DialogTitle>
   <DialogContent>
     <div style="display: flex; flex-direction: column; gap: 16px; padding-top: 8px;">
       <div style="display: flex; gap: 14px; align-items: center;">
         <span class="swatch-flat" style="width: 56px; height: 56px; background: rgb({hexToRgb(fHex).r}, {hexToRgb(fHex).g}, {hexToRgb(fHex).b});"></span>
         <div style="display: flex; flex-direction: column; gap: 6px;">
-          <span class="detail-label">Cor</span>
+          <span class="form-label label-mono">Cor</span>
           <div style="display: flex; gap: 8px; align-items: center;">
             <input type="color" bind:value={fHex} class="color-swatch" aria-label="Escolher cor" />
-            <input type="text" bind:value={fHex} class="hex-input font-mono" maxlength="7" aria-label="Hex" />
+            <input type="text" bind:value={fHex} class="hex-input font-mono" maxlength="7" aria-label="Hex" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
           </div>
         </div>
       </div>
 
       <Select variant="outlined" bind:value={fMfr} label="Fabricante" style="width: 100%;">
-        {#each manufacturers as mfr}
+        {#each manufacturers as mfr (mfr.id)}
           <Option value={mfr.id}>{mfr.name}</Option>
         {/each}
       </Select>
       <Textfield variant="outlined" bind:value={fName} label="Nome da tinta" style="width: 100%;" />
       <div style="display: flex; gap: 12px;">
         <Textfield variant="outlined" bind:value={fCode} label="Código (opcional)" style="flex: 1;" />
-        <Textfield variant="outlined" bind:value={fVolume} label="Volume (ex.: 17ml)" style="flex: 1;" />
+        <Textfield variant="outlined" bind:value={fVolume} label="Volume (ex.: 17 ml)" style="flex: 1;" />
       </div>
       <Textfield variant="outlined" bind:value={fNotes} label="Notas (opcional)" textarea style="width: 100%;" />
     </div>
 
     <div style="display: flex; gap: 10px; margin-top: 22px; justify-content: flex-end;">
-      <button class="btn-ghost" onclick={() => (formOpen = false)}>Cancelar</button>
-      <button class="btn-primary" style="width: auto;" onclick={save} disabled={saving}>
-        <Icon name="check" size={16} /> {saving ? 'Salvando…' : 'Salvar'}
+      <button class="pill-light" onclick={() => (formOpen = false)}>Cancelar</button>
+      <button class="pill-dark" onclick={save} disabled={saving}>
+        {saving ? 'Salvando…' : 'Salvar'}
       </button>
     </div>
   </DialogContent>
 </Dialog>
 
 <!-- Resultado da importação -->
-<Dialog bind:open={importOpen} surface$style="background: var(--ink-900); border: 1px solid var(--ink-700); border-radius: var(--radius-surface); max-width: 520px; width: 100%;">
+<Dialog bind:open={importOpen} surface$style="background: var(--papel); border-radius: var(--radius-surface); max-width: 520px; width: 100%;">
   <DialogTitle>Importação de CSV</DialogTitle>
   <DialogContent>
     {#if importResult}
-      <div class="import-summary" class:ok={importResult.imported > 0}>
-        <Icon name={importResult.imported > 0 ? 'check' : 'info'} size={18} />
-        <span><strong>{importResult.imported}</strong> {importResult.imported === 1 ? 'tinta importada' : 'tintas importadas'}</span>
-      </div>
+      <p class="import-summary">
+        <strong>{importResult.imported}</strong>&nbsp;{importResult.imported === 1 ? 'tinta importada' : 'tintas importadas'}
+      </p>
 
       {#if importResult.errors && importResult.errors.length > 0}
-        <p class="detail-label" style="margin: 18px 0 8px;">
+        <p class="label-mono" style="margin: 18px 0 8px;">
           {importResult.errors.length} {importResult.errors.length === 1 ? 'linha ignorada' : 'linhas ignoradas'}
         </p>
         <div class="err-list">
@@ -374,139 +434,292 @@
             </div>
           {/each}
         </div>
-        <p class="empty-hint" style="margin-top: 12px;">Corrija essas linhas no arquivo e importe de novo — as que já entraram não duplicam se você remover as boas do CSV.</p>
+        <p class="err-hint">Corrija essas linhas no arquivo e importe de novo. As que já entraram não duplicam se você remover as boas do CSV.</p>
       {:else}
-        <p class="empty-hint" style="margin-top: 14px;">Tudo certo — nenhuma linha com erro.</p>
+        <p class="err-hint" style="margin-top: 14px;">Tudo certo, nenhuma linha com erro.</p>
       {/if}
     {/if}
     <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
-      <button class="btn-primary" style="width: auto;" onclick={() => (importOpen = false)}>Fechar</button>
+      <button class="pill-dark" onclick={() => (importOpen = false)}>Fechar</button>
     </div>
   </DialogContent>
 </Dialog>
 
 <style>
-  /* Barra de ações: filtros à esquerda, ações à direita; quebra em telas estreitas */
-  .stock-toolbar {
+  .stock-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 26px;
+  }
+
+  .stock-count {
+    font-size: 12.5px;
+    color: var(--text-2);
+    margin-top: 4px;
+  }
+
+  .stock-cta {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 16px;
+    gap: 14px;
     flex-wrap: wrap;
+  }
+
+  .text-link {
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-size: 13px;
+    color: var(--text-2);
+    cursor: pointer;
+  }
+
+  .text-link:hover:not(:disabled) {
+    color: var(--grafite);
+    text-decoration: underline;
+  }
+
+  .text-link:disabled {
+    color: var(--text-3);
+    cursor: not-allowed;
   }
 
   .stock-filters {
     display: flex;
     align-items: center;
-    gap: 12px;
-    flex: 1;
-    min-width: 260px;
-  }
-
-  .stock-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 28px;
     flex-wrap: wrap;
   }
 
-  /* O btn-primary global é width:100% sem padding lateral — aqui ele é auto,
-     então precisa de respiro nas laterais pra não colar o texto na borda. */
-  .stock-add {
-    width: auto;
-    padding: 0 20px;
-    white-space: nowrap;
-  }
-
-  .stock-csv-buttons {
+  .brand-pills {
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
   }
 
-  .stock-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+  .stock-search {
+    width: 220px;
+    height: 38px;
+    padding: 0 14px;
+    font: inherit;
+    font-size: 13px;
   }
 
-  .stock-row {
-    display: flex;
-    align-items: center;
-    gap: 14px;
+  .stock-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 430px;
+    gap: 0;
+    align-items: start;
   }
 
-  .stock-main {
-    flex: 1;
+  @media (max-width: 1000px) {
+    .stock-body {
+      grid-template-columns: 1fr;
+    }
+    .stock-detail {
+      border-left: none;
+      border-top: 1px solid var(--hairline);
+      padding-left: 0;
+      padding-top: 28px;
+      margin-top: 28px;
+    }
+  }
+
+  .stock-master {
+    padding-right: 36px;
     min-width: 0;
   }
 
-  .stock-name {
-    font-family: var(--font-display);
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--paper);
+  .stock-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 22px 16px;
+  }
+
+  .stock-card {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+    min-width: 0;
+  }
+
+  .stock-visual {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .stock-swatch {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    aspect-ratio: 4 / 3;
+    border-radius: var(--radius-control);
+    box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.06);
+  }
+
+  /* selecionada = borda laca 2px */
+  .stock-card.selected .stock-swatch {
+    box-shadow: 0 0 0 2px var(--laca);
+  }
+
+  .vol-badge {
+    position: absolute;
+    left: 10px;
+    bottom: 8px;
+    font-size: 10px;
+    color: #fff;
+    background: rgba(26, 23, 18, 0.5);
+    padding: 2px 7px;
+    border-radius: var(--radius-pill);
+  }
+
+  .stock-card-name {
+    font-size: 13px;
+    font-weight: 680;
+    color: var(--grafite);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  /* Etiqueta do pote: marca, código e volume em mono, como rótulo de catálogo */
-  .stock-meta {
+  .stock-card-meta {
+    font-size: 10.5px;
+    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .stock-detail {
+    border-left: 1px solid var(--hairline);
+    padding-left: 36px;
+    min-height: 380px;
+  }
+
+  .detail-visual {
     display: flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    color: var(--ink-500);
-    margin-top: 2px;
+    align-items: flex-end;
+    gap: 16px;
+    margin: 18px 0 20px;
   }
 
-  .stock-meta .dot {
-    color: var(--ink-600);
+  .detail-swatch {
+    width: 180px;
+    height: 130px;
+    border-radius: var(--radius-control);
+    box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.06);
   }
 
-  .stock-notes {
+  .detail-name {
+    font-size: 26px;
+    font-weight: 720;
+    color: var(--grafite);
+    margin-bottom: 10px;
+  }
+
+  .detail-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     font-size: 12px;
-    color: var(--ink-500);
-    margin-top: 4px;
-    font-style: italic;
+    color: var(--text-2);
+    margin-bottom: 24px;
   }
 
-  .stock-actions {
+  .detail-sec {
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .detail-text {
+    font-size: 13.5px;
+    color: var(--grafite);
+    line-height: 1.5;
+    margin-bottom: 20px;
+  }
+
+  .detail-line {
+    margin: 4px 0 18px;
+  }
+
+  .detail-recipes {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--laca-deep);
+    margin-bottom: 20px;
+  }
+
+  .detail-actions {
     display: flex;
-    gap: 6px;
-    flex-shrink: 0;
+    gap: 10px;
   }
 
-  .icon-btn {
-    width: 34px;
-    height: 34px;
+  .detail-none {
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--text-2);
+  }
+
+  /* Estado vazio */
+  .stock-empty {
+    padding: 48px 0;
+    max-width: 460px;
+  }
+
+  .empty-visual {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--ink-700);
-    border-radius: var(--radius-pill);
-    background: transparent;
-    color: var(--ink-500);
-    cursor: pointer;
-    transition: all 0.15s ease;
+    align-items: flex-end;
+    gap: 18px;
+    margin-bottom: 26px;
   }
 
-  .icon-btn:hover {
-    color: var(--paper);
-    border-color: var(--ink-500);
+  .empty-swatch {
+    width: 150px;
+    height: 100px;
+    border: 2px dashed var(--hairline);
+    border-radius: var(--radius-control);
   }
 
-  .icon-btn.danger:hover {
-    color: #f08a8a;
-    border-color: #6b3030;
+  .empty-big {
+    font-size: 24px;
+    font-weight: 720;
+    color: var(--grafite);
+    margin-bottom: 8px;
+  }
+
+  .empty-sub {
+    font-size: 13.5px;
+    color: var(--text-2);
+    margin-bottom: 24px;
+  }
+
+  .empty-actions {
+    display: flex;
+    gap: 12px;
+  }
+
+  /* Form */
+  .form-label {
+    font-size: 10px;
   }
 
   .color-swatch {
     width: 44px;
     height: 34px;
     padding: 0;
-    border: 1px solid var(--ink-600);
+    border: 1px solid var(--hairline);
     border-radius: var(--radius-control);
     background: transparent;
     cursor: pointer;
@@ -514,75 +727,52 @@
 
   .color-swatch:focus-visible {
     outline: none;
-    border-color: var(--lacquer);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
+    border-color: var(--laca);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--laca) 18%, transparent);
   }
 
   .hex-input {
     width: 96px;
     padding: 8px 10px;
-    border: 1px solid var(--ink-600);
-    border-radius: var(--radius-control);
-    background: var(--ink-850);
-    color: var(--ink-100);
     font-size: 13px;
     text-transform: uppercase;
   }
 
-  .hex-input:focus {
-    outline: none;
-    border-color: var(--lacquer);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
-  }
-
-  .detail-label {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    font-weight: 600;
-    color: var(--ink-500);
-  }
-
   .import-summary {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 14px;
-    border-radius: 8px;
-    background: var(--ink-800);
-    color: var(--ink-300);
     font-size: 14px;
-  }
-
-  .import-summary.ok {
-    color: var(--paper);
+    color: var(--grafite);
   }
 
   .err-list {
     display: flex;
     flex-direction: column;
-    gap: 6px;
     max-height: 260px;
     overflow-y: auto;
+    border-top: 1px solid var(--hairline);
   }
 
   .err-row {
     display: flex;
     gap: 10px;
     align-items: baseline;
-    padding: 8px 10px;
-    border-radius: 6px;
-    background: var(--ink-800);
+    padding: 8px 0;
+    border-bottom: 1px solid var(--hairline);
     font-size: 12.5px;
   }
 
   .err-line {
-    color: #f0a86a;
+    color: var(--laca-deep);
     flex-shrink: 0;
     font-size: 11.5px;
   }
 
   .err-msg {
-    color: var(--ink-300);
+    color: var(--grafite);
+  }
+
+  .err-hint {
+    margin-top: 12px;
+    font-size: 12.5px;
+    color: var(--text-2);
   }
 </style>

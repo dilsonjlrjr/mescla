@@ -1,12 +1,13 @@
 <script lang="ts">
   // Busca de tinta em TELA CHEIA — nunca dropdown: com o teclado virtual
   // aberto sobram ~150px entre campo e teclado, inutilizável pra 11.932 itens.
-  // Padrão iFood/Spotify: campo no topo com foco automático, lista embaixo,
-  // back/✕ cancela (integrado ao histórico via nav.pushLayer).
-  import Icon from './Icon.svelte';
+  // Grid de 2 colunas com amostra chapada + garrafinha, resultados ordenados
+  // por matiz (arquivo de museu). Back/fechar cancela (nav.pushLayer).
+  import PaintBottle from './PaintBottle.svelte';
   import { pushLayer } from '../nav.svelte';
-  import { searchPaints, type Paint } from '../services/catalog';
+  import { searchPaints, paintById, allPaints, type Paint } from '../services/catalog';
   import { shelf } from '../services/shelf.svelte';
+  import { hueOf } from '../ui';
 
   interface Props {
     open: boolean;
@@ -48,10 +49,15 @@
     timer = setTimeout(() => (debounced = q), 120);
   });
 
-  import { paintById, allPaints } from '../services/catalog';
+  let searching = $derived(debounced.trim().length > 0);
 
   let results = $derived.by(() => {
-    if (debounced.trim()) return searchPaints(debounced, { limit: 50 });
+    if (searching) {
+      // Ordenado por matiz: a lista vira uma cartela contínua de cor.
+      return searchPaints(debounced, { limit: 60 }).slice().sort(
+        (a, b) => hueOf(a.r, a.g, a.b) - hueOf(b.r, b.g, b.b)
+      );
+    }
     // Pré-digitação: recentes primeiro, depois tintas das marcas da estante.
     const recents = recentIds.map(id => paintById(id)).filter((p): p is Paint => !!p);
     const seen = new Set(recents.map(p => p.id));
@@ -75,44 +81,47 @@
 {#if open}
   <div class="fss" role="dialog" aria-modal="true" aria-label="Buscar tinta">
     <div class="fss-bar">
-      <div class="fss-field">
-        <span class="fss-icon"><Icon name="search" size={19} /></span>
-        <input
-          bind:this={input}
-          bind:value={query}
-          type="search"
-          {placeholder}
-          autocomplete="off"
-          autocapitalize="off"
-          spellcheck="false"
-          enterkeyhint="search"
-        />
-      </div>
-      <button class="fss-cancel pressable" onclick={onClose}>Cancelar</button>
+      <input
+        bind:this={input}
+        bind:value={query}
+        type="search"
+        {placeholder}
+        aria-label="Buscar tinta"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        enterkeyhint="search"
+      />
+      <button class="fss-cancel pressable" onclick={onClose}>fechar</button>
     </div>
 
     <div class="fss-results">
       {#if results.length === 0}
         <div class="empty-state">
-          <span class="empty-icon"><Icon name="search-off" size={36} /></span>
           <p class="empty-title">Nada com esse nome</p>
           <p class="empty-hint">Tente o código do pote (ex.: 70.951) ou só parte do nome.</p>
         </div>
       {:else}
-        {#if !debounced.trim() && results.length > 0}
-          <p class="fss-caption">{recentIds.length ? 'Recentes e da sua estante' : 'Da sua estante'}</p>
-        {/if}
-        {#each results as p (p.id)}
-          <button class="fss-row pressable" onclick={() => pick(p)}>
-            <span class="swatch-flat" style="width: 40px; height: 40px; background: rgb({p.r}, {p.g}, {p.b});"></span>
-            <span class="fss-row-text">
-              <span class="fss-row-name">{p.name}</span>
-              <span class="fss-row-meta">
-                <span class="font-mono">{p.code}</span> · {p.manufacturer}
+        <p class="fss-caption section-label">
+          {#if searching}
+            {results.length} {results.length === 1 ? 'resultado' : 'resultados'} · ordenado por matiz
+          {:else}
+            {recentIds.length ? 'Recentes e da sua estante' : 'Da sua estante'}
+          {/if}
+        </p>
+        <div class="fss-grid">
+          {#each results as p (p.id)}
+            <button class="fss-card pressable" onclick={() => pick(p)}>
+              <span class="fss-card-top">
+                <span class="fss-card-swatch" style="background: rgb({p.r}, {p.g}, {p.b});"></span>
+                <PaintBottle r={p.r} g={p.g} b={p.b} size={64} />
               </span>
-            </span>
-          </button>
-        {/each}
+              <span class="fss-card-name">{p.name}</span>
+              <span class="fss-card-meta font-mono">{p.code} · {p.manufacturer}</span>
+            </button>
+          {/each}
+        </div>
       {/if}
     </div>
   </div>
@@ -125,7 +134,7 @@
     z-index: 70;
     display: flex;
     flex-direction: column;
-    background: var(--ink-950);
+    background: var(--bancada);
     padding-top: var(--safe-top);
     animation: fade-in 0.15s ease both;
   }
@@ -134,51 +143,16 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--ink-700);
-    background: var(--ink-900);
+    padding: 14px 16px 10px;
   }
 
-  /* Campo cavado dentro da barra: fundo ink-850 + borda ink-600, foco em laca
-     no wrapper (:focus-within); o input interno fica transparente, sem caixa. */
-  .fss-field {
+  .fss-bar input {
     flex: 1;
     min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-height: 48px;
-    padding: 0 12px;
-    background: var(--ink-850);
-    border: 1px solid var(--ink-600);
-    border-radius: var(--radius-control);
-  }
-
-  .fss-field:focus-within {
-    border-color: var(--lacquer);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
-  }
-
-  .fss-icon {
-    color: var(--ink-500);
-    display: flex;
-    flex-shrink: 0;
-  }
-
-  .fss-field input {
-    flex: 1;
-    min-width: 0;
-    border: none;
-    outline: none;
-    box-shadow: none;
-    background: transparent;
+    min-height: 50px;
+    padding: 0 14px;
     font: inherit;
     font-size: 16px; /* <16px dispara zoom automático */
-    color: var(--ink-100);
-  }
-
-  .fss-field input::placeholder {
-    color: var(--ink-500);
   }
 
   .fss-cancel {
@@ -187,7 +161,7 @@
     padding: 0 6px;
     font-size: 15px;
     font-weight: 500;
-    color: var(--lacquer-deep);
+    color: var(--ink-500);
   }
 
   .fss-results {
@@ -195,53 +169,59 @@
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 8px 12px calc(16px + var(--safe-bottom));
+    padding: 4px 16px calc(16px + var(--safe-bottom));
   }
 
   .fss-caption {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--ink-500);
-    padding: 8px 8px 6px;
+    padding: 8px 0 10px;
   }
 
-  .fss-row {
+  .fss-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px 14px;
+  }
+
+  .fss-card {
     display: flex;
-    align-items: center;
-    gap: 14px;
-    width: 100%;
-    min-height: 64px;
-    padding: 8px 8px;
-    border-radius: var(--radius-control);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
     text-align: left;
   }
 
-  .fss-row:active {
-    background: var(--ink-800);
-  }
-
-  .fss-row-text {
+  .fss-card-top {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
+    align-items: flex-end;
+    gap: 8px;
+    width: 100%;
+    margin-bottom: 7px;
   }
 
-  .fss-row-name {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--ink-100);
+  .fss-card-swatch {
+    flex: 1;
+    min-width: 0;
+    aspect-ratio: 5 / 4;
+    border-radius: var(--radius-control);
+    box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.1);
+  }
+
+  .fss-card-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--grafite);
+    line-height: 1.25;
+    max-width: 100%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  .fss-row-meta {
-    font-size: 13px;
+  .fss-card-meta {
+    font-size: 11.5px;
     color: var(--ink-500);
+    max-width: 100%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

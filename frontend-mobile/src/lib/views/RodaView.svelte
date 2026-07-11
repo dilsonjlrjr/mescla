@@ -7,6 +7,7 @@
   import DeltaBadge from '../components/DeltaBadge.svelte';
   import BottomSheet from '../components/BottomSheet.svelte';
   import WheelGuide from '../components/WheelGuide.svelte';
+  import { switchTab } from '../nav.svelte';
   import {
     findSimilar,
     suggestRecipeForColor,
@@ -191,6 +192,13 @@
 </script>
 
 <div class="roda">
+  <header class="roda-head">
+    <button class="roda-back pressable" onclick={() => switchTab('mais')}>
+      <Icon name="chevron-left" size={16} /> Mais
+    </button>
+    <h1 class="roda-title font-display">Roda de cores</h1>
+  </header>
+
   <WheelGuide baseRgb={baseRgb} />
 
   <div class="wheel-wrap">
@@ -276,7 +284,7 @@
   <section class="block">
     <h2 class="block-title font-display">Clarear e escurecer certo</h2>
     <p class="hint">
-      O matiz caminha pro <strong>azul</strong> na sombra e pro <strong>amarelo</strong> na luz — é o
+      O matiz caminha pro <strong>azul</strong> na sombra e pro <strong>amarelo</strong> na luz: é o
       que mantém a cor viva.
     </p>
 
@@ -300,7 +308,7 @@
           </div>
         {/each}
       </div>
-      <p class="hint muted-hint">Repare como desbota e "suja" — perde a vida.</p>
+      <p class="hint muted-hint">Repare como desbota e "suja": perde a vida.</p>
     {/if}
   </section>
 
@@ -377,7 +385,7 @@
     {:else if recipe}
       {#if !recipe.reproducible}
         <p class="mix-warn">
-          <Icon name="info" size={14} /> A {recipeTarget.brand} não tem os pigmentos pra chegar exatamente nesta cor — abaixo está a aproximação mais próxima.
+          <Icon name="info" size={14} /> A {recipeTarget.brand} não tem os pigmentos pra chegar exatamente nesta cor. Abaixo está a aproximação mais próxima.
         </p>
       {/if}
 
@@ -423,6 +431,29 @@
 <style>
   .roda {
     padding: 0 0 24px;
+  }
+
+  .roda-head {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 8px 16px 0;
+  }
+
+  .roda-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 40px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink-500);
+  }
+
+  .roda-title {
+    font-size: 26px;
+    font-weight: 750;
+    color: var(--grafite);
   }
 
   .wheel-wrap {

@@ -1,62 +1,89 @@
 <script lang="ts">
-  // Busca global (⌘K) — padrão command palette: um campo, duas fontes de
-  // resultado (navegação + tintas do catálogo). Escolher uma tinta cai direto
-  // na Equivalência com ela pré-selecionada — o caminho nº 1 do app em 2 teclas.
-  import Icon from './Icon.svelte';
+  // Busca global (⌘K) — command palette do Tintômetro: um campo grande,
+  // tintas do catálogo + ações sobre a tinta escolhida + navegação.
+  // Query em hex (#8A1518) busca por cor e mostra o ΔE de cada resultado.
+  import PaintBottle from './PaintBottle.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock';
 
-  interface Paint {
+  interface NavOpts {
+    paintId?: number;
+    targetManufacturerId?: number;
+    manufacturer?: string;
+    stockPrefillPaintId?: number;
+  }
+
+  interface Row {
     id: number;
     name: string;
     code?: string;
     manufacturer: string;
+    productLine?: string;
     r: number;
     g: number;
     b: number;
+    deltaE?: number;
   }
 
   interface Props {
     open: boolean;
     onClose: () => void;
-    onNavigate: (view: View, paintId?: number) => void;
+    onNavigate: (view: View, opts?: number | NavOpts) => void;
   }
 
   let { open, onClose, onNavigate }: Props = $props();
 
-  const actions: { view: View; label: string; hint: string; icon: 'home' | 'flask' | 'wheel' | 'grid' | 'box' | 'pipette' | 'swap' | 'building' }[] = [
-    { view: 'mix', label: 'Equivalência', hint: 'receita em outra marca', icon: 'flask' },
-    { view: 'catalog', label: 'Catálogo', hint: 'todas as tintas', icon: 'grid' },
-    { view: 'stock', label: 'Meu estoque', hint: 'as tintas que você tem', icon: 'box' },
-    { view: 'wheel', label: 'Roda de cor', hint: 'harmonias e rampas', icon: 'wheel' },
-    { view: 'color-search', label: 'Buscar cor', hint: 'da cor exata pra tinta', icon: 'pipette' },
-    { view: 'compare', label: 'Comparar', hint: 'tintas lado a lado', icon: 'swap' },
-    { view: 'manufacturers', label: 'Marcas', hint: 'quem fabrica o quê', icon: 'building' },
-    { view: 'home', label: 'Início', hint: 'visão geral', icon: 'home' },
+  const navActions: { view: View; label: string }[] = [
+    { view: 'mix', label: 'Equivalência' },
+    { view: 'catalog', label: 'Catálogo' },
+    { view: 'color-search', label: 'Cor' },
+    { view: 'stock', label: 'Meu estoque' },
+    { view: 'compare', label: 'Comparar' },
+    { view: 'manufacturers', label: 'Fabricantes' },
+    { view: 'wheel', label: 'Roda de cor' },
+    { view: 'home', label: 'Início' },
   ];
 
   let query = $state('');
-  let paints: Paint[] = $state([]);
+  let paints: Row[] = $state([]);
   let highlighted = $state(0);
   let inputEl: HTMLInputElement | undefined = $state();
   let timer: ReturnType<typeof setTimeout>;
 
-  let filteredActions = $derived(
+  let hexQuery = $derived(/^#?[0-9a-fA-F]{6}$/.test(query.trim()));
+
+  let filteredNav = $derived(
     query.trim()
-      ? actions.filter(a => a.label.toLowerCase().includes(query.trim().toLowerCase()))
-      : actions
+      ? navActions.filter(a => a.label.toLowerCase().includes(query.trim().toLowerCase()))
+      : navActions
   );
 
-  // Lista plana pra navegação por teclado: ações primeiro, tintas depois.
-  let total = $derived(filteredActions.length + paints.length);
+  // Tinta "escolhida" pras ações: a destacada, senão a primeira da lista.
+  let activePaint = $derived.by(() => {
+    if (paints.length === 0) return null;
+    const idx = highlighted - filteredNav.length;
+    return idx >= 0 && idx < paints.length ? paints[idx] : paints[0];
+  });
+
+  let paintActions = $derived(
+    activePaint
+      ? [
+          { kbd: '↵', label: `Gerar fórmula equivalente com ${activePaint.name}` },
+          { kbd: 'E', label: `Adicionar ${activePaint.name} ao meu estoque` },
+          { kbd: 'C', label: 'Comparar com outra tinta' },
+        ]
+      : []
+  );
+
+  // Lista plana pra navegação por teclado: nav, tintas, ações.
+  let total = $derived(filteredNav.length + paints.length + paintActions.length);
 
   $effect(() => {
     if (!open) return;
     query = '';
     paints = [];
     highlighted = 0;
-    // foco depois do render do overlay
     setTimeout(() => inputEl?.focus(), 30);
   });
 
@@ -69,23 +96,50 @@
     }
     timer = setTimeout(async () => {
       try {
-        const found = await PaintService.SearchPaints(q);
-        paints = (found || []).slice(0, 8);
+        if (/^#?[0-9a-fA-F]{6}$/.test(q)) {
+          const n = parseInt(q.replace('#', ''), 16);
+          const found = await PaintService.FindSimilar((n >> 16) & 255, (n >> 8) & 255, n & 255, 100, 6);
+          paints = (found || []).map(f => ({
+            id: f.paintId, name: f.name, manufacturer: f.manufacturer,
+            r: f.r, g: f.g, b: f.b, deltaE: f.deltaE,
+          }));
+        } else {
+          const found = await PaintService.SearchPaints(q);
+          paints = (found || []).slice(0, 6).map(p => ({
+            id: p.id, name: p.name, code: p.code, manufacturer: p.manufacturer,
+            productLine: p.productLine, r: p.r, g: p.g, b: p.b,
+          }));
+        }
       } catch {
         paints = [];
       }
-      highlighted = 0;
+      highlighted = paints.length > 0 ? filteredNav.length : 0;
     }, 120);
   });
 
-  function pick(index: number) {
-    if (index < filteredActions.length) {
-      onNavigate(filteredActions[index].view);
-    } else {
-      const paint = paints[index - filteredActions.length];
-      if (paint) onNavigate('mix', paint.id);
-    }
+  function runPaintAction(k: number) {
+    const p = activePaint;
+    if (!p) return;
+    if (k === 0) onNavigate('mix', { paintId: p.id });
+    else if (k === 1) onNavigate('stock', { stockPrefillPaintId: p.id });
+    else onNavigate('compare', { paintId: p.id });
     onClose();
+  }
+
+  function pick(index: number) {
+    if (index < filteredNav.length) {
+      onNavigate(filteredNav[index].view);
+      onClose();
+      return;
+    }
+    const pIdx = index - filteredNav.length;
+    if (pIdx < paints.length) {
+      // abrir ficha da tinta no Catálogo
+      onNavigate('catalog', { paintId: paints[pIdx].id });
+      onClose();
+      return;
+    }
+    runPaintAction(pIdx - paints.length);
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -110,26 +164,27 @@
   <div class="palette-overlay" onclick={onClose}>
     <div class="palette" role="dialog" aria-label="Busca global" tabindex="-1" onclick={e => e.stopPropagation()}>
       <div class="palette-input">
-        <Icon name="search" size={17} />
+        <span class="kbd-mark font-mono">⌘K</span>
         <input
           bind:this={inputEl}
           bind:value={query}
           type="text"
-          placeholder="Tinta, código ou tela…"
+          placeholder="buscar tinta"
           autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
           spellcheck="false"
           onkeydown={onKeydown}
           role="combobox"
           aria-expanded="true"
           aria-controls="palette-results"
         />
-        <kbd class="font-mono">esc</kbd>
       </div>
 
       <div class="palette-results" id="palette-results" role="listbox">
-        {#if filteredActions.length > 0}
-          <p class="palette-group font-mono">ir para</p>
-          {#each filteredActions as a, i (a.view)}
+        {#if filteredNav.length > 0}
+          <p class="palette-group label-mono">Ir para</p>
+          {#each filteredNav as a, i (a.view)}
             <button
               class="palette-row"
               class:highlighted={highlighted === i}
@@ -138,19 +193,17 @@
               onclick={() => pick(i)}
               onmouseenter={() => (highlighted = i)}
             >
-              <span class="row-icon"><Icon name={a.icon} size={16} /></span>
               <span class="row-label">{a.label}</span>
-              <span class="row-hint">{a.hint}</span>
             </button>
           {/each}
         {/if}
 
         {#if paints.length > 0}
-          <p class="palette-group font-mono">tintas</p>
+          <p class="palette-group label-mono">Tintas</p>
           {#each paints as p, j (p.id)}
-            {@const i = filteredActions.length + j}
+            {@const i = filteredNav.length + j}
             <button
-              class="palette-row"
+              class="palette-row paint"
               class:highlighted={highlighted === i}
               role="option"
               aria-selected={highlighted === i}
@@ -158,18 +211,44 @@
               onmouseenter={() => (highlighted = i)}
             >
               <span class="row-swatch" style="background: rgb({p.r}, {p.g}, {p.b});"></span>
-              <span class="row-label">{p.name}</span>
-              <span class="row-hint"><span class="font-mono">{p.code ?? ''}</span> {p.manufacturer}</span>
+              <PaintBottle r={p.r} g={p.g} b={p.b} size={34} />
+              <span class="row-main">
+                <span class="row-label">{p.name}</span>
+                <span class="row-meta font-mono">{p.manufacturer}{p.productLine ? ` · ${p.productLine}` : ''}</span>
+              </span>
+              {#if highlighted === i}
+                <span class="row-open font-mono">↵&nbsp;&nbsp;abrir ficha</span>
+              {:else if hexQuery && p.deltaE !== undefined}
+                <span class="row-delta font-mono">ΔE {p.deltaE.toFixed(1)} da busca</span>
+              {/if}
+            </button>
+          {/each}
+        {/if}
+
+        {#if paintActions.length > 0}
+          <p class="palette-group label-mono">Ações</p>
+          {#each paintActions as act, k}
+            {@const i = filteredNav.length + paints.length + k}
+            <button
+              class="palette-row"
+              class:highlighted={highlighted === i}
+              role="option"
+              aria-selected={highlighted === i}
+              onclick={() => pick(i)}
+              onmouseenter={() => (highlighted = i)}
+            >
+              <span class="kbd-chip font-mono">{act.kbd}</span>
+              <span class="row-label">{act.label}</span>
             </button>
           {/each}
         {/if}
 
         {#if total === 0}
-          <p class="palette-empty">Nada com esse nome. Tente o código do pote (ex.: 70.951).</p>
+          <p class="palette-empty">Nada com esse nome. Tente o código do pote (ex.: 70.951) ou um hex (#8A1518).</p>
         {/if}
       </div>
 
-      <div class="palette-foot font-mono">↑↓ navegar · enter abrir · esc fechar</div>
+      <div class="palette-foot font-mono">↑↓ navegar&nbsp;&nbsp;&nbsp;↵ abrir&nbsp;&nbsp;&nbsp;esc fechar</div>
     </div>
   </div>
 {/if}
@@ -187,19 +266,18 @@
     position: fixed;
     inset: 0;
     z-index: 90;
-    background: rgba(0, 0, 0, 0.4);
+    background: color-mix(in srgb, var(--bancada) 82%, transparent);
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    padding-top: 12vh;
+    padding-top: 15vh;
   }
 
   .palette {
-    width: min(580px, calc(100vw - 48px));
-    background: var(--ink-900);
-    border: 1px solid var(--ink-700);
+    width: min(760px, calc(100vw - 48px));
+    background: var(--papel);
     border-radius: var(--radius-surface);
-    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 24px 64px rgba(26, 23, 18, 0.18);
     overflow: hidden;
     animation: palette-in 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
@@ -212,11 +290,16 @@
   .palette-input {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 0 16px;
-    height: 54px;
-    border-bottom: 1px solid var(--ink-700);
-    color: var(--ink-500);
+    gap: 18px;
+    padding: 0 26px;
+    height: 76px;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .kbd-mark {
+    font-size: 13px;
+    color: var(--text-3);
+    flex-shrink: 0;
   }
 
   .palette-input input {
@@ -225,32 +308,25 @@
     border: none;
     outline: none;
     background: transparent;
-    box-shadow: none; /* a baseline global de campo (:focus com anel) não vale aqui — o "campo" é a própria barra do palette */
-    font: inherit;
-    font-size: 15px;
-    color: var(--ink-100);
+    box-shadow: none;
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 640;
+    color: var(--grafite);
   }
 
-  .palette-input kbd {
-    font-size: 10.5px;
-    padding: 3px 7px;
-    border-radius: 5px;
-    background: var(--ink-800);
-    color: var(--ink-500);
+  .palette-input input::placeholder {
+    color: var(--text-3);
   }
 
   .palette-results {
-    max-height: 340px;
+    max-height: 420px;
     overflow-y: auto;
-    padding: 8px;
+    padding: 10px 14px 14px;
   }
 
   .palette-group {
-    font-size: 10px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--ink-500);
-    padding: 8px 10px 5px;
+    padding: 12px 12px 7px;
   }
 
   .palette-row {
@@ -258,61 +334,83 @@
     align-items: center;
     gap: 12px;
     width: 100%;
-    padding: 9px 10px;
+    padding: 10px 12px;
     border-radius: var(--radius-control);
     text-align: left;
-    color: var(--ink-300);
+    color: var(--grafite);
   }
 
   .palette-row.highlighted {
-    background: var(--ink-800);
-    color: var(--ink-100);
-  }
-
-  .row-icon {
-    display: flex;
-    color: var(--ink-500);
-    flex-shrink: 0;
-  }
-
-  .palette-row.highlighted .row-icon {
-    color: var(--lacquer-deep);
+    background: color-mix(in srgb, var(--laca) 7%, transparent);
   }
 
   .row-swatch {
-    width: 22px;
-    height: 22px;
-    border-radius: 6px;
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-control);
     flex-shrink: 0;
-    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+    box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.1);
+  }
+
+  .row-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
   }
 
   .row-label {
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 14.5px;
+    font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  .row-hint {
+  .row-meta {
+    font-size: 11.5px;
+    color: var(--text-2);
+  }
+
+  .row-open {
     margin-left: auto;
     flex-shrink: 0;
-    font-size: 12px;
-    color: var(--ink-500);
+    font-size: 11.5px;
+    color: var(--laca-deep);
+  }
+
+  .row-delta {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 11.5px;
+    color: var(--text-2);
+  }
+
+  .kbd-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-control);
+    font-size: 11.5px;
+    color: var(--text-2);
+    flex-shrink: 0;
   }
 
   .palette-empty {
-    padding: 24px 14px;
+    padding: 26px 14px;
     text-align: center;
     font-size: 13px;
-    color: var(--ink-500);
+    color: var(--text-2);
   }
 
   .palette-foot {
-    padding: 9px 16px;
-    border-top: 1px solid var(--ink-700);
-    font-size: 10.5px;
-    color: var(--ink-500);
+    padding: 11px 26px;
+    border-top: 1px solid var(--hairline);
+    font-size: 11px;
+    color: var(--text-3);
   }
 </style>

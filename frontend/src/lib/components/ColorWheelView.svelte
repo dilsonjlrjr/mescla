@@ -198,7 +198,7 @@
   <div class="page-header animate-rise">
     <h1 class="page-title">Roda cromática</h1>
     <p class="page-subtitle">
-      Escolha uma cor e aprenda a clarear e escurecer do jeito certo — deslocando o matiz, não só
+      Escolha uma cor e aprenda a clarear e escurecer do jeito certo: deslocando o matiz, não só
       jogando branco e preto
     </p>
     <div class="page-divider"></div>
@@ -215,7 +215,7 @@
           bind:this={wheelEl}
           role="slider"
           tabindex="0"
-          aria-label="Roda cromática — matiz e saturação"
+          aria-label="Roda cromática: matiz e saturação"
           aria-valuenow={Math.round(hue)}
           aria-valuemin="0"
           aria-valuemax="360"
@@ -298,7 +298,7 @@
         <h3 class="section-title" style="margin-bottom: 4px;">Clarear e escurecer do jeito certo</h3>
         <p class="ramp-sub">
           Da sombra ao brilho. Repare: o matiz caminha pro <strong>azul</strong> na sombra e pro
-          <strong>amarelo</strong> na luz — é isso que mantém a cor viva.
+          <strong>amarelo</strong> na luz. É isso que mantém a cor viva.
         </p>
       </div>
       <div class="ramp-toggles">
@@ -355,7 +355,7 @@
       <div class="naive-block">
         <p class="naive-label">
           <Icon name="info" size={14} /> O jeito comum (só branco e preto): mesma cor, mas repare como
-          desbota e "suja" — perde a vida.
+          desbota e "suja", perde a vida.
         </p>
         <div class="naive-strip">
           {#each naive as c, i}
@@ -408,7 +408,7 @@
         {:else if recipe}
           {#if !recipe.reproducible}
             <p class="modal-warn">
-              <Icon name="info" size={14} /> A {recipeTarget.brand} não tem os pigmentos pra chegar exatamente nesta cor — abaixo está a aproximação mais próxima possível.
+              <Icon name="info" size={14} /> A {recipeTarget.brand} não tem os pigmentos pra chegar exatamente nesta cor. Abaixo está a aproximação mais próxima possível.
             </p>
           {/if}
 

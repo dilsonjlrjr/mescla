@@ -15,16 +15,35 @@
 
   type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock';
 
+  interface NavOpts {
+    paintId?: number;
+    targetManufacturerId?: number; // mix: re-executar receita salva
+    manufacturer?: string;         // catalog: filtro de marca
+    stockPrefillPaintId?: number;  // stock: abrir form pré-preenchido
+  }
+
   let currentView: View = $state('home');
   let recipeSourcePaintId: number | null = $state(null);
+  let recipeTargetMfrId: number | null = $state(null);
+  let catalogManufacturer: string | null = $state(null);
+  let catalogPaintId: number | null = $state(null);
+  let compareAnchorId: number | null = $state(null);
+  let stockPrefillPaintId: number | null = $state(null);
   let guideOpen = $state(false);
   let paletteOpen = $state(false);
+  // força remontagem da view quando a mesma rota é reaberta com outro contexto
+  let navSeq = $state(0);
 
-  function handleNavigate(view: View, paintId?: number) {
+  function handleNavigate(view: View, opts?: number | NavOpts) {
+    const o: NavOpts = typeof opts === 'number' ? { paintId: opts } : (opts ?? {});
+    recipeSourcePaintId = view === 'mix' ? (o.paintId ?? null) : null;
+    recipeTargetMfrId = view === 'mix' ? (o.targetManufacturerId ?? null) : null;
+    catalogManufacturer = view === 'catalog' ? (o.manufacturer ?? null) : null;
+    catalogPaintId = view === 'catalog' ? (o.paintId ?? null) : null;
+    compareAnchorId = view === 'compare' ? (o.paintId ?? null) : null;
+    stockPrefillPaintId = view === 'stock' ? (o.stockPrefillPaintId ?? null) : null;
+    navSeq++;
     currentView = view;
-    if (view === 'mix' && paintId) {
-      recipeSourcePaintId = paintId;
-    }
   }
 
   // ⌘K / Ctrl+K abre a busca global de qualquer tela.
@@ -36,7 +55,7 @@
   }
 
   onMount(() => {
-    // Guia abre sozinho só na primeira execução; depois fica no "?" da barra.
+    // Guia abre sozinho só na primeira execução.
     if (!localStorage.getItem('mescla_guided')) {
       guideOpen = true;
     }
@@ -54,27 +73,28 @@
     {currentView}
     onNavigate={handleNavigate}
     onSearch={() => (paletteOpen = true)}
-    onHelp={() => (guideOpen = true)}
   />
 
   <main class="app-main">
-    {#if currentView === 'home'}
-      <HomeView onNavigate={handleNavigate} />
-    {:else if currentView === 'catalog'}
-      <CatalogView onNavigate={handleNavigate} />
-    {:else if currentView === 'manufacturers'}
-      <ManufacturersView />
-    {:else if currentView === 'color-search'}
-      <ColorSearchView />
-    {:else if currentView === 'compare'}
-      <CompareView />
-    {:else if currentView === 'wheel'}
-      <ColorWheelView />
-    {:else if currentView === 'stock'}
-      <MyStockView />
-    {:else if currentView === 'mix'}
-      <EquivalentRecipeView initialSourcePaintId={recipeSourcePaintId} />
-    {/if}
+    {#key navSeq}
+      {#if currentView === 'home'}
+        <HomeView onNavigate={handleNavigate} />
+      {:else if currentView === 'catalog'}
+        <CatalogView onNavigate={handleNavigate} initialManufacturer={catalogManufacturer} initialPaintId={catalogPaintId} />
+      {:else if currentView === 'manufacturers'}
+        <ManufacturersView onNavigate={handleNavigate} />
+      {:else if currentView === 'color-search'}
+        <ColorSearchView />
+      {:else if currentView === 'compare'}
+        <CompareView initialAnchorId={compareAnchorId} />
+      {:else if currentView === 'wheel'}
+        <ColorWheelView />
+      {:else if currentView === 'stock'}
+        <MyStockView prefillPaintId={stockPrefillPaintId} />
+      {:else if currentView === 'mix'}
+        <EquivalentRecipeView initialSourcePaintId={recipeSourcePaintId} initialTargetManufacturerId={recipeTargetMfrId} />
+      {/if}
+    {/key}
   </main>
 </div>
 

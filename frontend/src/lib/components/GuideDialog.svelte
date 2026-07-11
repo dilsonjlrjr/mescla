@@ -19,12 +19,12 @@
     {
       n: '2',
       title: 'Diga qual marca você tem em mãos',
-      desc: 'A Mescla procura a melhor combinação usando só as tintas dessa marca — de 1 tinta pura até misturas de 3.',
+      desc: 'A Mescla procura a melhor combinação usando só as tintas dessa marca, de 1 tinta pura até misturas de 3.',
     },
     {
       n: '3',
       title: 'Leia o resultado com honestidade',
-      desc: 'O selo de proximidade diz se a cor fica idêntica, próxima ou impossível com esse catálogo — sem fingir precisão.',
+      desc: 'A leitura de ΔE00 diz se a cor fica idêntica, próxima ou impossível com esse catálogo, sem fingir precisão.',
     },
   ];
 </script>
@@ -41,7 +41,7 @@
       </div>
 
       <p style="font-size: 13.5px; color: var(--ink-300); line-height: 1.6; margin: 14px 0 20px;">
-        Você viu a cor perfeita numa tinta que não encontra por aqui — ou o pote acabou.
+        Você viu a cor perfeita numa tinta que não encontra por aqui, ou o pote acabou.
         A Mescla encontra a mesma cor nas marcas que você tem, medindo a diferença
         como o olho humano vê (ΔE2000). Tudo offline.
       </p>
@@ -56,18 +56,18 @@
         {/each}
       </div>
 
-      <div class="panel p-4 mb-5" style="background: var(--ink-850);">
-        <div class="font-mono" style="font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-500); margin-bottom: 8px;">Como ler o selo de proximidade</div>
+      <div class="panel p-4 mb-5" style="background: var(--bancada);">
+        <div class="label-mono" style="margin-bottom: 8px;">Como ler o ΔE00</div>
         <div class="flex flex-wrap gap-2">
-          <span class="delta-badge excellent" style="font-size: 11px;">Idêntica <span class="delta-value">ΔE &lt; 1</span></span>
-          <span class="delta-badge excellent" style="font-size: 11px;">Muito próxima <span class="delta-value">ΔE &lt; 3</span></span>
-          <span class="delta-badge good" style="font-size: 11px;">Próxima <span class="delta-value">ΔE &lt; 6</span></span>
-          <span class="delta-badge fair" style="font-size: 11px;">Diferença visível <span class="delta-value">ΔE &lt; 12</span></span>
-          <span class="delta-badge poor" style="font-size: 11px;">Cor diferente <span class="delta-value">ΔE ≥ 12</span></span>
+          <span class="delta-badge excellent" style="font-size: 11px;">Indistinguível a olho nu <span class="delta-value">0 - 1</span></span>
+          <span class="delta-badge excellent" style="font-size: 11px;">Excelente: some na mini <span class="delta-value">1 - 2</span></span>
+          <span class="delta-badge good" style="font-size: 11px;">Boa: passa sob luz de bancada <span class="delta-value">2 - 4</span></span>
+          <span class="delta-badge fair" style="font-size: 11px;">Perceptível lado a lado <span class="delta-value">4 - 8</span></span>
+          <span class="delta-badge poor" style="font-size: 11px;">Outra cor, na prática <span class="delta-value">8 +</span></span>
         </div>
       </div>
 
-      <button class="btn-primary" onclick={() => { open = false; onClose(); }}>
+      <button class="pill-dark w-full" onclick={() => { open = false; onClose(); }}>
         Começar
       </button>
     </div>

@@ -1,8 +1,21 @@
 <script lang="ts">
+  // Fabricantes (Tintômetro): lista com hairlines — inicial em círculo
+  // grafite, nome display, país mono, 5 amostras representativas do catálogo
+  // da marca, contagem mono grande e link "ver catálogo".
   import { onMount } from 'svelte';
-  import Textfield from '@smui/textfield';
-  import Icon from './Icon.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
+
+  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock';
+
+  interface NavOpts {
+    manufacturer?: string;
+  }
+
+  interface Props {
+    onNavigate: (view: View, opts?: number | NavOpts) => void;
+  }
+
+  let { onNavigate }: Props = $props();
 
   interface Manufacturer {
     id: number;
@@ -13,15 +26,45 @@
     paintCount: number;
   }
 
+  interface Paint {
+    id: number;
+    manufacturer: string;
+    productLine: string;
+    r: number;
+    g: number;
+    b: number;
+  }
+
   let manufacturers: Manufacturer[] = $state([]);
-  let filtered: Manufacturer[] = $state([]);
   let loading = $state(true);
-  let searchQuery = $state('');
+  // amostras + linhas por marca, derivadas do catálogo completo
+  let chipsByBrand: Map<string, Paint[]> = $state(new Map());
+  let linesByBrand: Map<string, string[]> = $state(new Map());
 
   onMount(async () => {
     try {
-      manufacturers = (await PaintService.GetManufacturers()) || [];
-      filtered = manufacturers;
+      const [mfrs, paints] = await Promise.all([
+        PaintService.GetManufacturers(),
+        PaintService.GetAllPaints(),
+      ]);
+      manufacturers = mfrs || [];
+      const chips = new Map<string, Paint[]>();
+      const lines = new Map<string, Set<string>>();
+      for (const p of (paints || []) as Paint[]) {
+        const arr = chips.get(p.manufacturer) ?? [];
+        // espalha as amostras pelo catálogo (não só as 5 primeiras iguais)
+        if (arr.length < 5) {
+          arr.push(p);
+          chips.set(p.manufacturer, arr);
+        }
+        if (p.productLine) {
+          const ls = lines.get(p.manufacturer) ?? new Set();
+          ls.add(p.productLine);
+          lines.set(p.manufacturer, ls);
+        }
+      }
+      chipsByBrand = chips;
+      linesByBrand = new Map([...lines].map(([k, v]) => [k, [...v].slice(0, 4)]));
     } catch (e) {
       console.error('Erro carregando fabricantes:', e);
     } finally {
@@ -29,173 +72,198 @@
     }
   });
 
-  $effect(() => {
-    if (!searchQuery) {
-      filtered = manufacturers;
-      return;
-    }
-    const q = searchQuery.toLowerCase();
-    filtered = manufacturers.filter(m =>
-      m.name.toLowerCase().includes(q) ||
-      m.country.toLowerCase().includes(q)
-    );
-  });
+  function metaOf(m: Manufacturer): string {
+    const lines = linesByBrand.get(m.name) ?? [];
+    const parts = [m.country, lines.join(', ')].filter(Boolean);
+    return parts.join(' · ');
+  }
 </script>
 
 <div class="page-container">
-  <!-- Header -->
   <div class="page-header animate-rise">
     <h1 class="page-title">Fabricantes</h1>
-    <p class="page-subtitle">{filtered.length} de {manufacturers.length} fabricantes cadastrados</p>
-    <div class="page-divider"></div>
+    <p class="page-subtitle">{manufacturers.length} marcas, cada uma com seu catálogo e suas linhas.</p>
   </div>
 
-  <!-- Search -->
-  <div class="panel p-3 mb-6 animate-rise" style="animation-delay: 80ms; position: relative; z-index: 1;">
-    <Textfield
-      variant="outlined"
-      bind:value={searchQuery}
-      label="Buscar por nome ou país..."
-      style="width: 100%;"
-    >
-      {#snippet leadingIcon()}
-        <span class="mdc-text-field__icon mdc-text-field__icon--leading" style="color: var(--ink-500); display: flex;"><Icon name="search" size={17} /></span>
-      {/snippet}
-    </Textfield>
-  </div>
-
-  <!-- Grid -->
   {#if loading}
-    <div class="grid-4">
-      {#each Array(8) as _}
-        <div class="panel p-4" style="display: flex; flex-direction: column; gap: 10px;">
-          <div class="skeleton" style="width: 48px; height: 48px; border-radius: 50%;"></div>
-          <div class="skeleton" style="height: 12px; width: 70%;"></div>
-          <div class="skeleton" style="height: 10px; width: 40%;"></div>
+    <div class="mfr-list">
+      {#each Array(6) as _, i (i)}
+        <div class="mfr-row">
+          <div class="skeleton" style="width: 46px; height: 46px; border-radius: 50%;"></div>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+            <div class="skeleton" style="height: 14px; width: 30%;"></div>
+            <div class="skeleton" style="height: 10px; width: 45%;"></div>
+          </div>
         </div>
       {/each}
     </div>
   {:else}
-    <div class="grid-4">
-      {#each filtered as mfr, i (mfr.id)}
-        <div class="panel mfr-card animate-rise" style="animation-delay: {Math.min(i * 25, 200)}ms;">
-          <div class="mfr-head">
-            <div class="mfr-logo">
-              {#if mfr.logoPath}
-                <img
-                  src="file://{mfr.logoPath}"
-                  alt={mfr.name}
-                  loading="lazy"
-                  onerror={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
-                />
-              {:else}
-                <Icon name="building" size={22} />
-              {/if}
-            </div>
-            <div class="mfr-id">
-              <div class="mfr-name font-display">{mfr.name}</div>
-              {#if mfr.country}
-                <div class="mfr-country">{mfr.country}</div>
-              {/if}
-            </div>
-          </div>
-          <div class="mfr-footer">
-            <span class="mfr-count font-mono">{mfr.paintCount} {mfr.paintCount === 1 ? 'tinta' : 'tintas'}</span>
-            {#if mfr.website}
-              <a class="mfr-link" href={mfr.website} target="_blank" rel="noopener noreferrer">site</a>
+    <div class="mfr-list animate-rise" style="animation-delay: 60ms;">
+      {#each manufacturers as mfr (mfr.id)}
+        <div class="mfr-row">
+          <span class="mfr-badge font-display">
+            {#if mfr.logoPath}
+              <img
+                src="file://{mfr.logoPath}"
+                alt=""
+                loading="lazy"
+                onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')}
+              />
             {/if}
+            <span class="mfr-initial">{mfr.name.charAt(0).toUpperCase()}</span>
+          </span>
+
+          <div class="mfr-id">
+            <span class="mfr-name font-display">{mfr.name}</span>
+            <span class="mfr-meta font-mono">{metaOf(mfr)}</span>
           </div>
+
+          <div class="mfr-chips" aria-hidden="true">
+            {#each chipsByBrand.get(mfr.name) ?? [] as chip (chip.id)}
+              <span class="mfr-chip" style="background: rgb({chip.r}, {chip.g}, {chip.b});"></span>
+            {/each}
+          </div>
+
+          <div class="mfr-count">
+            <span class="mfr-count-n font-mono">{mfr.paintCount.toLocaleString('pt-BR')}</span>
+            <span class="mfr-count-label">tintas</span>
+          </div>
+
+          <button class="mfr-open" onclick={() => onNavigate('catalog', { manufacturer: mfr.name })}>
+            ver catálogo ›
+          </button>
         </div>
       {/each}
     </div>
 
-    {#if filtered.length === 0}
-      <div style="text-align: center; padding: 80px 0;">
-        <div style="color: var(--ink-500); display: flex; justify-content: center; margin-bottom: 16px;"><Icon name="search-off" size={40} /></div>
-        <p class="font-medium" style="color: var(--ink-500);">Nenhum fabricante encontrado</p>
-      </div>
-    {/if}
+    <p class="mfr-foot font-mono">Mostrando {manufacturers.length} de {manufacturers.length} fabricantes</p>
   {/if}
 </div>
 
 <style>
-  /* Card composto: identidade (logo + nome/país) em cima, etiqueta embaixo */
-  .mfr-card {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+  .mfr-list {
+    border-top: 1px solid var(--hairline);
   }
 
-  .mfr-head {
+  .mfr-row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 16px;
-    flex: 1;
+    gap: 22px;
+    padding: 20px 0;
+    border-bottom: 1px solid var(--hairline);
   }
 
-  .mfr-logo {
+  .mfr-badge {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 46px;
     height: 46px;
-    border-radius: var(--radius-control);
-    background: var(--ink-800);
-    color: var(--ink-500);
+    border-radius: 50%;
+    background: var(--grafite);
     overflow: hidden;
     flex-shrink: 0;
   }
 
-  .mfr-logo img {
+  .mfr-badge img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: contain;
-    padding: 6px;
+    padding: 8px;
+    background: var(--grafite);
+    z-index: 1;
+  }
+
+  .mfr-initial {
+    color: var(--papel);
+    font-size: 18px;
+    font-weight: 700;
   }
 
   .mfr-id {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     min-width: 0;
+    width: 240px;
+    flex-shrink: 0;
   }
 
   .mfr-name {
-    font-weight: 640;
-    font-size: 14.5px;
-    color: var(--ink-100);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--grafite);
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .mfr-meta {
+    font-size: 11px;
+    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mfr-chips {
+    display: flex;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .mfr-chip {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-control);
+    box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.06);
+    flex-shrink: 0;
+  }
+
+  .mfr-count {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    flex-shrink: 0;
+    min-width: 76px;
+  }
+
+  .mfr-count-n {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--grafite);
+    letter-spacing: -0.02em;
+  }
+
+  .mfr-count-label {
+    font-size: 11px;
+    color: var(--text-2);
+  }
+
+  .mfr-open {
+    flex-shrink: 0;
+    border: none;
+    background: none;
+    padding: 4px 0 4px 12px;
+    font-size: 13px;
+    font-weight: 560;
+    color: var(--grafite);
+    cursor: pointer;
     white-space: nowrap;
   }
 
-  .mfr-country {
-    font-size: 11.5px;
-    color: var(--ink-500);
-    margin-top: 1px;
+  .mfr-open:hover {
+    color: var(--laca-deep);
   }
 
-  .mfr-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 9px 16px;
-    border-top: 1px solid var(--ink-700);
-    background: var(--ink-850);
-  }
-
-  /* Contagem como etiqueta mono, tipo linha de rótulo */
-  .mfr-count {
-    font-size: 10.5px;
-    font-weight: 500;
-    color: var(--ink-500);
-  }
-
-  .mfr-link {
-    font-size: 11px;
-    color: var(--lacquer-tint);
-    text-decoration: none;
-  }
-
-  .mfr-link:hover {
-    text-decoration: underline;
+  .mfr-foot {
+    margin-top: 16px;
+    font-size: 12px;
+    color: var(--text-2);
   }
 </style>

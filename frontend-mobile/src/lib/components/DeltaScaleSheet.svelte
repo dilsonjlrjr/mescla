@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Sheet da escala ΔE — no mobile a explicação é tocável (tap no badge),
-  // não tooltip. Mesmos cortes do DeltaBadge.
+  // Sheet da escala ΔE00 — leitura de instrumento: faixa mono bold, descrição
+  // e um par de amostras ilustrativas (cor base + cor deslocada) por linha.
   import BottomSheet from './BottomSheet.svelte';
 
   interface Props {
@@ -12,109 +12,106 @@
 
   let { open, onClose, deltaE = null }: Props = $props();
 
+  // Pares ilustrativos: o mesmo vermelho de bancada com deslocamentos crescentes.
   const bands = [
-    { range: '0–1', label: 'Idêntica', desc: 'Olho humano não distingue.', cls: 'excellent', max: 1 },
-    { range: '1–3', label: 'Muito próxima', desc: 'Diferença só aparece com as cores encostadas.', cls: 'excellent', max: 3 },
-    { range: '3–6', label: 'Próxima', desc: 'Diferença pequena, aceitável na maioria dos usos.', cls: 'good', max: 6 },
-    { range: '6–12', label: 'Diferença visível', desc: 'Diferença clara a olho nu.', cls: 'fair', max: 12 },
-    { range: '12+', label: 'Cor diferente', desc: 'A mistura não reproduz esta cor.', cls: 'poor', max: Infinity },
+    { range: '0 - 1', desc: 'Indistinguível a olho nu', a: '#8a1518', b: '#8b161a', max: 1 },
+    { range: '1 - 2', desc: 'Excelente: some na mini', a: '#8a1518', b: '#8f181c', max: 2 },
+    { range: '2 - 4', desc: 'Boa: passa sob luz de bancada', a: '#8a1518', b: '#96201f', max: 4 },
+    { range: '4 - 8', desc: 'Perceptível lado a lado', a: '#8a1518', b: '#a53527', max: 8 },
+    { range: '8 +', desc: 'Outra cor, na prática', a: '#8a1518', b: '#c05c2e', max: Infinity },
   ];
 
-  let activeIdx = $derived(deltaE == null ? -1 : bands.findIndex(b => deltaE! < b.max));
+  let activeIdx = $derived(deltaE == null ? -1 : bands.findIndex(x => deltaE! < x.max));
 </script>
 
-<BottomSheet {open} {onClose} title="O que é o ΔE?">
-  <p class="scale-intro">
-    O <strong>ΔE</strong> mede a diferença entre duas cores como o olho humano percebe —
-    quanto menor, mais parecidas. <strong>0 = idênticas.</strong>
-  </p>
+<BottomSheet {open} {onClose} title="O que significa o ΔE?">
+  <p class="scale-intro">Distância entre duas cores, como o olho vê.</p>
+
   <div class="scale-list">
     {#each bands as band, i}
-      <div class="scale-row {band.cls}" class:active={activeIdx === i}>
+      <div class="scale-row" class:active={activeIdx === i}>
         <span class="scale-range font-mono">{band.range}</span>
-        <span class="scale-text">
-          <span class="scale-label">{band.label}</span>
-          <span class="scale-desc">{band.desc}</span>
-        </span>
+        <span class="scale-desc">{band.desc}</span>
         {#if activeIdx === i && deltaE != null}
           <span class="scale-you font-mono">ΔE {deltaE.toFixed(1)}</span>
         {/if}
+        <span class="scale-pair" aria-hidden="true">
+          <span style="background: {band.a};"></span>
+          <span style="background: {band.b};"></span>
+        </span>
       </div>
     {/each}
   </div>
-  <p class="scale-note">Cores de tela são aproximadas — confie no ΔE.</p>
+
+  <p class="scale-note">O Mescla só sugere fórmula quando ΔE fica abaixo de 8.</p>
+  <button class="btn-primary" style="margin-top: 14px;" onclick={onClose}>Entendi</button>
 </BottomSheet>
 
 <style>
   .scale-intro {
     font-size: 15px;
-    color: var(--ink-300);
+    color: var(--ink-500);
     line-height: 1.55;
-    margin-bottom: 16px;
+    margin-bottom: 6px;
   }
 
   .scale-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
   }
 
   .scale-row {
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 12px 14px;
-    border-radius: var(--radius-surface);
-    background: var(--ink-900);
-    border: 1px solid var(--ink-700);
-    opacity: 0.75;
+    gap: 12px;
+    min-height: 60px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--hairline);
   }
 
-  .scale-row.active {
-    opacity: 1;
-    background: color-mix(in srgb, currentColor 10%, var(--ink-900));
-    border-color: color-mix(in srgb, currentColor 40%, transparent);
+  .scale-row.active .scale-range,
+  .scale-row.active .scale-desc {
+    color: var(--laca);
   }
-
-  .scale-row.excellent { color: var(--delta-excellent); }
-  .scale-row.good { color: var(--delta-good); }
-  .scale-row.fair { color: var(--delta-fair); }
-  .scale-row.poor { color: var(--delta-poor); }
 
   .scale-range {
-    font-size: 14px;
-    font-weight: 600;
-    min-width: 46px;
-  }
-
-  .scale-text {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .scale-label {
     font-size: 15px;
-    font-weight: 600;
+    font-weight: 700;
+    min-width: 52px;
+    color: var(--grafite);
+    white-space: nowrap;
   }
 
   .scale-desc {
-    font-size: 13px;
-    color: var(--ink-500);
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    color: var(--grafite);
   }
 
   .scale-you {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
+    color: var(--laca);
     flex-shrink: 0;
   }
 
+  .scale-pair {
+    display: inline-flex;
+    gap: 3px;
+    flex-shrink: 0;
+  }
+
+  .scale-pair span {
+    width: 34px;
+    height: 28px;
+    border-radius: var(--radius-control);
+    box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.1);
+  }
+
   .scale-note {
-    margin-top: 16px;
+    margin-top: 14px;
     font-size: 13px;
     color: var(--ink-500);
-    text-align: center;
   }
 </style>

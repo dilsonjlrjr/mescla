@@ -1,12 +1,14 @@
 <script lang="ts">
+  // Equivalência (tela principal do Tintômetro): painel esquerdo em cor
+  // CHAPADA da tinta de origem, altura cheia; à direita a Fórmula como fita
+  // proporcional, lista de ingredientes e a leitura de ΔE00 como instrumento.
   import { onMount } from 'svelte';
-  import Select, { Option } from '@smui/select';
-  import LinearProgress from '@smui/linear-progress';
-  import Icon from './Icon.svelte';
   import PaintSearchInput from './PaintSearchInput.svelte';
   import PaintBottle from './PaintBottle.svelte';
-  import DeltaBadge from './DeltaBadge.svelte';
+  import FormulaRibbon from './FormulaRibbon.svelte';
   import { toast } from '../toast.svelte';
+  import { saveRecipe } from '../recipes.svelte';
+  import { contrastOn, hexOf, deltaVerdict, deltaIsGood } from '../ui';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
   import type { UserPaintDTO } from '../../../bindings/paint-match-ai/models';
 
@@ -14,6 +16,7 @@
     id: number;
     name: string;
     manufacturer: string;
+    productLine?: string;
     r: number;
     g: number;
     b: number;
@@ -22,13 +25,15 @@
   interface Manufacturer {
     id: number;
     name: string;
+    paintCount?: number;
   }
 
   interface Props {
     initialSourcePaintId?: number | null;
+    initialTargetManufacturerId?: number | null;
   }
 
-  let { initialSourcePaintId = null }: Props = $props();
+  let { initialSourcePaintId = null, initialTargetManufacturerId = null }: Props = $props();
 
   let allPaints: Paint[] = $state([]);
   let manufacturers: Manufacturer[] = $state([]);
@@ -42,7 +47,6 @@
   // Priorizar o estoque do próprio pintor: quando ligado, a receita sai primeiro
   // do que ele tem; se o estoque não alcança a cor, cai na marca de reserva.
   let useStock = $state(false);
-  // Como o resultado atual foi montado — muda os banners e os selos de "no meu estoque".
   let fromStock = $state(false);
   let stockFellBack = $state(false);
 
@@ -56,9 +60,15 @@
       allPaints = paints || [];
       manufacturers = mfrs || [];
       userPaints = stock || [];
-      useStock = userPaints.length > 0; // se ele tem estoque, o mais útil já vem ligado
+      useStock = userPaints.length > 0;
+      if (initialTargetManufacturerId) {
+        targetManufacturerId = initialTargetManufacturerId;
+        // receita salva reaberta: recalcular exatamente pela marca gravada
+        useStock = false;
+      }
       if (initialSourcePaintId) {
         sourcePaint = allPaints.find(p => p.id === initialSourcePaintId) || null;
+        if (sourcePaint && (targetManufacturerId || useStock)) suggest();
       }
     } catch (e) {
       console.error('Erro carregando dados:', e);
@@ -66,61 +76,42 @@
     }
   });
 
-  // Índices do estoque: por id (pra achar a marca de cada ingrediente de uma
-  // receita de estoque) e por marca+código (pra marcar, numa receita por
-  // fabricante, os ingredientes que o pintor já tem).
+  // Índices do estoque (ver userstock.go): por id e por marca+código.
   let stockById = $derived(new Map(userPaints.map(p => [p.id, p])));
   let stockKeys = $derived(
     new Set(userPaints.filter(p => p.code.trim()).map(p => `${p.manufacturer.toLowerCase()}|${p.code.trim().toLowerCase()}`))
   );
 
-  // Um ingrediente "é do meu estoque" quando a receita saiu do estoque (todos
-  // são), ou quando casa marca+código com alguma tinta cadastrada.
+  let paintById = $derived(new Map(allPaints.map(p => [p.id, p])));
+
   function ingredientInStock(ing: any): boolean {
     if (fromStock) return true;
     if (!result || !ing.code) return false;
     return stockKeys.has(`${result.targetManufacturer.toLowerCase()}|${String(ing.code).trim().toLowerCase()}`);
   }
 
-  function ingredientBrand(ing: any): string {
+  // Linha de produto do ingrediente: no catálogo, resolvida por paintId;
+  // numa receita de estoque, a marca da tinta do estoque.
+  function ingredientLine(ing: any): string {
     if (fromStock) return stockById.get(ing.paintId)?.manufacturer ?? '';
-    return result?.targetManufacturer ?? '';
+    return paintById.get(ing.paintId)?.productLine || result?.targetManufacturer || '';
   }
 
-  // Todas as marcas, incluindo a própria da tinta de origem: dá pra montar um tom
-  // que a marca não tem a partir de outras tintas dela (a tinta-alvo é excluída
-  // do cálculo no backend).
-  let availableTargets = $derived(manufacturers);
+  let targetName = $derived(
+    manufacturers.find(m => m.id === Number(targetManufacturerId))?.name ?? ''
+  );
 
-  // Passo atual da jornada — guia o olho pro próximo campo. Com o estoque
-  // priorizado, a marca de destino é opcional (só reserva), então o passo 2
-  // não trava a jornada.
-  let step = $derived(!sourcePaint ? 1 : (!targetManufacturerId && !useStock) ? 2 : 3);
+  let targetCount = $derived(
+    manufacturers.find(m => m.id === Number(targetManufacturerId))?.paintCount ?? 0
+  );
+
   let canSuggest = $derived(!!sourcePaint && !loading && (useStock || !!targetManufacturerId));
 
-  // Faixas de ΔE pra legenda visível (mesmos cortes do DeltaBadge). max é o
-  // teto exclusivo da faixa; a última pega tudo acima de 12.
-  const deltaBands = [
-    { range: '0–1',  label: 'idêntica',      cls: 'excellent', max: 1 },
-    { range: '1–3',  label: 'muito próxima', cls: 'excellent', max: 3 },
-    { range: '3–6',  label: 'próxima',       cls: 'good',      max: 6 },
-    { range: '6–12', label: 'visível',       cls: 'fair',      max: 12 },
-    { range: '12+',  label: 'diferente',     cls: 'poor',      max: Infinity },
-  ];
-  let activeBandIdx = $derived(result ? deltaBands.findIndex(b => result.deltaE < b.max) : -1);
-
-  // Medir a receita em % ou em gotas. Pintor dosa na bancada por gota. As gotas
-  // são só a indicação da proporção — não uma interação: o app mostra a menor
-  // receita de gotas inteiras que mantém as proporções.
-  let unit: 'percent' | 'drops' = $state('percent');
-
+  // Gotas: menor proporção inteira que mantém os percentuais (70/20/10 -> 7/2/1).
   function gcd(a: number, b: number): number {
     return b === 0 ? a : gcd(b, a % b);
   }
 
-  // Converte os percentuais na menor proporção de gotas inteiras. Arredonda pra
-  // inteiros que somam 100 (método do maior resto) e divide pelo MDC — assim
-  // 30/60/10% vira 3/6/1 gotas, 25/75% vira 1/3, etc.
   function computeDrops(ingredients: any[]): number[] {
     const raw = ingredients.map(i => i.percentage);
     const ints = raw.map(Math.floor);
@@ -135,13 +126,17 @@
     return ints.map(v => Math.round(v / g));
   }
 
-  let drops = $derived(result?.ingredients ? computeDrops(result.ingredients) : []);
-  let totalDrops = $derived(drops.reduce((a, b) => a + b, 0));
+  // Proporções ~0% são ruído de arredondamento: fora da fita e da lista.
+  let ingredients = $derived(
+    (result?.ingredients || []).filter((i: any) => i.percentage > 0.5)
+  );
+  let drops = $derived(ingredients.length ? computeDrops(ingredients) : []);
 
   function selectSource(paint: Paint) {
     sourcePaint = paint;
     result = null;
     errorMsg = '';
+    if (targetManufacturerId || useStock) suggest();
   }
 
   function clearSource() {
@@ -150,8 +145,21 @@
     errorMsg = '';
   }
 
+  function onTargetChange() {
+    result = null;
+    errorMsg = '';
+    if (sourcePaint && (targetManufacturerId || useStock)) suggest();
+  }
+
+  function toggleStock() {
+    useStock = !useStock;
+    result = null;
+    errorMsg = '';
+    if (sourcePaint && (useStock || targetManufacturerId)) suggest();
+  }
+
   async function suggest() {
-    if (!sourcePaint || !canSuggest) return;
+    if (!sourcePaint) return;
     loading = true;
     errorMsg = '';
     result = null;
@@ -161,12 +169,9 @@
       if (useStock && userPaints.length > 0) {
         const fromStockRes = await PaintService.SuggestEquivalentFromStock(sourcePaint.id);
         if (fromStockRes.reproducible || !targetManufacturerId) {
-          // Ou o estoque alcança a cor, ou não há marca de reserva pra tentar:
-          // mostramos a melhor do estoque (o banner avisa se é só aproximação).
           result = fromStockRes;
           fromStock = true;
         } else {
-          // Estoque não alcança e há marca de reserva: cai no fluxo por fabricante.
           result = await PaintService.SuggestEquivalentRecipe(sourcePaint.id, Number(targetManufacturerId));
           stockFellBack = true;
         }
@@ -176,7 +181,7 @@
     } catch (e) {
       console.error('Erro sugerindo receita equivalente:', e);
       errorMsg = String(e).includes('estoque está vazio')
-        ? 'Seu estoque está vazio — cadastre tintas ou desligue a priorização.'
+        ? 'Seu estoque está vazio. Cadastre tintas ou desligue a priorização.'
         : 'O cálculo falhou. Escolha a tinta e a marca de novo e tente outra vez.';
       toast('O cálculo falhou. Tente de novo.', 'error');
     } finally {
@@ -185,645 +190,622 @@
   }
 
   function copyRecipe() {
-    if (!result?.ingredients) return;
-    const measure = (i: any, idx: number) =>
-      unit === 'drops'
-        ? `${drops[idx]} ${drops[idx] === 1 ? 'gota' : 'gotas'}`
-        : `${i.percentage.toFixed(1)}%`;
+    if (!ingredients.length) return;
     const lines = [
-      `${result.sourceName} (${result.sourceManufacturer}) → ${result.targetManufacturer}`,
-      ...(unit === 'drops' ? [`Mistura de ${totalDrops} gotas`] : []),
-      ...result.ingredients.map((i: any, idx: number) => `${measure(i, idx)}  ${i.name}${i.code ? ` (${i.code})` : ''}`),
-      `ΔE2000 ${result.deltaE.toFixed(2)}`,
+      `${result.sourceName} (${result.sourceManufacturer}) em ${result.targetManufacturer}`,
+      ...ingredients.map((i: any, idx: number) =>
+        `${drops[idx]} ${drops[idx] === 1 ? 'gota' : 'gotas'} (${i.percentage.toFixed(1)}%)  ${i.name}${i.code ? ` (${i.code})` : ''}`),
+      `dE00 ${result.deltaE.toFixed(2)}`,
     ];
     navigator.clipboard.writeText(lines.join('\n'));
-    toast('Receita copiada');
+    toast('Fórmula copiada');
   }
+
+  function persistRecipe() {
+    if (!result || !ingredients.length) return;
+    saveRecipe({
+      sourcePaintId: result.sourcePaintId,
+      sourceName: result.sourceName,
+      sourceHex: hexOf(result.sourceR, result.sourceG, result.sourceB),
+      targetManufacturerId: fromStock ? 0 : Number(targetManufacturerId),
+      targetManufacturer: fromStock ? 'meu estoque' : result.targetManufacturer,
+      ingredients: ingredients.map((i: any) => ({
+        name: i.name,
+        code: i.code || '',
+        hex: hexOf(i.r, i.g, i.b),
+        percentage: i.percentage,
+      })),
+      deltaE: result.deltaE,
+    });
+    toast('Receita salva');
+  }
+
+  function tryAnotherBrand() {
+    targetManufacturerId = '';
+    result = null;
+    document.getElementById('target-select')?.focus();
+  }
+
+  let sourceInk = $derived(sourcePaint ? contrastOn(sourcePaint.r, sourcePaint.g, sourcePaint.b) : '#1a1712');
 </script>
 
-<div class="page-container">
-  <div class="page-header animate-rise">
-    <h1 class="page-title">Equivalência</h1>
-    <p class="page-subtitle">A mesma cor, feita com as tintas da marca que você tem</p>
-    <div class="page-divider"></div>
-  </div>
-
-  <div class="mix-layout">
-    <!-- Form: passos numerados guiam a jornada -->
-    <div class="panel p-5 animate-rise" style="animation-delay: 80ms;">
-      <div class="form-step" class:current={step === 1} class:done={step > 1}>
-        <span class="step-n">1</span>
-        <h3 class="form-step-title font-display">Tinta que você quer</h3>
+<div class="equiv-split">
+  <!-- Painel da tinta de origem: cor chapada, raio 0, altura cheia -->
+  {#if sourcePaint}
+    <aside class="source-panel" style="background: rgb({sourcePaint.r}, {sourcePaint.g}, {sourcePaint.b}); color: {sourceInk};">
+      <div class="source-top">
+        <span class="label-mono inherit">Tinta de origem</span>
+        <span class="source-no font-mono">No. {sourcePaint.id}</span>
       </div>
-      <PaintSearchInput
-        paints={allPaints}
-        selected={sourcePaint}
-        onSelect={selectSource}
-        onClear={clearSource}
-        label="Nome, código ou marca…"
-      />
+      <div class="source-bottom">
+        <h2 class="source-name font-display">{sourcePaint.name}</h2>
+        <p class="source-meta">{sourcePaint.manufacturer}{sourcePaint.productLine ? ` · ${sourcePaint.productLine}` : ''}</p>
+        <p class="source-code font-mono">
+          {hexOf(sourcePaint.r, sourcePaint.g, sourcePaint.b)}&nbsp;&nbsp;&nbsp;RGB {sourcePaint.r} {sourcePaint.g} {sourcePaint.b}
+        </p>
+        <button class="source-swap font-mono" style="color: {sourceInk};" onclick={clearSource}>trocar tinta ›</button>
+      </div>
+    </aside>
+  {:else}
+    <aside class="source-panel empty">
+      <div class="source-top">
+        <span class="label-mono">Tinta de origem</span>
+      </div>
+      <div class="source-pick">
+        <p class="pick-title font-display">Comece pela cor que você quer.</p>
+        <p class="pick-hint">Busque pelo nome, código ou marca. Ou venha do Catálogo pelo botão da tinta.</p>
+        <div class="pick-input">
+          <PaintSearchInput
+            paints={allPaints}
+            selected={null}
+            onSelect={selectSource}
+            onClear={clearSource}
+            label="Nome, código ou marca"
+          />
+        </div>
+      </div>
+    </aside>
+  {/if}
 
-      {#if userPaints.length > 0}
-        <button
-          class="stock-toggle"
-          class:on={useStock}
-          onclick={() => { useStock = !useStock; result = null; }}
-          aria-pressed={useStock}
+  <!-- Fórmula -->
+  <section class="formula-side">
+    <div class="formula-head">
+      <div>
+        <h1 class="formula-title font-display">Fórmula</h1>
+        <p class="formula-sub">
+          {#if fromStock && result}
+            A cor mais próxima possível usando só o seu estoque.
+          {:else if targetName}
+            A cor mais próxima possível usando só o catálogo {targetName}.
+          {:else}
+            Escolha a marca de destino pra calcular a fórmula.
+          {/if}
+        </p>
+      </div>
+      <div class="target-wrap">
+        <select
+          id="target-select"
+          class="target-select"
+          bind:value={targetManufacturerId}
+          onchange={onTargetChange}
+          aria-label="Marca de destino"
         >
-          <span class="stock-toggle-icon"><Icon name="box" size={17} /></span>
-          <span class="stock-toggle-text">
-            <span class="stock-toggle-title">Priorizar meu estoque</span>
-            <span class="stock-toggle-sub">{useStock ? `usando as ${userPaints.length} tintas que você tem` : `você tem ${userPaints.length} tintas cadastradas`}</span>
-          </span>
-          <span class="stock-switch" class:on={useStock}><span class="stock-knob"></span></span>
-        </button>
-      {/if}
-
-      <div class="form-step" class:current={step === 2} class:done={step > 2} style="margin-top: 24px;">
-        <span class="step-n">2</span>
-        <h3 class="form-step-title font-display">{useStock ? 'Marca de reserva (opcional)' : 'Marca que você tem'}</h3>
+          <option value="">{useStock ? 'Marca de reserva' : 'Escolher marca'}</option>
+          {#each manufacturers as mfr (mfr.id)}
+            <option value={mfr.id}>{mfr.name}</option>
+          {/each}
+        </select>
       </div>
-      <Select variant="outlined" bind:value={targetManufacturerId} label={useStock ? 'Se faltar no estoque…' : 'Marca'} style="width: 100%;" disabled={!sourcePaint}>
-        <Option value="">{useStock ? 'Nenhuma' : 'Selecione…'}</Option>
-        {#each availableTargets as mfr}
-          <Option value={mfr.id}>{mfr.name}</Option>
-        {/each}
-      </Select>
-
-      <button
-        class="btn-primary"
-        onclick={suggest}
-        disabled={!canSuggest}
-        style="margin-top: 20px;"
-      >
-        {loading ? 'Calculando…' : 'Encontrar equivalência'}
-      </button>
-
-      {#if errorMsg}
-        <p style="margin-top: 12px; font-size: 12.5px; color: var(--delta-poor);">{errorMsg}</p>
-      {/if}
     </div>
 
-    <!-- Result -->
-    <div class="animate-rise" style="animation-delay: 160ms;">
-      {#if loading}
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 80px 0;">
-          <LinearProgress indeterminate style="width: 200px;" />
-          <span style="font-size: 12.5px; color: var(--ink-500);">Testando misturas de até 3 tintas…</span>
+    {#if errorMsg}
+      <div class="notice-card mb-6">
+        <div class="notice-title">Algo deu errado</div>
+        <p class="notice-text">{errorMsg}</p>
+      </div>
+    {/if}
+
+    {#if loading}
+      <!-- Calculando: skeleton + linha mono (board Estados) -->
+      <div class="calc-skeleton" aria-hidden="true">
+        <div class="skeleton" style="height: 60px; width: 60%; border-radius: 0;"></div>
+        {#each [0, 1, 2] as i (i)}
+          <div class="skel-row">
+            <div class="skeleton" style="width: 40px; height: 40px;"></div>
+            <div class="skel-lines">
+              <div class="skeleton" style="height: 12px; width: 46%;"></div>
+              <div class="skeleton" style="height: 10px; width: 30%;"></div>
+            </div>
+            <div class="skeleton" style="width: 44px; height: 20px;"></div>
+          </div>
+        {/each}
+      </div>
+      <p class="calc-line font-mono">
+        {#if useStock && userPaints.length > 0}
+          Testando misturas com as {userPaints.length} tintas do seu estoque…
+        {:else}
+          Testando misturas de {targetCount || 'todas as'} tintas no catálogo {targetName}…
+        {/if}
+      </p>
+    {:else if result}
+      {#if stockFellBack}
+        <div class="notice-card mb-6">
+          <div class="notice-title">Seu estoque não alcança essa cor</div>
+          <p class="notice-text">
+            A fórmula abaixo usa o catálogo {result.targetManufacturer} (marca de reserva).
+            Os potes que você já tem estão marcados na lista.
+          </p>
         </div>
-      {:else if result}
-        <!-- Estoque priorizado: alcançou a cor -->
-        {#if fromStock && result.reproducible}
-          <div class="ok-banner mb-5 animate-rise">
-            <span class="ok-icon"><Icon name="box" size={18} /></span>
-            <div>
-              <div class="ok-title">Dá pra fazer com o seu estoque</div>
-              <p class="warn-text">Todas as tintas da receita abaixo são suas — nada de comprar pote novo.</p>
-            </div>
-          </div>
-        {/if}
+      {/if}
 
-        <!-- Estoque não alcançou, mas caímos numa marca de reserva -->
-        {#if stockFellBack}
-          <div class="warn-banner mb-5 animate-rise" style="border-color: color-mix(in srgb, var(--delta-fair) 45%, transparent); background: color-mix(in srgb, var(--delta-fair) 12%, transparent);">
-            <span class="warn-icon" style="color: var(--delta-fair);"><Icon name="info" size={18} /></span>
-            <div>
-              <div class="warn-title" style="color: var(--delta-fair);">Seu estoque não alcança essa cor</div>
-              <p class="warn-text">Montamos a receita pela <strong>{result.targetManufacturer}</strong> (marca de reserva). Os potes que você já tem estão marcados abaixo.</p>
-            </div>
+      {#if !result.reproducible}
+        <div class="notice-card mb-6">
+          <div class="notice-title">
+            {fromStock ? 'Seu estoque não alcança a cor' : 'Essa marca não alcança a cor'}
           </div>
-        {/if}
-
-        <!-- Aviso: cor irreproduzível com o catálogo de destino -->
-        {#if !result.reproducible}
-          <div class="warn-banner mb-5 animate-rise">
-            <span class="warn-icon"><Icon name="info" size={18} /></span>
-            <div>
-              <div class="warn-title">
-                {fromStock ? 'Seu estoque não alcança essa cor' : `Esta cor não sai com as tintas da ${result.targetManufacturer}`}
-              </div>
-              <p class="warn-text">
-                {#if fromStock}
-                  As tintas que você tem não chegam nesse tom. A mistura abaixo é a <strong>aproximação mais próxima</strong> com o seu estoque — escolha uma marca de reserva pra ver outras opções.
-                {:else}
-                  Falta pigmento no catálogo dela pra chegar neste tom. A mistura abaixo é a
-                  <strong>aproximação mais próxima possível</strong> — compare o par de cores
-                  antes de decidir usar.
-                {/if}
-              </p>
-            </div>
-          </div>
-        {/if}
-
-        <!-- O par: alvo vs obtido, lado a lado — o momento da verdade -->
-        <div class="panel p-5 mb-5">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="font-display text-sm font-semibold text-white">Alvo × mistura</h3>
-            <DeltaBadge
-              deltaE={result.deltaE}
-              pair={{ r1: result.sourceR, g1: result.sourceG, b1: result.sourceB, r2: result.resultR, g2: result.resultG, b2: result.resultB }}
-            />
-          </div>
-          <div class="verdict-pair">
-            <div class="verdict-half" style="background: rgb({result.sourceR}, {result.sourceG}, {result.sourceB});">
-              <span class="verdict-tag">{result.sourceName} · {result.sourceManufacturer}</span>
-            </div>
-            <div class="verdict-half" style="background: rgb({result.resultR}, {result.resultG}, {result.resultB});">
-              <span class="verdict-tag">sua mistura · {result.targetManufacturer}</span>
-            </div>
-          </div>
-
-          <!-- Legenda: explica o par de cores e o ΔE pra quem nunca viu o termo -->
-          <div class="verdict-legend">
-            <p class="legend-desc">
-              À <strong>esquerda</strong>, a cor que você quer; à <strong>direita</strong>, o que a sua mistura produz.
-              O <strong>ΔE</strong> mede o quanto elas se diferenciam — quanto menor, mais parecidas (<strong>0 = idênticas</strong>).
-            </p>
-            <div class="delta-scale" role="img" aria-label="Escala de diferença de cor, ΔE {result.deltaE.toFixed(1)}">
-              {#each deltaBands as band, i}
-                <span class="scale-seg {band.cls}" class:active={activeBandIdx === i}>
-                  <span class="scale-range">{band.range}</span>
-                  <span class="scale-lbl">{band.label}</span>
-                </span>
-              {/each}
-            </div>
-          </div>
+          <p class="notice-text">
+            Melhor resultado ficou em ΔE {result.deltaE.toFixed(1)}.
+            {fromStock ? 'Nenhuma mistura com as suas tintas chega perto.' : `Nenhuma mistura ${result.targetManufacturer} chega perto.`}
+            A fórmula abaixo é só a aproximação mais próxima.
+          </p>
+          <button class="notice-link" onclick={tryAnotherBrand}>Tentar outra marca</button>
         </div>
+      {/if}
 
-        <!-- Ingredients -->
-        <div class="panel p-5 mb-5">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="font-display text-sm font-semibold text-white">
-              {result.reproducible ? 'Receita' : 'Melhor aproximação'} ({result.ingredients?.length || 0} {result.ingredients?.length === 1 ? 'tinta' : 'tintas'})
-            </h3>
-            <button class="btn-ghost" onclick={copyRecipe}>
-              Copiar receita
-            </button>
-          </div>
+      <div class="formula-body">
+        <div class="formula-main">
+          <FormulaRibbon
+            segments={ingredients.map((i: any) => ({ r: i.r, g: i.g, b: i.b, code: i.code || i.name, percentage: i.percentage }))}
+          />
 
-          <!-- Medir em % ou gotas: pintor dosa na bancada por gota -->
-          <div class="recipe-controls">
-            <div class="unit-toggle" role="group" aria-label="Unidade de medida">
-              <button class:active={unit === 'percent'} onclick={() => unit = 'percent'}>%</button>
-              <button class:active={unit === 'drops'} onclick={() => unit = 'drops'}>gotas</button>
-            </div>
-            {#if unit === 'drops'}
-              <span class="drops-cap">mistura de {totalDrops} {totalDrops === 1 ? 'gota' : 'gotas'} — dá pra multiplicar (2×, 3×…) pra fazer mais</span>
-            {/if}
-          </div>
-
-          {#if result.ingredients}
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-              {#each result.ingredients as ing, i}
-                <div class="ingredient-row animate-slide" style="animation-delay: {i * 40}ms;">
-                  <div class="flex items-center gap-4">
-                    <PaintBottle r={ing.r} g={ing.g} b={ing.b} size={46} />
-                    <div style="flex: 1; min-width: 0;">
-                      <div class="flex items-center gap-2">
-                        <span class="font-semibold text-sm text-white truncate">{ing.name}</span>
-                        {#if ingredientInStock(ing)}
-                          <span class="stock-chip" title="Você tem esta tinta"><Icon name="box" size={11} /> no estoque</span>
-                        {/if}
-                      </div>
-                      <div class="flex items-center gap-2" style="margin-top: 3px;">
-                        {#if ingredientBrand(ing)}
-                          <span class="ing-brand">{ingredientBrand(ing)}</span>
-                        {/if}
-                        {#if ing.code}
-                          <span class="ing-code font-mono">{ing.code}</span>
-                        {/if}
-                      </div>
-                    </div>
-                    <div style="text-align: right; flex-shrink: 0;">
-                      {#if unit === 'drops'}
-                        <div class="font-mono font-bold text-white" style="font-size: 16px;">{drops[i]} <span style="font-size: 11px; font-weight: 500; color: var(--ink-500);">{drops[i] === 1 ? 'gota' : 'gotas'}</span></div>
-                        <div style="font-size: 11px; color: var(--ink-500);">{ing.percentage.toFixed(1)}%</div>
-                      {:else}
-                        <div class="font-mono font-bold text-white" style="font-size: 16px;">{ing.percentage.toFixed(1)}%</div>
-                      {/if}
-                    </div>
+          <div class="ingredient-list">
+            {#each ingredients as ing, i (ing.paintId)}
+              <div class="ingredient-row">
+                <PaintBottle r={ing.r} g={ing.g} b={ing.b} size={52} />
+                <div class="ing-text">
+                  <div class="ing-name">
+                    {ing.name}
+                    {#if ingredientInStock(ing)}
+                      <span class="stock-chip font-mono" title="Você tem esta tinta">no meu estoque</span>
+                    {/if}
                   </div>
-                  <div style="margin-top: 10px; height: 3px; border-radius: 999px; background: var(--ink-700); overflow: hidden;">
-                    <div style="height: 100%; width: {ing.percentage}%; border-radius: 999px; background: var(--lacquer); transition: width 0.5s ease;"></div>
-                  </div>
+                  <div class="ing-meta font-mono">{ing.code ? `${ing.code} · ` : ''}{ingredientLine(ing)}</div>
                 </div>
-              {/each}
-            </div>
+                <span class="ing-drops font-mono">{drops[i]} {drops[i] === 1 ? 'gota' : 'gotas'}</span>
+                <span class="ing-pct font-display">{Math.round(ing.percentage)}%</span>
+              </div>
+            {/each}
+          </div>
+
+          {#if result.tips && result.tips.length > 0}
+            <p class="formula-tip">{result.tips[0]}</p>
           {/if}
         </div>
 
-        <!-- Tips -->
-        {#if result.tips && result.tips.length > 0}
-          <div class="panel p-5">
-            <h3 class="font-display text-sm font-semibold text-white mb-4">
-              <span class="flex items-center gap-2"><Icon name="info" size={16} />Dicas de ajuste</span>
-            </h3>
-            <ul style="display: flex; flex-direction: column; gap: 10px; padding-left: 18px; margin: 0;">
-              {#each result.tips as tip}
-                <li style="font-size: 13px; color: var(--ink-300); line-height: 1.5;">{tip}</li>
-              {/each}
-            </ul>
+        <!-- Leitura de instrumento: ΔE00 gigante + verdicto + amostras -->
+        <aside class="delta-col">
+          <span class="label-mono">ΔE00</span>
+          <div class="delta-reading big" class:good={deltaIsGood(result.deltaE)}>{result.deltaE.toFixed(1)}</div>
+          <p class="delta-verdict" class:good={deltaIsGood(result.deltaE)}>{deltaVerdict(result.deltaE)}</p>
+
+          <div class="sample-pair">
+            <div class="sample">
+              <span class="sample-color" style="background: rgb({result.sourceR}, {result.sourceG}, {result.sourceB});"></span>
+              <span class="sample-tag font-mono">alvo</span>
+            </div>
+            <div class="sample">
+              <span class="sample-color" style="background: rgb({result.resultR}, {result.resultG}, {result.resultB});"></span>
+              <span class="sample-tag font-mono">mistura</span>
+            </div>
           </div>
+        </aside>
+      </div>
+    {:else if sourcePaint}
+      <div class="await-calc">
+        <p class="await-title font-display">
+          {useStock ? 'Pronto pra calcular com o seu estoque.' : 'Escolha a marca de destino.'}
+        </p>
+        <p class="await-hint">
+          {useStock
+            ? 'A fórmula prioriza as tintas que você já tem. Se não alcançar, cai na marca de reserva.'
+            : 'A Mescla monta a cor usando só o catálogo da marca escolhida.'}
+        </p>
+        {#if useStock}
+          <button class="pill-dark" onclick={suggest} disabled={!canSuggest}>Gerar fórmula</button>
         {/if}
-      {:else if sourcePaint}
-        <!-- O par em aberto: a cor-alvo já ocupa a metade dela; a mistura
-             ainda é uma incógnita — o cálculo preenche a outra metade. -->
-        <div class="panel p-5">
-          <div class="verdict-pair preview">
-            <div class="verdict-half" style="background: rgb({sourcePaint.r}, {sourcePaint.g}, {sourcePaint.b});">
-              <span class="verdict-tag">{sourcePaint.name} · {sourcePaint.manufacturer}</span>
-            </div>
-            <div class="verdict-half pending">
-              <span class="pending-mark font-mono">?</span>
-              <span class="verdict-tag">sua mistura</span>
-            </div>
-          </div>
-          <p class="preview-hint">
-            {useStock ? 'Calcule — a receita prioriza as tintas do seu estoque.' : 'Escolha a marca e calcule: a mistura aparece aqui, colada na cor-alvo.'}
-          </p>
-        </div>
+      </div>
+    {:else}
+      <div class="await-calc">
+        <p class="await-title font-display">A fórmula aparece aqui.</p>
+        <p class="await-hint">Busque a tinta de origem no painel ao lado e escolha a marca de destino.</p>
+      </div>
+    {/if}
+
+    <!-- Rodapé: estoque à esquerda, salvar à direita -->
+    <div class="formula-foot">
+      {#if userPaints.length > 0}
+        <button class="stock-line" onclick={toggleStock} aria-pressed={useStock}>
+          <span class="switch" class:on={useStock}><span class="knob"></span></span>
+          <span class="stock-label">Priorizar meu estoque</span>
+        </button>
       {:else}
-        <div class="panel empty-state">
-          <span class="empty-icon"><Icon name="flask" size={40} /></span>
-          <p class="empty-title">Comece buscando a tinta que você quer</p>
-          <p class="empty-hint">Digite o nome no campo ao lado — ou venha do Catálogo pelo botão da tinta.</p>
-        </div>
+        <span></span>
       {/if}
+      <div class="foot-actions">
+        {#if result && ingredients.length}
+          <button class="pill-light" onclick={copyRecipe}>Copiar</button>
+          <button class="pill-dark" onclick={persistRecipe}>Salvar receita</button>
+        {/if}
+      </div>
     </div>
-  </div>
+  </section>
 </div>
 
 <style>
-  .mix-layout {
+  /* Split full-bleed: o painel de cor encosta na borda esquerda/inferior */
+  .equiv-split {
     display: grid;
-    grid-template-columns: 320px 1fr;
-    gap: 24px;
+    grid-template-columns: minmax(320px, 40%) minmax(0, 1fr);
+    min-height: 100%;
   }
 
-  .form-step {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 14px;
-    opacity: 0.55;
-    transition: opacity 0.2s ease;
+  @media (max-width: 900px) {
+    .equiv-split {
+      grid-template-columns: 1fr;
+    }
+    .source-panel {
+      min-height: 320px;
+    }
   }
 
-  .form-step.current,
-  .form-step.done {
-    opacity: 1;
-  }
-
-  .form-step.current .step-n {
-    background: var(--lacquer);
-    color: white;
-  }
-
-  .form-step.done .step-n {
-    background: var(--delta-excellent);
-    color: white;
-  }
-
-  .form-step .step-n {
-    margin-bottom: 0;
-  }
-
-  .form-step-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--paper);
-  }
-
-  /* Par alvo × mistura: as duas cores encostadas, como se compara tinta de verdade */
-  .verdict-pair {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    height: 168px;
-    border-radius: var(--radius-surface);
-    overflow: hidden;
-    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.22);
-  }
-
-  .verdict-half {
-    position: relative;
-  }
-
-  /* Metade pendente (antes do cálculo): a incógnita do par */
-  .verdict-pair.preview {
-    height: 192px;
-  }
-
-  .verdict-half.pending {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--ink-850);
-    border-left: 1px dashed var(--ink-600);
-  }
-
-  .pending-mark {
-    font-size: 36px;
-    font-weight: 600;
-    color: var(--ink-500);
-  }
-
-  .preview-hint {
-    margin-top: 12px;
-    font-size: 12.5px;
-    color: var(--ink-500);
-  }
-
-  /* Legenda do par + escala de ΔE */
-  .verdict-legend {
-    margin-top: 14px;
-  }
-
-  .legend-desc {
-    margin: 0 0 12px;
-    font-size: 12.5px;
-    line-height: 1.55;
-    color: var(--ink-300);
-  }
-
-  .legend-desc strong {
-    color: var(--ink-100);
-    font-weight: 600;
-  }
-
-  .delta-scale {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 4px;
-  }
-
-  .scale-seg {
+  .source-panel {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    padding: 6px 4px;
-    border-radius: 6px;
-    text-align: center;
-    background: var(--ink-800);
-    border: 1px solid transparent;
-    opacity: 0.55;
-    transition: opacity 0.15s ease;
+    justify-content: space-between;
+    max-width: 560px;
+    width: 100%;
+    padding: 36px 40px 44px;
+    border-radius: 0;
   }
 
-  /* Faixa onde o ΔE atual cai — destacada, o resto esmaecido */
-  .scale-seg.active {
+  .source-panel.empty {
+    background: var(--bancada-deep);
+    color: var(--grafite);
+    justify-content: flex-start;
+  }
+
+  .source-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  /* labels dentro do painel herdam a cor de contraste */
+  .label-mono.inherit {
+    color: inherit;
+    opacity: 0.85;
+  }
+
+  .source-no {
+    font-size: 17px;
+    font-weight: 500;
+  }
+
+  .source-name {
+    font-size: clamp(2.4rem, 4.6vw, 4rem);
+    font-weight: 720;
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    margin-bottom: 14px;
+    overflow-wrap: anywhere;
+  }
+
+  .source-meta {
+    font-size: 14.5px;
+    font-weight: 560;
+    margin-bottom: 8px;
+  }
+
+  .source-code {
+    font-size: 12.5px;
+    opacity: 0.9;
+  }
+
+  .source-swap {
+    margin-top: 18px;
+    padding: 0;
+    border: none;
+    background: none;
+    font-size: 11.5px;
+    opacity: 0.75;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .source-swap:hover {
     opacity: 1;
-    background: color-mix(in srgb, currentColor 12%, transparent);
-    border-color: color-mix(in srgb, currentColor 40%, transparent);
+    text-decoration: underline;
   }
 
-  .scale-seg.excellent { color: var(--delta-excellent); }
-  .scale-seg.good      { color: var(--delta-good); }
-  .scale-seg.fair      { color: var(--delta-fair); }
-  .scale-seg.poor      { color: var(--delta-poor); }
+  /* Centraliza o convite no espaço restante (space-between jogava tudo pro fundo) */
+  .source-pick {
+    max-width: 380px;
+    margin: auto 0;
+  }
 
-  .scale-range {
-    font-family: var(--font-mono);
-    font-size: 11px;
+  .pick-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--grafite);
+    margin-bottom: 8px;
+    line-height: 1.15;
+  }
+
+  .pick-hint {
+    font-size: 13px;
+    color: var(--text-2);
+    margin-bottom: 20px;
+    line-height: 1.55;
+  }
+
+  .formula-side {
+    display: flex;
+    flex-direction: column;
+    padding: 44px 48px 36px;
+    min-width: 0;
+  }
+
+  .formula-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 36px;
+  }
+
+  .formula-title {
+    font-size: 2.6rem;
+    font-weight: 750;
+    color: var(--grafite);
+    letter-spacing: -0.015em;
+    line-height: 1.05;
+    margin-bottom: 8px;
+  }
+
+  .formula-sub {
+    font-size: 13.5px;
+    color: var(--text-2);
+    max-width: 420px;
+  }
+
+  /* Dropdown do fabricante-alvo: pílula branca */
+  .target-select {
+    appearance: none;
+    -webkit-appearance: none;
+    height: 44px;
+    padding: 0 40px 0 20px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-pill);
+    background: var(--papel);
+    color: var(--grafite);
+    font-family: var(--font-body);
+    font-size: 13.5px;
     font-weight: 600;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%231a1712' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 18px center;
   }
 
-  .scale-lbl {
-    font-size: 9.5px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--ink-500);
+  .target-select:hover {
+    border-color: var(--grafite);
   }
 
-  .scale-seg.active .scale-lbl {
-    color: currentColor;
+  .formula-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px;
+    gap: 0;
+    flex: 1;
   }
 
-  .verdict-tag {
-    position: absolute;
-    bottom: 8px;
-    left: 8px;
-    right: 8px;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    padding: 3px 8px;
-    border-radius: 4px;
-    background: rgba(15, 13, 18, 0.55);
-    color: rgba(255, 255, 255, 0.92);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    width: fit-content;
-    max-width: calc(100% - 16px);
+  @media (max-width: 1100px) {
+    .formula-body {
+      grid-template-columns: 1fr;
+    }
+    .delta-col {
+      border-left: none;
+      border-top: 1px solid var(--hairline);
+      padding-left: 0;
+      padding-top: 24px;
+      margin-top: 24px;
+    }
+  }
+
+  .formula-main {
+    min-width: 0;
+    padding-right: 36px;
+  }
+
+  .delta-col {
+    padding-left: 32px;
+    border-left: 1px solid var(--hairline);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .delta-reading.big {
+    font-size: clamp(64px, 7vw, 96px);
+    margin: 14px 0 8px;
+  }
+
+  .sample-pair {
+    display: flex;
+    gap: 4px;
+    margin-top: 26px;
+  }
+
+  .sample {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .sample-color {
+    width: 96px;
+    height: 64px;
+    border-radius: var(--radius-control);
+    box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.08);
+    display: block;
+  }
+
+  .sample-tag {
+    font-size: 10.5px;
+    color: var(--text-2);
+  }
+
+  .ingredient-list {
+    margin-top: 28px;
+    border-top: 1px solid var(--hairline);
   }
 
   .ingredient-row {
-    padding: 12px;
-    border: 1px solid var(--ink-700);
-    border-radius: 8px;
-  }
-
-  /* Barra de medida: alternador %/gotas + total de gotas */
-  .recipe-controls {
     display: flex;
     align-items: center;
-    gap: 14px;
-    flex-wrap: wrap;
-    margin-bottom: 16px;
+    gap: 18px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--hairline);
   }
 
-  .unit-toggle {
-    display: inline-flex;
-    padding: 2px;
-    border-radius: 8px;
-    background: var(--ink-800);
-    border: 1px solid var(--ink-700);
-  }
-
-  .unit-toggle button {
-    font: inherit;
-    font-size: 12.5px;
-    font-weight: 600;
-    padding: 5px 14px;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--ink-300);
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
-  }
-
-  .unit-toggle button.active {
-    background: var(--lacquer);
-    color: #fff;
-  }
-
-  .drops-cap {
-    font-size: 12px;
-    color: var(--ink-500);
-  }
-
-  /* Referência do pote — sem o código não dá pra comprar/achar a tinta na loja */
-  .ing-code {
-    display: inline-block;
-    margin-top: 3px;
-    font-size: 11px;
-    font-weight: 500;
-    padding: 1px 7px;
-    border-radius: 4px;
-    background: var(--ink-800);
-    color: var(--lacquer-tint);
-  }
-
-  .warn-banner {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
-    padding: 16px 18px;
-    border-radius: 10px;
-    border: 1px solid color-mix(in srgb, var(--delta-poor) 45%, transparent);
-    background: color-mix(in srgb, var(--delta-poor) 12%, transparent);
-  }
-
-  .warn-icon {
-    color: var(--delta-poor);
-    flex-shrink: 0;
-    margin-top: 1px;
-  }
-
-  .warn-title {
-    font-weight: 600;
-    font-size: 13.5px;
-    color: var(--delta-poor);
-    margin-bottom: 4px;
-  }
-
-  .warn-text {
-    font-size: 12.5px;
-    color: var(--ink-300);
-    line-height: 1.55;
-    margin: 0;
-  }
-
-  /* Toggle "priorizar meu estoque" */
-  .stock-toggle {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-    margin-top: 18px;
-    padding: 12px 14px;
-    border: 1px solid var(--ink-700);
-    border-radius: 10px;
-    background: var(--ink-800);
-    cursor: pointer;
-    text-align: left;
-    transition: border-color 0.15s ease, background 0.15s ease;
-  }
-
-  .stock-toggle.on {
-    border-color: color-mix(in srgb, var(--lacquer) 55%, transparent);
-    background: color-mix(in srgb, var(--lacquer) 10%, transparent);
-  }
-
-  .stock-toggle-icon {
-    display: flex;
-    color: var(--ink-500);
-    flex-shrink: 0;
-  }
-
-  .stock-toggle.on .stock-toggle-icon {
-    color: var(--lacquer);
-  }
-
-  .stock-toggle-text {
+  .ing-text {
     flex: 1;
     min-width: 0;
+  }
+
+  .ing-name {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .stock-toggle-title {
-    font-size: 13.5px;
-    font-weight: 600;
-    color: var(--paper);
-  }
-
-  .stock-toggle-sub {
-    font-size: 11.5px;
-    color: var(--ink-500);
-  }
-
-  .stock-switch {
-    flex-shrink: 0;
-    width: 38px;
-    height: 22px;
-    border-radius: 999px;
-    background: var(--ink-700);
-    position: relative;
-    transition: background 0.18s ease;
-  }
-
-  .stock-switch.on {
-    background: var(--lacquer);
-  }
-
-  .stock-knob {
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #fff;
-    transition: transform 0.18s ease;
-  }
-
-  .stock-switch.on .stock-knob {
-    transform: translateX(16px);
-  }
-
-  /* Selo "no meu estoque" no ingrediente */
-  .stock-chip {
-    display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: 10px;
+    font-size: 15px;
+    font-weight: 680;
+    color: var(--grafite);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ing-meta {
+    font-size: 12px;
+    color: var(--text-2);
+    margin-top: 4px;
+  }
+
+  .ing-drops {
+    flex-shrink: 0;
+    font-size: 12.5px;
+    color: var(--text-2);
+  }
+
+  .ing-pct {
+    flex-shrink: 0;
+    min-width: 76px;
+    text-align: right;
+    font-size: 28px;
+    font-weight: 720;
+    color: var(--grafite);
+  }
+
+  .stock-chip {
     flex-shrink: 0;
     font-size: 10px;
-    font-weight: 600;
-    padding: 2px 7px;
-    border-radius: 4px;
-    background: color-mix(in srgb, var(--lacquer) 16%, transparent);
-    color: var(--lacquer-tint);
-    white-space: nowrap;
+    font-weight: 500;
+    color: var(--laca-deep);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
   }
 
-  .ing-brand {
-    font-size: 11px;
-    color: var(--ink-500);
-  }
-
-  /* Banner positivo: dá pra fazer com o estoque */
-  .ok-banner {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
-    padding: 16px 18px;
-    border-radius: 10px;
-    border: 1px solid color-mix(in srgb, var(--delta-excellent) 45%, transparent);
-    background: color-mix(in srgb, var(--delta-excellent) 12%, transparent);
-  }
-
-  .ok-icon {
-    color: var(--delta-excellent);
-    flex-shrink: 0;
-    margin-top: 1px;
-  }
-
-  .ok-title {
-    font-weight: 600;
+  .formula-tip {
+    margin-top: 22px;
     font-size: 13.5px;
-    color: var(--delta-excellent);
-    margin-bottom: 4px;
+    color: var(--text-2);
+    line-height: 1.55;
+  }
+
+  /* Calculando (board Estados) */
+  .calc-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-width: 620px;
+  }
+
+  .skel-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .skel-lines {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .calc-line {
+    margin-top: 26px;
+    font-size: 12.5px;
+    color: var(--text-2);
+  }
+
+  .await-calc {
+    flex: 1;
+    max-width: 460px;
+    padding: 24px 0;
+  }
+
+  .await-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--grafite);
+    margin-bottom: 8px;
+  }
+
+  .await-hint {
+    font-size: 13.5px;
+    color: var(--text-2);
+    line-height: 1.55;
+    margin-bottom: 22px;
+  }
+
+  .formula-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 40px;
+    padding-top: 22px;
+  }
+
+  .stock-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: none;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .stock-label {
+    font-size: 13.5px;
+    font-weight: 560;
+    color: var(--grafite);
+  }
+
+  .foot-actions {
+    display: flex;
+    gap: 10px;
   }
 </style>

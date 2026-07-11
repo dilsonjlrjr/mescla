@@ -109,11 +109,11 @@
     display: flex;
     flex-direction: column;
     max-height: 85dvh;
-    background: var(--ink-900);
-    border: 1px solid var(--ink-700);
+    background: var(--papel);
+    border: 1px solid var(--hairline);
     border-bottom: none;
-    border-radius: 18px 18px 0 0;
-    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.25);
+    border-radius: var(--radius-surface) var(--radius-surface) 0 0;
+    box-shadow: 0 -8px 40px rgba(26, 23, 18, 0.22);
     animation: sheet-up 0.28s cubic-bezier(0.32, 0.72, 0, 1) both;
     transition: transform 0.2s ease;
     padding-bottom: var(--safe-bottom);

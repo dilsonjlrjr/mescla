@@ -1,41 +1,47 @@
-/* ── MESCLA MOBILE — Rótulo Theme (claro) ──
-   Linguagem visual: rótulo de lata de tinta sobre bancada clara. Neutros
-   stone, cor de tinta chapada como protagonista, papel branco, laca cádmio
-   como acento único, grafite #1a1712 da marca como contraste. Display:
-   Bricolage Grotesque; corpo Archivo; etiqueta Plex Mono.
-   Estrutura: dock flutuante em pílula (navegação), campos "cavados" com
-   borda visível e foco em laca.
-   Escala de raio (regra única): botões/badges = pílula, superfícies = 12px,
-   swatches/inputs = 8px. */
+/* ── MESCLA MOBILE — Tema "Tintômetro" ──
+   O app como instrumento de precisão de cor: a tinta é a interface, o resto
+   é bancada. Paleta de 5 cores (bancada, papel, grafite, hairline, laca);
+   a cor de tinta (dinâmica) é a protagonista, chapada e com raio 0 nos
+   painéis grandes. Hairlines e whitespace no lugar de cards e sombras —
+   sombra só em superfícies flutuantes (dock, sheets).
+   Display: Bricolage Grotesque; corpo Archivo; TODO valor medido em
+   IBM Plex Mono. Raios: pílula = ação · 8px = amostra/input ·
+   12px = superfície flutuante · 0 = cor chapada. */
 
 :root {
-  /* Ink (neutros stone — cinza neutro que conversa com o grafite da marca) */
-  --ink-950: #f5f5f4;
-  --ink-900: #ffffff;
-  --ink-850: #fafaf9;
-  --ink-800: #eceae8;
-  --ink-700: #dcdad7;
-  --ink-600: #b9b6b1;
-  --ink-500: #7d7a74;
-  --ink-400: #a19d97;
-  --ink-300: #57544e;
-  --ink-100: #1d1b17;
+  /* Paleta Tintômetro — 5 cores, nada mais */
+  --bancada: #f6f4ef;
+  --papel: #ffffff;
+  --grafite: #1a1712;
+  --hairline: #dcd6c9;
+  --laca: #e8542c;
 
-  --paper: #1a1712; /* grafite da marca — o CONTRASTE escuro (toasts, destaques) */
+  /* Neutros derivados (grafite com opacidade sobre bancada — nunca cor nova) */
+  --ink-950: var(--bancada);
+  --ink-900: var(--papel);
+  --ink-850: var(--papel);
+  --ink-800: color-mix(in srgb, var(--hairline) 42%, var(--bancada));
+  --ink-700: var(--hairline);
+  --ink-600: var(--hairline);
+  --ink-500: color-mix(in srgb, var(--grafite) 55%, var(--bancada));
+  --ink-400: color-mix(in srgb, var(--grafite) 45%, var(--bancada));
+  --ink-300: color-mix(in srgb, var(--grafite) 78%, var(--bancada));
+  --ink-100: var(--grafite);
 
-  /* Lacre — acento único (laca cádmio, cor do ícone).
-     deep/tint escurecem no claro: são usados como COR DE TEXTO nas views. */
-  --lacquer: #e8542c;
+  --paper: var(--grafite); /* alias legado: o CONTRASTE escuro (toasts, pílula preta) */
+
+  /* Laca — acento único. deep/tint: laca escurecida pra COR DE TEXTO no claro. */
+  --lacquer: var(--laca);
   --lacquer-deep: #b53d1f;
   --lacquer-tint: #c2451f;
 
-  /* Delta E — família separada do acento, escurecida pra ler no claro */
+  /* Delta E (legado — usado só na Roda/guia; o redesign fala laca ou grafite) */
   --delta-excellent: #2f7d49;
   --delta-good: #96760f;
   --delta-fair: #a85a1f;
   --delta-poor: #a13328;
 
-  /* Canais RGB (escurecidos pra legibilidade em fundo claro) */
+  /* Canais RGB (legado, roda) */
   --chan-r: #c0392b;
   --chan-g: #2f7d49;
   --chan-b: #2f5f9e;
@@ -75,8 +81,8 @@ body {
   font-family: var(--font-body);
   font-size: 16px; /* inputs <16px disparam zoom automático no mobile */
   line-height: 1.5;
-  color: var(--ink-100);
-  background: var(--ink-950);
+  color: var(--grafite);
+  background: var(--bancada);
   -webkit-font-smoothing: antialiased;
   touch-action: manipulation; /* mata o delay de double-tap-zoom */
   user-select: none;
@@ -87,20 +93,26 @@ textarea {
   user-select: text;
 }
 
-/* ── Receita única de campo (dark): campo CAVADO em relação à superfície
-   (fundo ink-850) com borda que APARECE (ink-600) e foco em laca. Baseline
-   com :where() = especificidade zero: estilos escopados podem sobrescrever. ── */
+/* ── Receita única de campo: papel + borda hairline, raio 8, foco em laca.
+   Baseline com :where() = especificidade zero. ── */
 :where(input[type='text'], input[type='search'], input[type='number'], textarea, select) {
-  background: var(--ink-850);
-  border: 1px solid var(--ink-600);
+  background: var(--papel);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-control);
-  color: var(--ink-100);
+  color: var(--grafite);
 }
 
 :where(input[type='text'], input[type='search'], input[type='number'], textarea, select):focus {
   outline: none;
-  border-color: var(--lacquer);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
+  border-color: var(--laca);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--laca) 20%, transparent);
+}
+
+/* type=search sem o chrome nativo do WebKit (X escuro destoa do tema) */
+input[type='search']::-webkit-search-cancel-button,
+input[type='search']::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 ::placeholder {
@@ -123,33 +135,44 @@ button {
 
 .pressable:active {
   transform: scale(0.97);
-  filter: brightness(0.92);
+  filter: brightness(0.95);
 }
 
-/* ── Superfícies ── */
+/* ── Superfícies: papel + hairline, sem sombra ── */
 .panel {
-  background: var(--ink-900);
-  border: 1px solid var(--ink-700);
+  background: var(--papel);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-surface);
 }
 
 .hairline {
   height: 1px;
-  background: var(--ink-700);
+  background: var(--hairline);
   border: none;
 }
 
+/* ── Label de seção: mono, uppercase, tracking largo ── */
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-500);
+}
+
 /* ── Botões ── */
+/* Pílula PRETA (grafite): a ação primária do Tintômetro. */
 .btn-primary {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   width: 100%;
-  min-height: 56px; /* alvo de toque generoso — é O botão do app */
+  min-height: 56px;
   border-radius: var(--radius-pill);
-  background: var(--lacquer);
-  color: white;
+  background: var(--grafite);
+  color: var(--papel);
   font-size: 17px;
   font-weight: 640;
   font-stretch: 110%;
@@ -158,7 +181,7 @@ button {
 
 .btn-primary:active {
   transform: scale(0.98);
-  filter: brightness(0.92);
+  filter: brightness(1.4);
 }
 
 .btn-primary:disabled {
@@ -166,6 +189,7 @@ button {
   pointer-events: none;
 }
 
+/* Pílula branca com borda hairline: a ação secundária. */
 .btn-ghost {
   display: inline-flex;
   align-items: center;
@@ -173,16 +197,16 @@ button {
   gap: 8px;
   min-height: 48px;
   padding: 0 20px;
-  border: 1px solid var(--ink-600);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-pill);
-  background: var(--ink-900);
-  color: var(--ink-300);
+  background: var(--papel);
+  color: var(--grafite);
   font-size: 15px;
   font-weight: 500;
 }
 
 .btn-ghost:active {
-  border-color: var(--lacquer);
+  border-color: var(--laca);
   color: var(--lacquer-deep);
 }
 
@@ -203,7 +227,7 @@ button {
   font-optical-sizing: auto;
   font-size: 30px;
   font-weight: 750;
-  color: var(--paper);
+  color: var(--grafite);
   letter-spacing: -0.015em;
   line-height: 1.1;
 }
@@ -213,7 +237,7 @@ button {
   display: inline-flex;
   border-radius: var(--radius-control);
   overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.14);
   flex-shrink: 0;
 }
 
@@ -223,7 +247,7 @@ button {
   height: 100%;
 }
 
-/* ── Badge de ΔE humanizado ── */
+/* ── Badge de ΔE humanizado (legado — Roda/guia) ── */
 .delta-badge {
   display: inline-flex;
   align-items: center;
@@ -248,13 +272,9 @@ button {
 .delta-badge.fair      { background: color-mix(in srgb, var(--delta-fair) 14%, transparent);      color: var(--delta-fair); }
 .delta-badge.poor      { background: color-mix(in srgb, var(--delta-poor) 12%, transparent);      color: var(--delta-poor); }
 
-/* Badge clicável (abre o sheet da escala): fundo translúcido em cima da cor
-   da tinta fica lavado e não parece botão — aqui vira um chip ELEVADO, com
-   superfície sólida, borda na cor do grau, sombra e rótulo "o que é?". */
 .delta-badge.tappable {
-  background: var(--ink-900);
-  border: 1.5px solid color-mix(in srgb, currentColor 45%, transparent);
-  box-shadow: 0 3px 12px rgba(26, 23, 18, 0.18);
+  background: var(--papel);
+  border: 1px solid var(--hairline);
   min-height: 44px;
   padding: 8px 8px 8px 16px;
 }
@@ -272,28 +292,15 @@ button {
   white-space: nowrap;
 }
 
-/* ── Swatch com furo de catálogo (assinatura visual) ── */
+/* ── Amostra chapada (raio 8, aro hairline pra cor clara não sumir) ── */
 .swatch-flat {
   position: relative;
   border-radius: var(--radius-control);
-  /* borda hairline pra swatch claro não sumir no fundo */
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink-100) 15%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.12);
   flex-shrink: 0;
 }
 
-.swatch-flat::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ink-950);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
-}
-
-/* ── Toasts (acima da tab bar) ── */
+/* ── Toasts (acima da tab bar — superfície flutuante: pode ter sombra) ── */
 .toast-region {
   position: fixed;
   bottom: calc(var(--tab-bar-h) + var(--safe-bottom) + 30px);
@@ -315,25 +322,25 @@ button {
   gap: 10px;
   padding: 12px 20px;
   border-radius: var(--radius-pill);
-  background: var(--paper);
-  color: var(--ink-950);
+  background: var(--grafite);
+  color: var(--bancada);
   font-size: 14px;
   font-weight: 500;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 6px 24px rgba(26, 23, 18, 0.22);
   animation: rise-in 0.25s cubic-bezier(0.4, 0, 0.2, 1) both;
   pointer-events: auto;
 }
 
 .toast.error {
-  background: var(--delta-poor);
-  color: white;
+  background: var(--lacquer-deep);
+  color: var(--papel);
 }
 
 .toast .toast-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--lacquer);
+  background: var(--laca);
   flex-shrink: 0;
 }
 
@@ -352,7 +359,7 @@ button {
 }
 
 .empty-state .empty-icon {
-  color: var(--ink-600);
+  color: var(--hairline);
   margin-bottom: 8px;
 }
 
@@ -361,7 +368,7 @@ button {
   font-stretch: 116%;
   font-size: 18px;
   font-weight: 640;
-  color: var(--ink-300);
+  color: var(--grafite);
 }
 
 .empty-state .empty-hint {
@@ -370,10 +377,40 @@ button {
   max-width: 280px;
 }
 
-/* ── Skeleton ── */
+/* ── Erro/aviso: card papel raio 12 com barra laca à esquerda (board Estados) ── */
+.notice-card {
+  background: var(--papel);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--laca);
+  border-radius: var(--radius-surface);
+  padding: 14px 16px;
+}
+
+.notice-card .notice-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--grafite);
+}
+
+.notice-card .notice-text {
+  font-size: 13.5px;
+  color: var(--ink-500);
+  margin-top: 3px;
+  line-height: 1.5;
+}
+
+.notice-card .notice-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--laca);
+}
+
+/* ── Skeleton (bancada mais escura, board Estados) ── */
 .skeleton {
   border-radius: var(--radius-control);
-  background: linear-gradient(90deg, var(--ink-800) 25%, var(--ink-700) 50%, var(--ink-800) 75%);
+  background: linear-gradient(90deg, var(--ink-800) 25%, var(--hairline) 50%, var(--ink-800) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }

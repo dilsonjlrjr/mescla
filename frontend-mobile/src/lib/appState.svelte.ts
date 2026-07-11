@@ -13,6 +13,8 @@ export const appState = $state({
   pendingCatalogMfrId: null as number | null,
   /** Tintas escolhidas pra comparação (máx 6) — badge no menu Mais. */
   compareIds: [] as number[],
+  /** Pré-preenche o form do estoque ("Tenho outra parecida" no detalhe). */
+  pendingStockPrefill: null as { manufacturerId: number; hex: string } | null,
 });
 
 export function addToCompare(id: number): boolean {

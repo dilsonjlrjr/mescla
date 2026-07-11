@@ -1,21 +1,23 @@
 <script lang="ts">
+  // Catálogo (Tintômetro): arquivo de museu — índice No., ordem por matiz,
+  // pills de filtro por fabricante e rodapé com contagem mono.
   import { onMount } from 'svelte';
-  import Textfield from '@smui/textfield';
-  import Select, { Option } from '@smui/select';
   import Dialog, { Content as DialogContent } from '@smui/dialog';
-  import Icon from './Icon.svelte';
   import PaintCard from './PaintCard.svelte';
   import PaintBottle from './PaintBottle.svelte';
   import { toast } from '../toast.svelte';
+  import { hueOf, hexOf, contrastOn } from '../ui';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
-  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix';
+  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock';
 
   interface Props {
     onNavigate: (view: View, paintId?: number) => void;
+    initialManufacturer?: string | null;
+    initialPaintId?: number | null;
   }
 
-  let { onNavigate }: Props = $props();
+  let { onNavigate, initialManufacturer = null, initialPaintId = null }: Props = $props();
 
   interface Paint {
     id: number;
@@ -26,9 +28,6 @@
     r: number;
     g: number;
     b: number;
-    swatchPath: string;
-    thumbnail: string;
-    imageUrl: string;
     finishType: string;
     paintType: string;
     coverage: string;
@@ -37,13 +36,14 @@
   }
 
   let paints: Paint[] = $state([]);
-  let filtered: Paint[] = $state([]);
   let loading = $state(true);
   let searchQuery = $state('');
-  let selectedManufacturer = $state('');
+  // svelte-ignore state_referenced_locally -- captura intencional do valor inicial
+  let selectedManufacturer = $state(initialManufacturer ?? '');
   let manufacturers: { id: number; name: string }[] = $state([]);
   let selectedPaint: Paint | null = $state(null);
   let dialogOpen = $state(false);
+  let sortBy: 'hue' | 'name' | 'code' = $state('hue');
 
   onMount(async () => {
     try {
@@ -52,8 +52,12 @@
         PaintService.GetManufacturers(),
       ]);
       paints = allPaints || [];
-      filtered = paints;
       manufacturers = mfrs || [];
+      // ficha aberta direto da busca global
+      if (initialPaintId) {
+        const p = paints.find(x => x.id === initialPaintId);
+        if (p) openDetail(p);
+      }
     } catch (e) {
       console.error('Erro carregando tintas:', e);
     } finally {
@@ -65,7 +69,7 @@
   const PAGE = 60;
   let visibleCount = $state(PAGE);
 
-  $effect(() => {
+  let filtered = $derived.by(() => {
     let result = paints;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -78,7 +82,16 @@
     if (selectedManufacturer) {
       result = result.filter(p => p.manufacturer === selectedManufacturer);
     }
-    filtered = result;
+    const sorted = [...result];
+    if (sortBy === 'hue') sorted.sort((a, b) => hueOf(a.r, a.g, a.b) - hueOf(b.r, b.g, b.b));
+    else if (sortBy === 'name') sorted.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    else sorted.sort((a, b) => (a.code || '').localeCompare(b.code || '', 'pt-BR'));
+    return sorted;
+  });
+
+  $effect(() => {
+    // qualquer mudança de filtro/ordem volta pra primeira página
+    searchQuery; selectedManufacturer; sortBy;
     visibleCount = PAGE;
   });
 
@@ -94,281 +107,360 @@
     onNavigate('mix', paint.id);
   }
 
-  function hexOf(p: Paint): string {
-    const h = (n: number) => n.toString(16).padStart(2, '0').toUpperCase();
-    return `${h(p.r)}${h(p.g)}${h(p.b)}`;
+  function copyHex(p: Paint) {
+    navigator.clipboard.writeText(hexOf(p.r, p.g, p.b));
+    toast(`${hexOf(p.r, p.g, p.b)} copiado`);
   }
 
-  function copyHex(p: Paint) {
-    navigator.clipboard.writeText(`#${hexOf(p)}`);
-    toast(`#${hexOf(p)} copiado`);
+  function pickBrand(name: string) {
+    selectedManufacturer = selectedManufacturer === name ? '' : name;
   }
 </script>
 
 <div class="page-container">
-  <!-- Header -->
-  <div class="page-header animate-rise">
-    <h1 class="page-title">Catálogo</h1>
-    <p class="page-subtitle">{filtered.length.toLocaleString('pt-BR')} de {paints.length.toLocaleString('pt-BR')} tintas — clique numa tinta pra ver detalhes e pedir a equivalência</p>
-    <div class="page-divider"></div>
+  <!-- Header: título + contagem mono à esquerda, pills de filtro à direita -->
+  <div class="catalog-head animate-rise">
+    <div>
+      <h1 class="page-title">Catálogo</h1>
+      <p class="catalog-count font-mono">
+        {paints.length.toLocaleString('pt-BR')} tintas&nbsp;&nbsp;·&nbsp;&nbsp;<button class="mfr-link" onclick={() => onNavigate('manufacturers')} title="Ver fabricantes">{manufacturers.length} fabricantes</button>
+      </p>
+    </div>
+    <div class="brand-pills">
+      <button class="filter-pill" class:active={selectedManufacturer === ''} onclick={() => (selectedManufacturer = '')}>Todas</button>
+      {#each manufacturers as mfr (mfr.id)}
+        <button class="filter-pill" class:active={selectedManufacturer === mfr.name} onclick={() => pickBrand(mfr.name)}>{mfr.name}</button>
+      {/each}
+    </div>
   </div>
 
-  <!-- Filters -->
-  <div class="panel p-3 mb-6 animate-rise" style="animation-delay: 80ms; position: relative; z-index: 1;">
-    <div class="flex gap-3">
-      <div class="flex-1">
-        <Textfield
-          variant="outlined"
-          bind:value={searchQuery}
-          label="Buscar por nome, código ou fabricante..."
-          style="width: 100%;"
-        >
-          {#snippet leadingIcon()}
-            <span class="mdc-text-field__icon mdc-text-field__icon--leading" style="color: var(--ink-500); display: flex;"><Icon name="search" size={17} /></span>
-          {/snippet}
-        </Textfield>
-      </div>
-      <div style="min-width: 240px;">
-        <Select variant="outlined" bind:value={selectedManufacturer} label="Fabricante" style="width: 100%;">
-          <Option value="">Todos os fabricantes</Option>
-          {#each manufacturers as mfr}
-            <Option value={mfr.name}>{mfr.name}</Option>
-          {/each}
-        </Select>
-      </div>
-    </div>
-
-    <!-- Filtros ativos como chips-pílula + contagem em etiqueta mono -->
-    {#if searchQuery || selectedManufacturer}
-      <div class="filter-meta">
-        {#if searchQuery}
-          <button class="filter-chip" onclick={() => searchQuery = ''} title="Limpar busca">
-            "{searchQuery}" <Icon name="close" size={11} />
-          </button>
-        {/if}
-        {#if selectedManufacturer}
-          <button class="filter-chip" onclick={() => selectedManufacturer = ''} title="Limpar filtro de marca">
-            {selectedManufacturer} <Icon name="close" size={11} />
-          </button>
-        {/if}
-        <span class="count-tag font-mono">{filtered.length.toLocaleString('pt-BR')} de {paints.length.toLocaleString('pt-BR')}</span>
-      </div>
-    {/if}
+  <div class="catalog-search animate-rise" style="animation-delay: 60ms;">
+    <input
+      type="search"
+      bind:value={searchQuery}
+      placeholder="Buscar por nome, código ou fabricante"
+      aria-label="Buscar tinta"
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      spellcheck="false"
+    />
   </div>
 
   <!-- Grid -->
   {#if loading}
-    <div class="grid-5">
-      {#each Array(15) as _}
-        <div class="panel" style="overflow: hidden;">
-          <div class="skeleton w-full" style="aspect-ratio: 1/1; border-radius: 0;"></div>
-          <div class="p-3" style="display: flex; flex-direction: column; gap: 8px;">
-            <div class="skeleton" style="height: 12px; width: 75%;"></div>
-            <div class="skeleton" style="height: 10px; width: 50%;"></div>
-          </div>
+    <div class="catalog-grid">
+      {#each Array(12) as _, i (i)}
+        <div>
+          <div class="skeleton" style="aspect-ratio: 4/3; margin-bottom: 10px;"></div>
+          <div class="skeleton" style="height: 12px; width: 75%; margin-bottom: 6px;"></div>
+          <div class="skeleton" style="height: 10px; width: 50%;"></div>
         </div>
       {/each}
     </div>
   {:else}
-    <div class="grid-5">
+    <div class="catalog-grid">
       {#each visible as paint, i (paint.id)}
-        <div class="animate-rise" style="animation-delay: {Math.min(i * 20, 200)}ms;">
-          <PaintCard {paint} onclick={() => openDetail(paint)} />
+        <div class="animate-rise" style="animation-delay: {Math.min(i * 15, 180)}ms;">
+          <PaintCard {paint} index={i + 1} onclick={() => openDetail(paint)} />
         </div>
       {/each}
     </div>
 
     {#if visibleCount < filtered.length}
-      <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 28px;">
-        <button class="btn-ghost" onclick={() => visibleCount += PAGE * 2}>
+      <div class="load-more">
+        <button class="pill-light" onclick={() => (visibleCount += PAGE * 2)}>
           Mostrar mais {Math.min(PAGE * 2, filtered.length - visibleCount)} tintas
         </button>
-        <span class="font-mono" style="font-size: 11px; color: var(--ink-500);">exibindo {visibleCount} de {filtered.length.toLocaleString('pt-BR')}</span>
       </div>
     {/if}
 
     {#if filtered.length === 0}
       <div class="empty-state">
-        <div class="empty-icon"><Icon name="search-off" size={40} /></div>
         <p class="empty-title">Nada com esse nome</p>
-        <p class="empty-hint">Tente o código do pote (ex.: 70.951) ou só parte do nome — ou limpe o filtro de marca.</p>
+        <p class="empty-hint">Tente o código do pote (ex.: 70.951) ou só parte do nome. Ou limpe o filtro de marca.</p>
       </div>
     {/if}
+
+    <!-- Rodapé: contagem à esquerda, ordenação à direita -->
+    <div class="catalog-foot">
+      <span class="font-mono foot-count">Mostrando {Math.min(visibleCount, filtered.length)} de {filtered.length.toLocaleString('pt-BR')}</span>
+      <label class="foot-sort">
+        <span class="foot-sort-label">Ordenar:</span>
+        <select bind:value={sortBy} aria-label="Ordenar catálogo">
+          <option value="hue">matiz</option>
+          <option value="name">nome</option>
+          <option value="code">código</option>
+        </select>
+      </label>
+    </div>
   {/if}
 </div>
 
-<!-- Detail Dialog -->
-<Dialog bind:open={dialogOpen} surface$style="background: var(--ink-900); border: 1px solid var(--ink-700); border-radius: var(--radius-surface); max-width: 560px; width: 100%;">
+<!-- Ficha da tinta -->
+<Dialog bind:open={dialogOpen} surface$style="background: var(--papel); border-radius: var(--radius-surface); max-width: 560px; width: 100%;">
   {#if selectedPaint}
-    <!-- Color hero: a cor real da tinta, chapada, com o furo de catálogo -->
-    <div class="color-hero" style="background: rgb({selectedPaint.r}, {selectedPaint.g}, {selectedPaint.b});">
-      <span class="hero-punch"></span>
-      <span class="hero-bottle">
-        <PaintBottle r={selectedPaint.r} g={selectedPaint.g} b={selectedPaint.b} size={106} label={selectedPaint.code} />
+    <div class="detail-hero" style="background: rgb({selectedPaint.r}, {selectedPaint.g}, {selectedPaint.b});">
+      <span class="detail-hero-hex font-mono" style="color: {contrastOn(selectedPaint.r, selectedPaint.g, selectedPaint.b)};">{hexOf(selectedPaint.r, selectedPaint.g, selectedPaint.b)}</span>
+      <span class="detail-bottle">
+        <PaintBottle r={selectedPaint.r} g={selectedPaint.g} b={selectedPaint.b} size={104} />
       </span>
-      <button class="close-btn" onclick={() => dialogOpen = false} aria-label="Fechar">
-        <Icon name="close" size={18} />
-      </button>
+      <button class="detail-close" style="color: {contrastOn(selectedPaint.r, selectedPaint.g, selectedPaint.b)};" onclick={() => (dialogOpen = false)} aria-label="Fechar">×</button>
     </div>
 
     <DialogContent>
-      <div class="mb-4">
-        <h2 class="font-display text-3xl font-bold text-white mb-1">{selectedPaint.name}</h2>
-        <p style="font-size: 14px; color: var(--ink-500);">{selectedPaint.manufacturer} · {selectedPaint.productLine}</p>
-      </div>
+      <div class="detail-body">
+        <h2 class="detail-name font-display">{selectedPaint.name}</h2>
+        <p class="detail-sub">{selectedPaint.manufacturer}{selectedPaint.productLine ? ` · ${selectedPaint.productLine}` : ''}</p>
 
-      <div class="flex items-center gap-2 mb-5">
-        <span class="font-mono text-xs font-medium" style="padding: 4px 12px; border-radius: var(--radius-pill); background: var(--ink-800); color: var(--lacquer-tint);">{selectedPaint.code}</span>
-      </div>
+        <div class="detail-grid font-mono">
+          <button class="detail-cell click" onclick={() => copyHex(selectedPaint!)} title="Copiar hex">
+            <span class="detail-label">Hex · copiar</span>
+            <span class="detail-value">{hexOf(selectedPaint.r, selectedPaint.g, selectedPaint.b)}</span>
+          </button>
+          <div class="detail-cell">
+            <span class="detail-label">RGB</span>
+            <span class="detail-value">{selectedPaint.r} {selectedPaint.g} {selectedPaint.b}</span>
+          </div>
+          {#if selectedPaint.code}
+            <div class="detail-cell">
+              <span class="detail-label">Código</span>
+              <span class="detail-value">{selectedPaint.code}</span>
+            </div>
+          {/if}
+          {#if selectedPaint.finishType}
+            <div class="detail-cell">
+              <span class="detail-label">Acabamento</span>
+              <span class="detail-value">{selectedPaint.finishType}</span>
+            </div>
+          {/if}
+          {#if selectedPaint.paintType}
+            <div class="detail-cell">
+              <span class="detail-label">Tipo</span>
+              <span class="detail-value">{selectedPaint.paintType}</span>
+            </div>
+          {/if}
+          {#if selectedPaint.volume}
+            <div class="detail-cell">
+              <span class="detail-label">Volume</span>
+              <span class="detail-value">{selectedPaint.volume}</span>
+            </div>
+          {/if}
+        </div>
 
-      <div class="grid-2">
-        <button class="panel p-3 copy-cell" onclick={() => copyHex(selectedPaint!)} title="Copiar código hex">
-          <div class="detail-label">Cor · clique pra copiar</div>
-          <div class="font-mono text-sm text-white">#{hexOf(selectedPaint)} · {selectedPaint.r}, {selectedPaint.g}, {selectedPaint.b}</div>
+        <button class="pill-dark w-full" onclick={() => goToRecipe(selectedPaint!)}>
+          Buscar receita equivalente
         </button>
-        {#if selectedPaint.finishType}
-          <div class="panel p-3">
-            <div class="detail-label">Acabamento</div>
-            <div class="text-sm text-white">{selectedPaint.finishType}</div>
-          </div>
-        {/if}
-        {#if selectedPaint.paintType}
-          <div class="panel p-3">
-            <div class="detail-label">Tipo</div>
-            <div class="text-sm text-white">{selectedPaint.paintType}</div>
-          </div>
-        {/if}
-        {#if selectedPaint.coverage}
-          <div class="panel p-3">
-            <div class="detail-label">Cobertura</div>
-            <div class="text-sm text-white">{selectedPaint.coverage}</div>
-          </div>
-        {/if}
-        {#if selectedPaint.opacity}
-          <div class="panel p-3">
-            <div class="detail-label">Opacidade</div>
-            <div class="text-sm text-white">{selectedPaint.opacity}</div>
-          </div>
-        {/if}
-        {#if selectedPaint.volume}
-          <div class="panel p-3">
-            <div class="detail-label">Volume</div>
-            <div class="text-sm text-white">{selectedPaint.volume}</div>
-          </div>
-        {/if}
       </div>
-
-      <button class="btn-primary" style="margin-top: 20px;" onclick={() => goToRecipe(selectedPaint!)}>
-        <Icon name="flask" size={17} />
-        Encontrar equivalência
-      </button>
     </DialogContent>
   {/if}
 </Dialog>
 
 <style>
-  .color-hero {
-    width: 100%;
-    height: 128px;
+  .catalog-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 28px;
+    margin-bottom: 24px;
+  }
+
+  .catalog-count {
+    font-size: 12.5px;
+    color: var(--text-2);
+    margin-top: 4px;
+  }
+
+  .mfr-link {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+  }
+
+  .mfr-link:hover {
+    color: var(--laca-deep);
+  }
+
+  .brand-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+    max-width: 60%;
+  }
+
+  .catalog-search {
+    margin-bottom: 32px;
+  }
+
+  .catalog-search input {
+    width: min(420px, 100%);
+    height: 42px;
+    padding: 0 16px;
+    font: inherit;
+    font-size: 13.5px;
+  }
+
+  .catalog-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 26px 20px;
+  }
+
+  .catalog-grid > * {
+    min-width: 0;
+  }
+
+  .load-more {
+    display: flex;
+    justify-content: center;
+    margin-top: 32px;
+  }
+
+  .catalog-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 40px;
+    padding-top: 16px;
+    border-top: 1px solid var(--hairline);
+  }
+
+  .foot-count {
+    font-size: 12px;
+    color: var(--text-2);
+  }
+
+  .foot-sort {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--grafite);
+  }
+
+  .foot-sort-label {
+    color: var(--text-2);
+  }
+
+  .foot-sort select {
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    background: transparent;
+    font: inherit;
+    font-weight: 700;
+    color: var(--grafite);
+    cursor: pointer;
+    padding-right: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' fill='none' stroke='%231a1712' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right center;
+  }
+
+  /* Ficha */
+  .detail-hero {
     position: relative;
+    width: 100%;
+    height: 148px;
   }
 
-  /* furo de catálogo — assinatura do swatch chapado */
-  .hero-punch {
+  .detail-hero-hex {
     position: absolute;
-    top: 12px;
-    right: 12px;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--ink-950);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+    bottom: 14px;
+    left: 20px;
+    font-size: 12px;
+    opacity: 0.92;
   }
 
-  /* a garrafinha em pé na frente da parede pintada, apoiada na base do hero */
-  .hero-bottle {
+  .detail-bottle {
     position: absolute;
     right: 26px;
     bottom: -1px;
     display: flex;
-    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3));
   }
 
-  /* fechar à esquerda pra não cobrir o furo (e casar com o padrão macOS) */
-  .close-btn {
+  .detail-close {
     position: absolute;
-    top: 12px;
-    left: 12px;
+    top: 10px;
+    left: 14px;
     width: 30px;
     height: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
     border: none;
-    border-radius: 50%;
-    background: rgba(15, 13, 18, 0.4);
-    color: rgba(255, 255, 255, 0.85);
+    background: none;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.8;
+  }
+
+  .detail-close:hover {
+    opacity: 1;
+  }
+
+  .detail-body {
+    padding: 8px 4px 4px;
+  }
+
+  .detail-name {
+    font-size: 28px;
+    font-weight: 720;
+    color: var(--grafite);
+    margin-bottom: 4px;
+  }
+
+  .detail-sub {
+    font-size: 13.5px;
+    color: var(--text-2);
+    margin-bottom: 22px;
+  }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: 22px;
+  }
+
+  .detail-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 12px 14px 0;
+    border: none;
+    background: none;
+    text-align: left;
+    font: inherit;
+  }
+
+  .detail-cell.click {
     cursor: pointer;
   }
 
-  .close-btn:hover {
-    background: rgba(15, 13, 18, 0.6);
+  .detail-cell.click:hover .detail-value {
+    color: var(--laca-deep);
   }
 
   .detail-label {
-    font-size: 10px;
+    font-size: 9.5px;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
-    font-weight: 600;
-    margin-bottom: 4px;
-    color: var(--ink-500);
+    letter-spacing: 0.14em;
+    color: var(--text-2);
   }
 
-  .copy-cell {
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-    transition: border-color 0.15s ease;
-  }
-
-  .copy-cell:hover {
-    border-color: var(--lacquer);
-  }
-
-  /* Filtros ativos: pílulas removíveis + etiqueta mono de contagem */
-  .filter-meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-top: 10px;
-  }
-
-  .filter-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 12px;
-    border: 1px solid var(--ink-600);
-    border-radius: var(--radius-pill);
-    background: var(--ink-850);
-    color: var(--ink-300);
-    font: inherit;
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: border-color 0.15s ease, color 0.15s ease;
-  }
-
-  .filter-chip:hover {
-    border-color: var(--lacquer);
-    color: var(--lacquer-deep);
-  }
-
-  .count-tag {
-    margin-left: auto;
-    font-size: 11px;
-    color: var(--ink-500);
+  .detail-value {
+    font-size: 13px;
+    color: var(--grafite);
   }
 
   :global(.mdc-dialog__surface) {

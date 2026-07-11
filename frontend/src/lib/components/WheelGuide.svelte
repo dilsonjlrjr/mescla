@@ -54,7 +54,7 @@
           <h4>O matiz vira um círculo</h4>
           <p>
             As cores são organizadas pelo <strong>matiz</strong>, do vermelho ao roxo e de volta. As
-            três <strong>primárias</strong> — vermelho, amarelo e azul — se misturam pra gerar todas
+            três <strong>primárias</strong> (vermelho, amarelo e azul) se misturam pra gerar todas
             as outras. Quem está <em>lado a lado</em> se parece; quem está <em>de frente</em> se completa.
           </p>
         </div>
@@ -71,8 +71,8 @@
         <div class="card-text">
           <h4>Metade quente, metade fria</h4>
           <p>
-            Vermelho, laranja e amarelo são <strong>quentes</strong> — avançam e chamam atenção. Verde,
-            azul e roxo são <strong>frias</strong> — recuam. Essa é a base do próximo truque: luz
+            Vermelho, laranja e amarelo são <strong>quentes</strong>: avançam e chamam atenção. Verde,
+            azul e roxo são <strong>frias</strong>: recuam. Essa é a base do próximo truque: luz
             costuma ser quente, sombra costuma ser fria.
           </p>
         </div>
@@ -82,7 +82,7 @@
       <div class="card card-wide">
         <div class="card-text">
           <h4>As três harmonias que resolvem tudo</h4>
-          <p>Combinações que funcionam — testadas aqui na sua cor:</p>
+          <p>Combinações que funcionam, testadas aqui na sua cor:</p>
         </div>
         <div class="harmony-rows">
           {#each [{ label: 'Complementar', sw: comp, note: 'opostas → contraste que vibra' }, { label: 'Análogas', sw: analog, note: 'vizinhas → combinam sem esforço' }, { label: 'Tríade', sw: triad, note: '3 espaçadas → colorido equilibrado' }] as row}
@@ -102,7 +102,7 @@
         <div class="card-text">
           <h4>O pulo do gato: clarear e escurecer sem "lama"</h4>
           <p>
-            Branco e preto puros <strong>matam</strong> a cor — ela fica leitosa ou suja. O jeito do
+            Branco e preto puros <strong>matam</strong> a cor: ela fica leitosa ou suja. O jeito do
             pintor é <strong>girar o matiz</strong>: pra iluminar, caminhe pro <em>amarelo</em> e suba
             o tom; pra sombrear, caminhe pro <em>azul</em> (ou puxe o complementar) e desça. Assim a
             cor continua viva em toda a escala.

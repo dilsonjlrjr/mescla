@@ -1,24 +1,25 @@
 <script lang="ts">
   // Mesclar — a jornada nº 1: "como reproduzo esta cor com o que tenho?"
-  // Form de 2 campos + CTA acima da dobra; resultado renderiza NA MESMA tela
-  // (o form recolhe pra uma barra compacta; o back do Android re-expande).
-  // A receita é calculada por marca da estante — a melhor aparece primeiro,
-  // as outras viram chips.
+  // Form de 2 campos + CTA; resultado renderiza NA MESMA tela (o back do
+  // Android re-expande o form via pilha de histórico). A receita é calculada
+  // por marca da estante — a melhor aparece primeiro, as outras viram pills.
   import Icon from '../components/Icon.svelte';
   import PaintBottle from '../components/PaintBottle.svelte';
-  import DeltaBadge from '../components/DeltaBadge.svelte';
+  import BrandMark from '../components/BrandMark.svelte';
+  import FormulaRibbon from '../components/FormulaRibbon.svelte';
   import FullScreenSearch from '../components/FullScreenSearch.svelte';
   import BrandSheet from '../components/BrandSheet.svelte';
   import DeltaScaleSheet from '../components/DeltaScaleSheet.svelte';
   import BenchMode from '../components/BenchMode.svelte';
   import { pushLayer, switchTab } from '../nav.svelte';
-  import { allManufacturers, allPaints, paintById, type Paint } from '../services/catalog';
+  import { allManufacturers, allPaints, paintById, hexOf, type Paint } from '../services/catalog';
   import { suggestEquivalentRecipe, suggestFromStock, bestBrandsFor, type EquivalentRecipe, type BrandBest } from '../services/engine';
   import { shelf, toggleShelf } from '../services/shelf.svelte';
   import { stock } from '../services/stock.svelte';
   import { appState } from '../appState.svelte';
   import { recents, rememberMescla, rememberPaint } from '../recents.svelte';
   import { toast } from '../toast.svelte';
+  import { contrastOn, deltaVerdict, deltaIsGood } from '../ui';
 
   let sourcePaint: Paint | null = $state(null);
   let searchOpen = $state(false);
@@ -29,16 +30,14 @@
   let recipes: EquivalentRecipe[] = $state([]);
   let activeIdx = $state(0);
   let showResult = $state(false);
-  let unit: 'drops' | 'percent' = $state('drops'); // bancada mede em gotas
   let bestBrands: BrandBest[] = $state([]);
-  let firstResultHintSeen = $state(localStorage.getItem('mescla.hint.deltae') === '1');
   // Priorizar o estoque próprio: quando ligado, a receita feita só com as tintas
   // que o pintor tem entra na disputa (e, se alcança a cor, aparece primeiro).
   let stockPriority = $state(stock.paints.length > 0);
 
   let closeResultLayer: (() => void) | null = null;
 
-  // Deep-link interno: Catálogo → "Mesclar esta cor".
+  // Deep-link interno: Catálogo → "Gerar fórmula equivalente".
   $effect(() => {
     if (appState.pendingMesclarPaint) {
       sourcePaint = appState.pendingMesclarPaint;
@@ -54,6 +53,13 @@
   let usingStock = $derived(stockPriority && stock.paints.length > 0);
   let canMesclar = $derived(sourcePaint !== null && (shelf.manufacturerIds.length > 0 || usingStock));
   let sameBrand = $derived(active !== null && active.targetManufacturer === active.sourceManufacturer);
+  let brandLabel = $derived(
+    shelfNames.length === 0
+      ? 'Marcas'
+      : shelfNames.length === 1
+        ? shelfNames[0]
+        : `${shelfNames[0]} +${shelfNames.length - 1}`
+  );
 
   function openResult() {
     if (showResult) return;
@@ -91,7 +97,7 @@
         }
       }
       if (found.length === 0) {
-        toast('Nada pra mesclar — escolha marcas ou cadastre tintas no estoque.', 'error');
+        toast('Nada pra mesclar: escolha marcas ou cadastre tintas no estoque.', 'error');
         return;
       }
       found.sort((a, b) => a.deltaE - b.deltaE);
@@ -122,11 +128,6 @@
     }
   }
 
-  function dismissHint() {
-    firstResultHintSeen = true;
-    localStorage.setItem('mescla.hint.deltae', '1');
-  }
-
   // ── Gotas: menor proporção inteira (gcd + maior resto) — portado do desktop ──
   function gcd(a: number, b: number): number {
     return b === 0 ? a : gcd(b, a % b);
@@ -151,14 +152,13 @@
 
   function recipeText(): string {
     if (!active) return '';
-    const measure = (i: number) =>
-      unit === 'drops'
-        ? `${drops[i]} ${drops[i] === 1 ? 'gota' : 'gotas'}`
-        : `${active!.ingredients[i].percentage.toFixed(1)}%`;
     return [
       `${active.sourceName} (${active.sourceManufacturer}) → ${active.targetManufacturer}`,
-      ...(unit === 'drops' ? [`Mistura de ${totalDrops} gotas`] : []),
-      ...active.ingredients.map((ing, i) => `${measure(i)}  ${ing.name}${ing.code ? ` (${ing.code})` : ''}`),
+      `Mistura de ${totalDrops} gotas`,
+      ...active.ingredients.map(
+        (ing, i) =>
+          `${drops[i]} ${drops[i] === 1 ? 'gota' : 'gotas'} (${ing.percentage.toFixed(1)}%)  ${ing.name}${ing.code ? ` (${ing.code})` : ''}`
+      ),
       `ΔE2000 ${active.deltaE.toFixed(2)}`,
     ].join('\n');
   }
@@ -216,262 +216,237 @@
     switchTab('cor');
   }
 
-  // Texto legível sobre a cor da tinta escolhida (a metade de cima do bilhete
-  // se pinta com ela — luma decide grafite ou papel).
-  function readableOn(r: number, g: number, b: number): string {
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.58 ? '#1a1712' : '#f5f5f4';
+  function pickSource(p: Paint) {
+    sourcePaint = p;
+    rememberPaint(p.id);
+    // Com resultado aberto, trocar a tinta re-roda a fórmula na hora.
+    if (showResult) void mesclar();
   }
 </script>
 
 <div class="mesclar">
+  <!-- Header papel: marca + seletor de marcas da estante -->
+  <header class="head">
+    <span class="head-brand">
+      <BrandMark size={26} />
+      <span class="head-name font-display">Mescla</span>
+    </span>
+    <button class="head-shelf pressable" onclick={() => (brandSheetOpen = true)}>
+      {brandLabel}
+      <Icon name="chevron-down" size={14} />
+    </button>
+  </header>
+
   {#if showResult && active}
-    <!-- Barra compacta: tap re-expande o form (mesmo efeito do back) -->
-    <button class="compact-bar pressable" onclick={collapseResult}>
-      <span class="color-pair" style="width: 26px; height: 17px;">
-        <span style="background: rgb({active.sourceR}, {active.sourceG}, {active.sourceB});"></span>
-        <span style="background: rgb({active.resultR}, {active.resultG}, {active.resultB});"></span>
+    <!-- Bloco de origem: cor CHAPADA, raio 0, full-bleed. Tap troca a tinta. -->
+    <button
+      class="origin pressable"
+      style="background: rgb({active.sourceR}, {active.sourceG}, {active.sourceB}); color: {contrastOn(active.sourceR, active.sourceG, active.sourceB)};"
+      onclick={() => (searchOpen = true)}
+    >
+      <span class="origin-tag font-mono">Tinta de origem</span>
+      <span class="origin-name">{active.sourceName}</span>
+      <span class="origin-meta font-mono">
+        {active.sourceManufacturer}{sourcePaint?.line ? ` · ${sourcePaint.line}` : ''}&nbsp;&nbsp;&nbsp;#{[active.sourceR, active.sourceG, active.sourceB].map(n => n.toString(16).padStart(2, '0').toUpperCase()).join('')}
       </span>
-      <span class="compact-text">{active.sourceName} → {active.targetManufacturer}</span>
-      <Icon name="chevron-down" size={16} />
     </button>
 
-    {#if recipes.length > 1}
-      <div class="brand-tabs">
-        {#each recipes as r, i (r.targetManufacturer)}
-          <button class="brand-tab pressable" class:active={i === activeIdx} onclick={() => (activeIdx = i)}>
-            {r.targetManufacturer}
-            <span class="font-mono">ΔE {r.deltaE.toFixed(1)}</span>
-          </button>
-        {/each}
-      </div>
-    {/if}
-
-    {#if !active.reproducible}
-      <div class="warn-banner animate-rise">
-        <span class="warn-icon"><Icon name="info" size={18} /></span>
-        <div>
-          <p class="warn-title">Nenhuma mistura de {active.targetManufacturer} chega perto desta cor</p>
-          <p class="warn-text">A receita abaixo é a melhor aproximação. Compare o par antes de usar.</p>
-        </div>
-      </div>
-    {/if}
-
-    {#if sameBrand}
-      <div class="own-note animate-rise">
-        {#if active.ingredients.length === 1}
-          A {active.targetManufacturer} já tem um tom equivalente — use a tinta abaixo direto, sem misturar.
-        {:else}
-          Esta cor é da própria {active.targetManufacturer} — a mistura abaixo reproduz o tom com <strong>outras</strong> tintas dela.
-        {/if}
-      </div>
-    {/if}
-
-    <!-- O par: alvo × mistura, colados — o momento da verdade -->
-    <div class="verdict animate-rise">
-      <div class="verdict-pair">
-        <div class="verdict-half" style="background: rgb({active.sourceR}, {active.sourceG}, {active.sourceB});">
-          <span class="verdict-tag font-mono">alvo</span>
-        </div>
-        <div class="verdict-half" style="background: rgb({active.resultR}, {active.resultG}, {active.resultB});">
-          <span class="verdict-tag font-mono">mistura</span>
-        </div>
-      </div>
-      <div class="verdict-badge">
-        <DeltaBadge deltaE={active.deltaE} size="lg" onclick={() => { deltaSheetOpen = true; dismissHint(); }} />
-        {#if !firstResultHintSeen}
-          <button class="hint-bubble animate-rise" onclick={() => { deltaSheetOpen = true; dismissHint(); }}>
-            Toque para entender a escala ↑
-          </button>
-        {/if}
-      </div>
-    </div>
-
-    <!-- Receita -->
-    <div class="recipe panel animate-rise">
-      <div class="recipe-head">
-        <h3 class="font-display">{active.reproducible ? 'Receita' : 'Melhor aproximação'}</h3>
-        <div class="unit-toggle">
-          <button class:active={unit === 'drops'} onclick={() => (unit = 'drops')}>gotas</button>
-          <button class:active={unit === 'percent'} onclick={() => (unit = 'percent')}>%</button>
-        </div>
-      </div>
-
-      {#if unit === 'drops'}
-        <p class="recipe-sub">mistura de {totalDrops} {totalDrops === 1 ? 'gota' : 'gotas'} — multiplique (2×, 3×…) pra fazer mais</p>
-      {/if}
-
-      {#each active.ingredients as ing, i (ing.paintId)}
-        <div class="ing-row">
-          <PaintBottle r={ing.r} g={ing.g} b={ing.b} size={44} />
-          <div class="ing-text">
-            <span class="ing-name">{ing.name}</span>
-            {#if ing.code}<span class="ing-code font-mono">{ing.code}</span>{/if}
-          </div>
-          <div class="ing-measure font-mono">
-            {#if unit === 'drops'}
-              <strong>{drops[i]}</strong> <span>{drops[i] === 1 ? 'gota' : 'gotas'}</span>
-            {:else}
-              <strong>{ing.percentage.toFixed(1)}%</strong>
-            {/if}
-          </div>
-        </div>
-      {/each}
-
-      <div class="recipe-actions">
-        <button class="btn-primary" onclick={() => (benchOpen = true)}>
-          <Icon name="flask" size={18} />
-          Modo bancada
-        </button>
-        <div class="recipe-actions-row">
-          <button class="btn-ghost" style="flex: 1;" onclick={copyRecipe}>
-            <Icon name="copy" size={16} />
-            Copiar
-          </button>
-          <button class="btn-ghost" style="flex: 1;" onclick={shareRecipe}>
-            <Icon name="share" size={16} />
-            Compartilhar
-          </button>
-        </div>
-      </div>
-    </div>
-
-    {#if !active.reproducible && bestBrands.length > 0}
-      <div class="panel escape animate-rise">
-        <h3 class="font-display">Sai melhor nestas marcas</h3>
-        {#each bestBrands as b (b.manufacturerId)}
-          <button class="escape-row pressable" onclick={() => pickBrandSuggestion(b)}>
-            <span class="swatch-flat" style="width: 34px; height: 34px; background: rgb({b.r}, {b.g}, {b.b});"></span>
-            <span class="escape-text">
-              <span class="escape-brand">{b.manufacturer}</span>
-              <span class="escape-paint">{b.name}{b.code ? ` · ${b.code}` : ''}</span>
-            </span>
-            <span class="font-mono escape-delta">ΔE {b.deltaE.toFixed(1)}</span>
-          </button>
-        {/each}
-        <button class="btn-ghost" style="width: 100%; margin-top: 10px;" onclick={seeReadyPaints}>
-          <Icon name="pipette" size={16} />
-          Ver tintas prontas mais próximas
-        </button>
-      </div>
-    {/if}
-
-    {#if active.tips.length > 0}
-      <div class="panel tips animate-rise">
-        <h3 class="font-display"><Icon name="info" size={15} /> Dicas de ajuste</h3>
-        <ul>
-          {#each active.tips as tip}
-            <li>{tip}</li>
+    <div class="result-body">
+      {#if recipes.length > 1}
+        <div class="brand-tabs">
+          {#each recipes as r, i (r.targetManufacturer)}
+            <button class="brand-tab pressable" class:active={i === activeIdx} onclick={() => (activeIdx = i)}>
+              {r.targetManufacturer}
+              <span class="font-mono">ΔE {r.deltaE.toFixed(1)}</span>
+            </button>
           {/each}
-        </ul>
-      </div>
-    {/if}
-
-    <p class="screen-note">Cores de tela são aproximadas — confie no ΔE.</p>
-  {:else}
-    <!-- ── Formulário: 2 campos + CTA, tudo acima da dobra ── -->
-    <header class="mesclar-head">
-      <h1 class="screen-title">Mescla</h1>
-      <p class="mesclar-tagline">cor certa, qualquer marca</p>
-    </header>
-
-    <!-- O bilhete: as duas metades do ícone viram o formulário — em cima a
-         cor que quero (a metade se pinta com ela), embaixo o grafite do
-         destino (as marcas que tenho), com a costura na junção. -->
-    <div class="pair-card">
-      {#if sourcePaint}
-        <button
-          class="pair-top filled pressable"
-          style="background: rgb({sourcePaint.r}, {sourcePaint.g}, {sourcePaint.b}); color: {readableOn(sourcePaint.r, sourcePaint.g, sourcePaint.b)};"
-          onclick={() => (searchOpen = true)}
-        >
-          <span class="pair-tag font-mono">quero esta cor</span>
-          <span class="pair-paint">
-            <span class="pair-paint-name">{sourcePaint.name}</span>
-            <span class="pair-paint-meta"><span class="font-mono">{sourcePaint.code}</span> · {sourcePaint.manufacturer}</span>
-          </span>
-          <span class="pair-swap"><Icon name="swap" size={14} /> Trocar</span>
-        </button>
-      {:else}
-        <button class="pair-top empty pressable" onclick={() => (searchOpen = true)}>
-          <span class="pair-tag font-mono">quero esta cor</span>
-          <span class="pair-prompt"><Icon name="search" size={18} /> Nome ou código da tinta…</span>
-        </button>
+        </div>
       {/if}
 
-      <div class="pair-seam" aria-hidden="true"><span></span></div>
-
-      <button class="pair-bottom pressable" onclick={() => (brandSheetOpen = true)}>
-        <span class="pair-tag font-mono">tenho tintas de</span>
-        {#if shelfNames.length === 0}
-          <span class="pair-prompt"><Icon name="building" size={18} /> Escolher marcas…</span>
-        {:else}
-          <span class="brand-chips">
-            {#each shelfNames.slice(0, 3) as name}
-              <span class="mini-chip">{name}</span>
-            {/each}
-            {#if shelfNames.length > 3}
-              <span class="mini-chip more">+{shelfNames.length - 3}</span>
-            {/if}
-          </span>
-        {/if}
-        <span class="pair-chevron"><Icon name="chevron-down" size={16} /></span>
-      </button>
-    </div>
-
-    {#if stock.paints.length > 0}
-      <button
-        class="stock-toggle pressable"
-        class:on={stockPriority}
-        onclick={() => (stockPriority = !stockPriority)}
-        aria-pressed={stockPriority}
-      >
-        <span class="stock-toggle-icon"><Icon name="box" size={18} /></span>
-        <span class="stock-toggle-text">
-          <span class="stock-toggle-title">Priorizar meu estoque</span>
-          <span class="stock-toggle-sub">{stockPriority ? `usando as ${stock.paints.length} tintas que você tem` : `${stock.paints.length} tintas cadastradas`}</span>
-        </span>
-        <span class="stock-switch" class:on={stockPriority}><span class="stock-knob"></span></span>
-      </button>
-    {/if}
-
-    <button class="btn-primary" style="margin-top: 22px;" disabled={!canMesclar || computing} onclick={mesclar}>
-      {#if computing}
-        Calculando mistura…
-      {:else}
-        <Icon name="droplet" size={19} />
-        Mesclar
+      {#if !active.reproducible}
+        <div class="notice-card animate-rise" style="margin-bottom: 16px;">
+          <p class="notice-title">Essa marca não alcança a cor</p>
+          <p class="notice-text">
+            Melhor resultado ficou em ΔE {active.deltaE.toFixed(1)}. A fórmula abaixo é a
+            aproximação mais próxima com {active.targetManufacturer}.
+          </p>
+          <button class="notice-link pressable" onclick={() => (brandSheetOpen = true)}>Tentar outra marca</button>
+        </div>
       {/if}
-    </button>
 
-    {#if !sourcePaint && recents.mesclas.length === 0}
-      <button class="example pressable" onclick={runExample}>
-        <span class="example-eyebrow">Experimente</span>
-        <span class="example-text">Mephiston Red → com tintas Vallejo</span>
-      </button>
-    {/if}
+      {#if sameBrand}
+        <p class="own-note animate-rise">
+          {#if active.ingredients.length === 1}
+            A {active.targetManufacturer} já tem um tom equivalente: use a tinta abaixo direto, sem misturar.
+          {:else}
+            Esta cor é da própria {active.targetManufacturer}. A fórmula abaixo reproduz o tom com outras tintas dela.
+          {/if}
+        </p>
+      {/if}
 
-    {#if recents.mesclas.length > 0}
-      <p class="field-label" style="margin-top: 26px;">Últimas mesclas</p>
-      <div class="history">
-        {#each recents.mesclas as m (m.sourceId + '|' + m.targetManufacturer)}
-          <button class="history-row pressable" onclick={() => rerun(m)}>
-            <span class="color-pair" style="width: 30px; height: 19px;">
-              <span style="background: rgb({m.sourceRGB[0]}, {m.sourceRGB[1]}, {m.sourceRGB[2]});"></span>
-              <span style="background: rgb({m.resultRGB[0]}, {m.resultRGB[1]}, {m.resultRGB[2]});"></span>
-            </span>
-            <span class="history-text">{m.sourceName} → {m.targetManufacturer}</span>
-            <span class="font-mono history-delta">ΔE {m.deltaE.toFixed(1)}</span>
-          </button>
+      <h2 class="h-formula font-display">Fórmula</h2>
+      <p class="formula-sub font-mono">{active.targetManufacturer} · {totalDrops} {totalDrops === 1 ? 'gota' : 'gotas'}</p>
+
+      <FormulaRibbon
+        segments={active.ingredients.map(ing => ({ r: ing.r, g: ing.g, b: ing.b, percentage: ing.percentage, code: ing.code }))}
+      />
+
+      <div class="ings">
+        {#each active.ingredients as ing, i (ing.paintId)}
+          <div class="ing-row">
+            <PaintBottle r={ing.r} g={ing.g} b={ing.b} size={46} />
+            <div class="ing-text">
+              <span class="ing-name">{ing.name}</span>
+              <span class="ing-meta font-mono">{ing.code ? `${ing.code} · ` : ''}{drops[i]} {drops[i] === 1 ? 'gota' : 'gotas'}</span>
+            </div>
+            <span class="ing-pct font-display">{Math.round(ing.percentage)}%</span>
+          </div>
         {/each}
       </div>
+
+      {#if active.tips.length > 0}
+        <p class="tip">{active.tips[0]}</p>
+      {/if}
+
+      <!-- ΔE00: leitura de instrumento -->
+      <div class="delta-block">
+        <button class="delta-main pressable" onclick={() => (deltaSheetOpen = true)}>
+          <span class="section-label">ΔE00</span>
+          <span class="delta-read">
+            <span class="delta-num font-mono">{active.deltaE.toFixed(1)}</span>
+            <span class="delta-verdict" class:good={deltaIsGood(active.deltaE)}>{deltaVerdict(active.deltaE)}</span>
+          </span>
+        </button>
+        <div class="delta-pair" aria-hidden="true">
+          <span class="delta-sw">
+            <span style="background: rgb({active.sourceR}, {active.sourceG}, {active.sourceB});"></span>
+            <span class="font-mono">alvo</span>
+          </span>
+          <span class="delta-sw">
+            <span style="background: rgb({active.resultR}, {active.resultG}, {active.resultB});"></span>
+            <span class="font-mono">mistura</span>
+          </span>
+        </div>
+      </div>
+
+      {#if !active.reproducible && bestBrands.length > 0}
+        <div class="escape animate-rise">
+          <p class="section-label" style="margin-bottom: 4px;">Sai melhor nestas marcas</p>
+          {#each bestBrands as b (b.manufacturerId)}
+            <button class="escape-row pressable" onclick={() => pickBrandSuggestion(b)}>
+              <span class="swatch-flat" style="width: 36px; height: 36px; background: rgb({b.r}, {b.g}, {b.b});"></span>
+              <span class="escape-text">
+                <span class="escape-brand">{b.manufacturer}</span>
+                <span class="escape-paint font-mono">{b.name}{b.code ? ` · ${b.code}` : ''}</span>
+              </span>
+              <span class="font-mono escape-delta">ΔE {b.deltaE.toFixed(1)}</span>
+            </button>
+          {/each}
+          <button class="btn-ghost" style="width: 100%; margin-top: 10px;" onclick={seeReadyPaints}>
+            Ver tintas prontas mais próximas
+          </button>
+        </div>
+      {/if}
+
+      <button class="btn-primary" style="margin-top: 20px;" onclick={() => (benchOpen = true)}>
+        Modo bancada
+      </button>
+      <div class="share-row">
+        <button class="share-btn pressable" onclick={copyRecipe}><Icon name="copy" size={15} /> Copiar receita</button>
+        <button class="share-btn pressable" onclick={shareRecipe}><Icon name="share" size={15} /> Compartilhar</button>
+      </div>
+
+      <p class="screen-note">Cores de tela são aproximadas. Confie no ΔE.</p>
+    </div>
+  {:else}
+    <!-- ── Formulário: origem + estante + CTA ── -->
+    {#if sourcePaint}
+      <button
+        class="origin pressable"
+        style="background: rgb({sourcePaint.r}, {sourcePaint.g}, {sourcePaint.b}); color: {contrastOn(sourcePaint.r, sourcePaint.g, sourcePaint.b)};"
+        onclick={() => (searchOpen = true)}
+      >
+        <span class="origin-tag font-mono">Tinta de origem</span>
+        <span class="origin-name">{sourcePaint.name}</span>
+        <span class="origin-meta font-mono">
+          {sourcePaint.manufacturer}{sourcePaint.line ? ` · ${sourcePaint.line}` : ''}&nbsp;&nbsp;&nbsp;{hexOf(sourcePaint)}
+        </span>
+      </button>
+    {:else}
+      <button class="origin empty pressable" onclick={() => (searchOpen = true)}>
+        <span class="origin-tag font-mono">Tinta de origem</span>
+        <span class="origin-prompt"><Icon name="search" size={18} /> Nome ou código da tinta…</span>
+      </button>
     {/if}
+
+    <div class="form-body">
+      {#if computing}
+        <!-- Board Estados: skeleton + linha mono -->
+        <div class="calc" aria-live="polite">
+          <div class="skeleton" style="height: 48px; margin-bottom: 14px;"></div>
+          {#each [0, 1, 2] as k (k)}
+            <div class="calc-row">
+              <div class="skeleton" style="width: 42px; height: 42px;"></div>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
+                <div class="skeleton" style="height: 12px; width: 70%;"></div>
+                <div class="skeleton" style="height: 12px; width: 45%;"></div>
+              </div>
+              <div class="skeleton" style="width: 40px; height: 18px;"></div>
+            </div>
+          {/each}
+          <p class="calc-note font-mono">Testando combinações no catálogo {shelfNames[0] ?? ''}…</p>
+        </div>
+      {:else}
+        {#if stock.paints.length > 0}
+          <button
+            class="stock-toggle pressable"
+            class:on={stockPriority}
+            onclick={() => (stockPriority = !stockPriority)}
+            aria-pressed={stockPriority}
+          >
+            <span class="stock-toggle-text">
+              <span class="stock-toggle-title">Priorizar meu estoque</span>
+              <span class="stock-toggle-sub font-mono">{stockPriority ? `usando ${stock.paints.length} tintas suas` : `${stock.paints.length} tintas cadastradas`}</span>
+            </span>
+            <span class="switch" class:on={stockPriority}><span class="knob"></span></span>
+          </button>
+        {/if}
+
+        <button class="btn-primary" style="margin-top: 18px;" disabled={!canMesclar} onclick={mesclar}>
+          Gerar fórmula
+        </button>
+
+        {#if !sourcePaint && recents.mesclas.length === 0}
+          <button class="example pressable" onclick={runExample}>
+            <span class="example-eyebrow font-mono">Experimente</span>
+            <span class="example-text">Mephiston Red com tintas Vallejo</span>
+          </button>
+        {/if}
+
+        {#if recents.mesclas.length > 0}
+          <p class="section-label" style="margin: 26px 0 4px;">Últimas mesclas</p>
+          <div class="history">
+            {#each recents.mesclas as m (m.sourceId + '|' + m.targetManufacturer)}
+              <button class="history-row pressable" onclick={() => rerun(m)}>
+                <span class="color-pair" style="width: 30px; height: 19px;">
+                  <span style="background: rgb({m.sourceRGB[0]}, {m.sourceRGB[1]}, {m.sourceRGB[2]});"></span>
+                  <span style="background: rgb({m.resultRGB[0]}, {m.resultRGB[1]}, {m.resultRGB[2]});"></span>
+                </span>
+                <span class="history-text">{m.sourceName} → {m.targetManufacturer}</span>
+                <span class="font-mono history-delta">ΔE {m.deltaE.toFixed(1)}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      {/if}
+    </div>
   {/if}
 </div>
 
 <FullScreenSearch
   open={searchOpen}
   onClose={() => (searchOpen = false)}
-  onSelect={p => { sourcePaint = p; rememberPaint(p.id); }}
+  onSelect={pickSource}
   recentIds={recents.paintIds}
 />
 <BrandSheet open={brandSheetOpen} onClose={() => (brandSheetOpen = false)} mode="shelf" />
@@ -482,367 +457,137 @@
 
 <style>
   .mesclar {
-    padding: 16px 16px 24px;
+    padding: 0 0 24px;
   }
 
-  /* Toggle "priorizar meu estoque" */
-  .stock-toggle {
+  /* ── Header papel com hairline ── */
+  .head {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 12px;
-    width: 100%;
-    margin-top: 16px;
-    padding: 12px 14px;
-    border: 1px solid var(--ink-700);
-    border-radius: 12px;
-    background: var(--ink-900);
-    text-align: left;
+    min-height: 56px;
+    padding: 8px 16px;
+    background: var(--papel);
+    border-bottom: 1px solid var(--hairline);
   }
 
-  .stock-toggle.on {
-    border-color: color-mix(in srgb, var(--lacquer) 55%, transparent);
-    background: color-mix(in srgb, var(--lacquer) 10%, transparent);
+  .head-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
   }
 
-  .stock-toggle-icon {
-    display: flex;
-    color: var(--ink-500);
-    flex-shrink: 0;
+  .head-name {
+    font-size: 20px;
+    font-weight: 750;
+    letter-spacing: -0.015em;
+    color: var(--grafite);
   }
 
-  .stock-toggle.on .stock-toggle-icon {
-    color: var(--lacquer);
-  }
-
-  .stock-toggle-text {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .stock-toggle-title {
+  .head-shelf {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-pill);
+    background: var(--papel);
     font-size: 14px;
     font-weight: 600;
-    color: var(--ink-100);
+    color: var(--grafite);
+    white-space: nowrap;
   }
 
-  .stock-toggle-sub {
-    font-size: 12px;
-    color: var(--ink-500);
-  }
-
-  .stock-switch {
-    flex-shrink: 0;
-    width: 40px;
-    height: 23px;
-    border-radius: 999px;
-    background: var(--ink-700);
-    position: relative;
-    transition: background 0.18s ease;
-  }
-
-  .stock-switch.on {
-    background: var(--lacquer);
-  }
-
-  .stock-knob {
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 17px;
-    height: 17px;
-    border-radius: 50%;
-    background: #fff;
-    transition: transform 0.18s ease;
-  }
-
-  .stock-switch.on .stock-knob {
-    transform: translateX(17px);
-  }
-
-  .mesclar-head {
-    padding: 8px 0 18px;
-  }
-
-  .mesclar-tagline {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.14em;
-    color: var(--ink-500);
-    margin-top: 2px;
-  }
-
-  .field-label {
-    font-size: 13px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--ink-500);
-    margin-bottom: 8px;
-  }
-
-  /* ── O bilhete (par origem × destino — o ícone da marca virando form) ── */
-  .pair-card {
-    position: relative;
-    border-radius: var(--radius-surface);
-    overflow: hidden;
-    border: 1px solid var(--ink-700);
-    background: var(--ink-900);
-  }
-
-  .pair-top,
-  .pair-bottom {
+  /* ── Bloco de origem: cor chapada, raio 0, full-bleed ── */
+  .origin {
     position: relative;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
+    justify-content: flex-end;
+    gap: 4px;
     width: 100%;
+    min-height: 172px;
+    padding: 16px;
     text-align: left;
-    padding: 14px 16px 16px;
   }
 
-  .pair-top {
-    min-height: 112px;
-  }
-
-  .pair-top.empty {
-    background: var(--ink-850);
-    color: var(--ink-500);
-  }
-
-  .pair-top.filled {
-    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
-  }
-
-  /* A metade de baixo é o grafite da marca: o destino ainda desconhecido. */
-  .pair-bottom {
-    min-height: 92px;
-    background: var(--paper);
-    color: rgba(245, 245, 244, 0.68);
-  }
-
-  .pair-tag {
+  .origin-tag {
+    position: absolute;
+    top: 14px;
+    left: 16px;
     font-size: 10.5px;
     font-weight: 600;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    opacity: 0.72;
+    opacity: 0.8;
   }
 
-  .pair-prompt {
+  .origin-name {
+    font-family: var(--font-display);
+    font-optical-sizing: auto;
+    font-size: 38px;
+    font-weight: 750;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .origin-meta {
+    font-size: 12.5px;
+    letter-spacing: 0.03em;
+    opacity: 0.85;
+  }
+
+  .origin.empty {
+    background: var(--ink-800);
+    color: var(--ink-500);
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .origin-prompt {
     display: inline-flex;
     align-items: center;
     gap: 10px;
     font-size: 16px;
-  }
-
-  .pair-paint {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-    max-width: 100%;
-  }
-
-  .pair-paint-name {
-    font-family: var(--font-display);
-    font-optical-sizing: auto;
-    font-size: 19px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
-  }
-
-  .pair-paint-meta {
-    font-size: 13px;
-    opacity: 0.78;
-  }
-
-  .pair-swap {
-    position: absolute;
-    top: 12px;
-    right: 14px;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 13px;
-    font-weight: 600;
-    opacity: 0.85;
-  }
-
-  .pair-chevron {
-    position: absolute;
-    top: 14px;
-    right: 14px;
-    display: flex;
-    opacity: 0.7;
-  }
-
-  /* A costura: a mesma pílula vertical do ícone, cruzando a junção. */
-  .pair-seam {
-    position: relative;
-    height: 0;
-    z-index: 2;
-    pointer-events: none;
-  }
-
-  .pair-seam span {
-    position: absolute;
-    left: 50%;
-    top: 0;
-    transform: translate(-50%, -50%);
-    width: 5px;
-    height: 30px;
-    border-radius: var(--radius-pill);
-    background: var(--ink-950);
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.07);
-  }
-
-  .brand-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .mini-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 5px 11px;
-    border-radius: 999px;
-    background: var(--ink-800);
-    color: var(--ink-300);
-    font-size: 13px;
-    font-weight: 500;
-    white-space: nowrap;
-  }
-
-  .mini-chip.more {
-    background: color-mix(in srgb, var(--lacquer) 12%, transparent);
-    color: var(--lacquer-deep);
-  }
-
-  .example {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 3px;
-    width: 100%;
-    margin-top: 22px;
-    padding: 14px 16px;
-    border: 1px dashed var(--ink-600);
-    border-radius: 12px;
-    background: var(--ink-850);
-    text-align: left;
-  }
-
-  .example-eyebrow {
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--lacquer-deep);
-  }
-
-  .example-text {
-    font-size: 15px;
-    font-weight: 500;
-    color: var(--ink-300);
-  }
-
-  .history {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .history-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-    min-height: 52px;
-    padding: 8px 14px;
-    border: 1px solid var(--ink-700);
-    border-radius: 10px;
-    background: var(--ink-900);
-    text-align: left;
-  }
-
-  .history-text {
-    flex: 1;
-    min-width: 0;
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--ink-300);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .history-delta {
-    flex-shrink: 0;
-    font-size: 12px;
     color: var(--ink-500);
   }
 
-  /* ── Resultado ── */
-  .compact-bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    min-height: 52px;
-    padding: 8px 14px;
-    border: 1px solid var(--ink-700);
-    border-radius: 12px;
-    background: var(--ink-900);
-    margin-bottom: 12px;
-    text-align: left;
-    color: var(--ink-500);
+  .result-body,
+  .form-body {
+    padding: 18px 16px 0;
   }
 
-  .compact-text {
-    flex: 1;
-    min-width: 0;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--ink-100);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
+  /* ── Pills de marca (várias receitas) ── */
   .brand-tabs {
     display: flex;
     gap: 8px;
     overflow-x: auto;
     padding-bottom: 4px;
-    margin-bottom: 12px;
+    margin-bottom: 14px;
     scrollbar-width: none;
+  }
+
+  .brand-tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .brand-tab {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    min-height: 44px;
+    min-height: 42px;
     padding: 0 14px;
-    border-radius: 999px;
-    border: 1px solid var(--ink-700);
-    background: var(--ink-900);
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--hairline);
+    background: var(--papel);
     font-size: 14px;
     font-weight: 600;
-    color: var(--ink-300);
+    color: var(--grafite);
     white-space: nowrap;
     flex-shrink: 0;
   }
@@ -853,162 +598,52 @@
   }
 
   .brand-tab.active {
-    background: var(--paper);
-    border-color: var(--paper);
-    color: var(--ink-950);
+    background: var(--grafite);
+    border-color: var(--grafite);
+    color: var(--papel);
   }
 
   .brand-tab.active span {
-    color: var(--ink-600);
-  }
-
-  .warn-banner {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
-    padding: 14px 16px;
-    border-radius: 12px;
-    border: 1px solid color-mix(in srgb, var(--delta-poor) 45%, transparent);
-    background: color-mix(in srgb, var(--delta-poor) 10%, transparent);
-    margin-bottom: 12px;
-  }
-
-  .warn-icon {
-    color: var(--delta-poor);
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-
-  .warn-title {
-    font-size: 14.5px;
-    font-weight: 600;
-    color: var(--delta-poor);
-  }
-
-  .warn-text {
-    font-size: 13px;
-    color: var(--ink-300);
-    margin-top: 2px;
+    color: color-mix(in srgb, var(--papel) 70%, transparent);
   }
 
   .own-note {
-    padding: 12px 16px;
-    border-radius: 12px;
-    background: var(--ink-800);
     font-size: 13.5px;
-    color: var(--ink-300);
-    margin-bottom: 12px;
+    color: var(--ink-500);
     line-height: 1.5;
-  }
-
-  .verdict {
     margin-bottom: 14px;
   }
 
-  .verdict-pair {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    height: 140px;
-    border-radius: 14px;
-    overflow: hidden;
-    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+  .h-formula {
+    font-size: 26px;
+    font-weight: 750;
+    color: var(--grafite);
   }
 
-  .verdict-half {
-    position: relative;
-  }
-
-  .verdict-tag {
-    position: absolute;
-    bottom: 8px;
-    left: 8px;
-    font-size: 10px;
-    padding: 3px 8px;
-    border-radius: 4px;
-    background: rgba(0, 0, 0, 0.55);
-    color: rgba(255, 255, 255, 0.92);
-  }
-
-  /* Abaixo do par, nunca por cima: o badge não pode cobrir a junção das
-     cores — é ali que o olho compara alvo × mistura. */
-  .verdict-badge {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    margin-top: 12px;
-    position: relative;
-  }
-
-  .hint-bubble {
-    font-size: 12.5px;
-    font-weight: 500;
-    color: var(--lacquer-deep);
-    background: var(--ink-900);
-    border: 1px solid var(--ink-700);
-    border-radius: 999px;
-    padding: 6px 14px;
-    min-height: 36px;
-  }
-
-  .recipe {
-    padding: 16px;
-    margin-bottom: 12px;
-  }
-
-  .recipe-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 4px;
-  }
-
-  .recipe-head h3,
-  .escape h3,
-  .tips h3 {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--ink-100);
-  }
-
-  .unit-toggle {
-    display: inline-flex;
-    padding: 2px;
-    border-radius: 9px;
-    background: var(--ink-800);
-  }
-
-  .unit-toggle button {
-    min-height: 38px;
-    padding: 0 16px;
-    border-radius: 7px;
-    font-size: 13.5px;
-    font-weight: 600;
+  .formula-sub {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
     color: var(--ink-500);
+    margin: 2px 0 12px;
   }
 
-  .unit-toggle button.active {
-    background: var(--lacquer);
-    color: white;
-  }
-
-  .recipe-sub {
-    font-size: 12.5px;
-    color: var(--ink-500);
-    margin-bottom: 10px;
+  /* ── Ingredientes: linhas hairline ── */
+  .ings {
+    margin-top: 14px;
   }
 
   .ing-row {
     display: flex;
     align-items: center;
     gap: 14px;
-    min-height: 60px;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--ink-800);
+    min-height: 64px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--hairline);
   }
 
-  .ing-row:last-of-type {
-    border-bottom: none;
+  .ing-row:first-child {
+    border-top: 1px solid var(--hairline);
   }
 
   .ing-text {
@@ -1020,50 +655,112 @@
   }
 
   .ing-name {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--ink-100);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--grafite);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  .ing-code {
-    font-size: 12px;
-    color: var(--lacquer-tint);
-  }
-
-  .ing-measure {
-    flex-shrink: 0;
-    text-align: right;
-    color: var(--ink-100);
-  }
-
-  .ing-measure strong {
-    font-size: 24px;
-    font-weight: 600;
-  }
-
-  .ing-measure span {
+  .ing-meta {
     font-size: 12px;
     color: var(--ink-500);
   }
 
-  .recipe-actions {
-    margin-top: 14px;
+  .ing-pct {
+    flex-shrink: 0;
+    font-size: 27px;
+    font-weight: 750;
+    color: var(--grafite);
+    letter-spacing: -0.01em;
+  }
+
+  .tip {
+    font-size: 13.5px;
+    color: var(--ink-500);
+    line-height: 1.5;
+    margin-top: 12px;
+  }
+
+  /* ── ΔE00: leitura de instrumento ── */
+  .delta-block {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-top: 18px;
+    padding: 14px 0;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .delta-main {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    align-items: flex-start;
+    gap: 2px;
+    text-align: left;
+    min-width: 0;
   }
 
-  .recipe-actions-row {
+  .delta-read {
     display: flex;
-    gap: 10px;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
   }
 
+  .delta-num {
+    font-size: 54px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--grafite);
+    letter-spacing: -0.02em;
+  }
+
+  .delta-verdict {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--grafite);
+    max-width: 150px;
+    line-height: 1.25;
+  }
+
+  .delta-verdict.good {
+    color: var(--laca);
+  }
+
+  .delta-pair {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .delta-sw {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .delta-sw > span:first-child {
+    width: 44px;
+    height: 36px;
+    border-radius: var(--radius-control);
+    box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.12);
+  }
+
+  .delta-sw .font-mono {
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-500);
+  }
+
+  /* ── Escape (marcas melhores) ── */
   .escape {
-    padding: 16px;
-    margin-bottom: 12px;
+    margin-top: 18px;
   }
 
   .escape-row {
@@ -1072,13 +769,9 @@
     gap: 12px;
     width: 100%;
     min-height: 56px;
-    padding: 8px 4px;
+    padding: 8px 0;
     text-align: left;
-    border-bottom: 1px solid var(--ink-800);
-  }
-
-  .escape-row:last-of-type {
-    border-bottom: none;
+    border-bottom: 1px solid var(--hairline);
   }
 
   .escape-text {
@@ -1091,12 +784,12 @@
 
   .escape-brand {
     font-size: 15px;
-    font-weight: 600;
-    color: var(--ink-100);
+    font-weight: 700;
+    color: var(--grafite);
   }
 
   .escape-paint {
-    font-size: 12.5px;
+    font-size: 12px;
     color: var(--ink-500);
     white-space: nowrap;
     overflow: hidden;
@@ -1109,35 +802,163 @@
     color: var(--ink-500);
   }
 
-  .tips {
-    padding: 16px;
-    margin-bottom: 12px;
+  .share-row {
+    display: flex;
+    justify-content: center;
+    gap: 22px;
+    margin-top: 12px;
   }
 
-  .tips h3 {
-    display: flex;
+  .share-btn {
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 10px;
-  }
-
-  .tips ul {
-    padding-left: 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .tips li {
+    gap: 6px;
+    min-height: 44px;
     font-size: 14px;
-    color: var(--ink-300);
-    line-height: 1.5;
+    font-weight: 600;
+    color: var(--ink-500);
   }
 
   .screen-note {
     text-align: center;
     font-size: 12px;
     color: var(--ink-500);
-    padding: 8px 0 4px;
+    padding: 14px 0 4px;
+  }
+
+  /* ── Form ── */
+  .stock-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 56px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--hairline);
+    text-align: left;
+  }
+
+  .stock-toggle-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .stock-toggle-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--grafite);
+  }
+
+  .stock-toggle-sub {
+    font-size: 11px;
+    color: var(--ink-500);
+  }
+
+  /* Toggle: trilho pílula, laca quando on, knob branco */
+  .switch {
+    flex-shrink: 0;
+    width: 44px;
+    height: 26px;
+    border-radius: var(--radius-pill);
+    background: var(--hairline);
+    position: relative;
+    transition: background 0.18s ease;
+  }
+
+  .switch.on {
+    background: var(--laca);
+  }
+
+  .knob {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.18s ease;
+  }
+
+  .switch.on .knob {
+    transform: translateX(18px);
+  }
+
+  .example {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    width: 100%;
+    margin-top: 22px;
+    padding: 14px 16px;
+    border: 1px dashed var(--hairline);
+    border-radius: var(--radius-surface);
+    background: var(--papel);
+    text-align: left;
+  }
+
+  .example-eyebrow {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--lacquer-deep);
+  }
+
+  .example-text {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--grafite);
+  }
+
+  .history {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .history-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 54px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--hairline);
+    text-align: left;
+  }
+
+  .history-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--grafite);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .history-delta {
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--ink-500);
+  }
+
+  /* ── Calculando (board Estados) ── */
+  .calc-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+  }
+
+  .calc-note {
+    font-size: 12px;
+    color: var(--ink-500);
+    margin-top: 10px;
   }
 </style>

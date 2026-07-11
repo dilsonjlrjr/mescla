@@ -1,8 +1,8 @@
 <script lang="ts">
   // Modo Bancada — consulta com as mãos sujas de tinta, a 40cm da tela:
-  // gotas gigantes (Plex Mono 48-56px), multiplicador ×1 ×2 ×3 com alvos de
-  // 64px, Wake Lock (a tela não apaga) e nenhum outro controle além de sair.
-  import Icon from './Icon.svelte';
+  // fundo PAPEL, números gigantes (Bricolage ~110px), multiplicador ×1 ×2 ×3,
+  // Wake Lock (a tela não apaga) e nenhum outro controle além de sair.
+  import PaintBottle from './PaintBottle.svelte';
   import { pushLayer } from '../nav.svelte';
   import type { EquivalentRecipe } from '../services/engine';
 
@@ -47,55 +47,54 @@
 
 <div class="bench" role="dialog" aria-modal="true" aria-label="Modo bancada">
   <div class="bench-head">
-    <div class="bench-title">
-      <span class="color-pair" style="width: 34px; height: 22px;">
-        <span style="background: rgb({recipe.sourceR}, {recipe.sourceG}, {recipe.sourceB});"></span>
-        <span style="background: rgb({recipe.resultR}, {recipe.resultG}, {recipe.resultB});"></span>
-      </span>
-      <span>{recipe.sourceName}</span>
-    </div>
+    <h1 class="bench-title font-display">Bancada</h1>
     <button class="bench-exit pressable" onclick={exit} aria-label="Sair do modo bancada">
-      <Icon name="close" size={22} />
+      sair <span aria-hidden="true">×</span>
     </button>
+  </div>
+
+  <div class="bench-mult">
+    {#each [1, 2, 3] as m (m)}
+      <button class="bench-mult-btn pressable" class:active={mult === m} onclick={() => (mult = m)}>
+        ×{m}
+      </button>
+    {/each}
+    {#if mult > 1}
+      <span class="bench-mult-note font-mono">{mult === 2 ? 'lote dobrado' : 'lote triplicado'}</span>
+    {/if}
   </div>
 
   <div class="bench-rows">
     {#each recipe.ingredients as ing, i (ing.paintId)}
       <div class="bench-row">
-        <span class="bench-swatch" style="background: rgb({ing.r}, {ing.g}, {ing.b});"></span>
-        <div class="bench-text">
-          <span class="bench-name">{ing.name}</span>
-          {#if ing.code}<span class="bench-code font-mono">{ing.code}</span>{/if}
-        </div>
-        <div class="bench-drops font-mono">
-          {drops[i] * mult}
-          <span>{drops[i] * mult === 1 ? 'gota' : 'gotas'}</span>
+        <PaintBottle r={ing.r} g={ing.g} b={ing.b} size={92} />
+        <div class="bench-main">
+          <div class="bench-count">
+            <span class="bench-num font-display">{drops[i] * mult}</span>
+            <span class="bench-unit">{drops[i] * mult === 1 ? 'gota' : 'gotas'}</span>
+          </div>
+          <span class="bench-meta font-mono">{ing.name}{ing.code ? ` · ${ing.code}` : ''}</span>
         </div>
       </div>
     {/each}
   </div>
 
-  <div class="bench-foot">
-    <p class="bench-total font-mono">total {totalDrops * mult} gotas</p>
-    <div class="bench-mult">
-      {#each [1, 2, 3] as m}
-        <button class="bench-mult-btn pressable" class:active={mult === m} onclick={() => (mult = m)}>
-          ×{m}
-        </button>
-      {/each}
-    </div>
-  </div>
+  <p class="bench-foot">
+    <span class="font-mono">total {totalDrops * mult} gotas</span>
+    A tela fica acesa enquanto você mistura.
+  </p>
 </div>
 
 <style>
+  /* Fundo papel: o modo bancada é uma folha de instrução, não um app. */
   .bench {
     position: fixed;
     inset: 0;
     z-index: 80;
     display: flex;
     flex-direction: column;
-    background: var(--ink-950);
-    padding: calc(var(--safe-top) + 16px) 20px calc(var(--safe-bottom) + 20px);
+    background: var(--papel);
+    padding: calc(var(--safe-top) + 16px) 20px calc(var(--safe-bottom) + 16px);
     animation: fade-in 0.15s ease both;
   }
 
@@ -104,39 +103,60 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 18px;
+    margin-bottom: 10px;
   }
 
   .bench-title {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-family: var(--font-display);
-    font-optical-sizing: auto;
-    font-size: 20px;
-    font-weight: 700;
+    font-size: 30px;
+    font-weight: 750;
     letter-spacing: -0.015em;
-    color: var(--ink-100);
-    min-width: 0;
-  }
-
-  .bench-title span:last-child {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    color: var(--grafite);
   }
 
   .bench-exit {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 0 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink-500);
+  }
+
+  .bench-exit span {
+    font-size: 19px;
+    line-height: 1;
+  }
+
+  .bench-mult {
     display: flex;
     align-items: center;
-    justify-content: center;
-    width: 56px;
-    height: 56px;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .bench-mult-btn {
+    min-width: 56px;
+    height: 48px;
     border-radius: var(--radius-pill);
-    border: 1px solid var(--ink-700);
-    background: var(--ink-900);
-    color: var(--ink-300);
-    flex-shrink: 0;
+    border: 1px solid var(--hairline);
+    background: var(--papel);
+    font-family: var(--font-mono);
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--grafite);
+  }
+
+  .bench-mult-btn.active {
+    background: var(--grafite);
+    border-color: var(--grafite);
+    color: var(--papel);
+  }
+
+  .bench-mult-note {
+    font-size: 12px;
+    color: var(--ink-500);
   }
 
   .bench-rows {
@@ -145,98 +165,69 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 14px;
   }
 
   .bench-row {
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 18px;
-    border-radius: var(--radius-surface);
-    background: var(--ink-900);
-    border: 1px solid var(--ink-700);
+    gap: 22px;
+    padding: 18px 0;
+    border-top: 1px solid var(--hairline);
   }
 
-  .bench-swatch {
-    width: 56px;
-    height: 56px;
-    border-radius: var(--radius-control);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink-100) 15%, transparent);
-    flex-shrink: 0;
+  .bench-row:first-child {
+    border-top: none;
   }
 
-  .bench-text {
+  .bench-main {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 2px;
-    flex: 1;
-    min-width: 0;
   }
 
-  .bench-name {
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--ink-100);
-    line-height: 1.25;
+  .bench-count {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
   }
 
-  .bench-code {
-    font-size: 14px;
-    color: var(--lacquer-tint);
+  .bench-num {
+    font-size: 108px;
+    font-weight: 780;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    color: var(--grafite);
   }
 
-  .bench-drops {
-    font-size: 52px;
-    font-weight: 600;
-    color: var(--ink-100);
-    line-height: 1;
-    text-align: right;
-    flex-shrink: 0;
-  }
-
-  .bench-drops span {
-    display: block;
-    font-size: 13px;
+  .bench-unit {
+    font-size: 19px;
     font-weight: 500;
     color: var(--ink-500);
-    margin-top: 2px;
+  }
+
+  .bench-meta {
+    font-size: 13.5px;
+    color: var(--ink-500);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .bench-foot {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    margin-top: 18px;
-  }
-
-  .bench-total {
-    font-size: 15px;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 10px;
+    padding-top: 12px;
+    border-top: 1px solid var(--hairline);
+    font-size: 13px;
     color: var(--ink-500);
   }
 
-  .bench-mult {
-    display: flex;
-    gap: 10px;
-  }
-
-  .bench-mult-btn {
-    width: 64px;
-    height: 64px;
-    border-radius: var(--radius-pill);
-    border: 1px solid var(--ink-700);
-    background: var(--ink-900);
-    font-family: var(--font-mono);
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--ink-300);
-  }
-
-  .bench-mult-btn.active {
-    background: var(--lacquer);
-    border-color: var(--lacquer);
-    color: white;
+  .bench-foot .font-mono {
+    font-size: 12px;
   }
 
   @keyframes fade-in {

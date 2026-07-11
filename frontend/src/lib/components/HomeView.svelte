@@ -1,296 +1,303 @@
 <script lang="ts">
+  // Home (Tintômetro): "Bancada pronta." + linha de stats em mono gigante,
+  // ações em pílulas e a lista de receitas salvas com mini fita de fórmula.
   import { onMount } from 'svelte';
-  import Icon from './Icon.svelte';
-  import PaintBottle from './PaintBottle.svelte';
-  import BrandMark from './BrandMark.svelte';
+  import FormulaRibbon from './FormulaRibbon.svelte';
+  import { recipes, removeRecipe, type SavedRecipe } from '../recipes.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
-  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix';
+  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock';
+
+  interface NavOpts {
+    paintId?: number;
+    targetManufacturerId?: number;
+  }
 
   interface Props {
-    onNavigate: (view: View) => void;
+    onNavigate: (view: View, opts?: number | NavOpts) => void;
   }
 
   let { onNavigate }: Props = $props();
 
-  interface Stats {
-    manufacturers: number;
-    productLines: number;
-    paints: number;
-    equivalences: number;
-    recipes: number;
-  }
-
-  interface Paint {
-    id: number;
-    name: string;
-    manufacturer: string;
-    r: number;
-    g: number;
-    b: number;
-  }
-
-  let stats: Stats | null = $state(null);
-  let shelf: Paint[] = $state([]);
-  let loading = $state(true);
+  let paintCount: number | null = $state(null);
+  let mfrCount: number | null = $state(null);
+  let stockCount: number | null = $state(null);
 
   onMount(async () => {
     try {
-      const [s, all] = await Promise.all([
+      const [s, stock] = await Promise.all([
         PaintService.GetStats(),
-        PaintService.GetAllPaints(),
+        PaintService.GetUserPaints(),
       ]);
-      stats = s;
-      const pool = all || [];
-      const stride = Math.max(1, Math.floor(pool.length / 10));
-      shelf = pool.filter((_: Paint, i: number) => i % stride === 0).slice(0, 10);
+      paintCount = s.paints;
+      mfrCount = s.manufacturers;
+      stockCount = (stock || []).length;
     } catch (e) {
       console.error('Erro carregando stats:', e);
-    } finally {
-      loading = false;
     }
   });
 
-  const steps = [
-    { n: '1', title: 'Escolha a tinta', desc: 'A cor que você viu num tutorial, numa caixa ou que acabou no pote.' },
-    { n: '2', title: 'Escolha sua marca', desc: 'A Mescla busca a melhor mistura usando só as tintas dela.' },
-    { n: '3', title: 'Misture com confiança', desc: 'Percentuais, selo de proximidade honesto e dicas de ajuste.' },
-  ];
+  function fmt(n: number | null): string {
+    return n === null ? '·' : n.toLocaleString('pt-BR');
+  }
 
-  const tools: { view: View; title: string; desc: string; icon: 'grid' | 'pipette' | 'swap' | 'building' }[] = [
-    { view: 'catalog', title: 'Catálogo', desc: 'Todas as tintas, filtráveis por marca', icon: 'grid' },
-    { view: 'color-search', title: 'Buscar cor', desc: 'Da cor exata pra tinta mais próxima', icon: 'pipette' },
-    { view: 'compare', title: 'Comparar', desc: 'Até 6 tintas lado a lado', icon: 'swap' },
-    { view: 'manufacturers', title: 'Marcas', desc: 'Quem fabrica o quê', icon: 'building' },
-  ];
+  function hexToRgb(hex: string): { r: number; g: number; b: number } {
+    const n = parseInt(hex.replace('#', ''), 16) || 0;
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+
+  function openRecipe(r: SavedRecipe) {
+    onNavigate('mix', {
+      paintId: r.sourcePaintId,
+      targetManufacturerId: r.targetManufacturerId || undefined,
+    });
+  }
 </script>
 
 <div class="page-container">
-  <!-- Hero: a tese do produto à esquerda; à direita o motivo da marca em
-       escala real — duas tintas do catálogo se encontrando na costura. -->
-  <div class="hero animate-rise">
-    <div class="hero-copy">
-      <div class="hero-brand">
-        <BrandMark size={52} />
-        <div class="hero-word font-display">Mescla</div>
+  <div class="home-hero animate-rise">
+    <h1 class="home-title font-display">Bancada pronta.</h1>
+    <p class="home-sub">Tudo que você precisa pra chegar na cor certa antes do pincel.</p>
+  </div>
+
+  <!-- Stats: números gigantes mono, separados por hairlines verticais -->
+  <div class="stat-row animate-rise" style="animation-delay: 60ms;">
+    <div class="stat">
+      <span class="stat-n font-mono">{fmt(paintCount)}</span>
+      <span class="stat-label">tintas no catálogo</span>
+    </div>
+    <div class="stat">
+      <span class="stat-n font-mono">{fmt(mfrCount)}</span>
+      <span class="stat-label">fabricantes</span>
+    </div>
+    <div class="stat">
+      <span class="stat-n font-mono">{fmt(stockCount)}</span>
+      <span class="stat-label">no meu estoque</span>
+    </div>
+    <div class="stat">
+      <span class="stat-n font-mono">{recipes.length.toLocaleString('pt-BR')}</span>
+      <span class="stat-label">receitas salvas</span>
+    </div>
+  </div>
+
+  <!-- Ações -->
+  <div class="home-actions animate-rise" style="animation-delay: 120ms;">
+    <button class="pill-dark" onclick={() => onNavigate('mix')}>Gerar fórmula equivalente</button>
+    <button class="pill-light" onclick={() => onNavigate('color-search')}>Buscar por cor</button>
+    <button class="pill-light" onclick={() => onNavigate('stock')}>Importar estoque CSV</button>
+  </div>
+
+  <!-- Receitas salvas -->
+  <div class="animate-rise" style="animation-delay: 180ms;">
+    <p class="label-mono recipes-label">Receitas salvas</p>
+
+    {#if recipes.length === 0}
+      <div class="recipes-empty">
+        <div class="empty-ribbon" aria-hidden="true">
+          <span style="background: var(--bancada-deep); width: 55%;"></span>
+          <span style="background: var(--hairline); width: 30%;"></span>
+          <span style="background: var(--bancada-deep); width: 15%;"></span>
+        </div>
+        <p class="empty-title font-display">Nenhuma receita salva ainda</p>
+        <p class="empty-hint">Gere uma fórmula na Equivalência e toque em "Salvar receita". Ela fica aqui, pronta pra reabrir na bancada.</p>
+        <button class="pill-dark" onclick={() => onNavigate('mix')}>Gerar a primeira fórmula</button>
       </div>
-      <h1 class="hero-thesis font-display">
-        Você tem a cor em <em>uma</em> marca.<br />
-        Precisa dela em <em>outra</em>.
-      </h1>
-      <p class="hero-sub">
-        {#if loading}
-          Carregando o catálogo…
-        {:else if stats}
-          {stats.paints.toLocaleString('pt-BR')} tintas de {stats.manufacturers} marcas, comparadas como o olho vê — offline.
-        {/if}
-      </p>
-      <button class="btn-primary hero-cta" onclick={() => onNavigate('mix')}>
-        <Icon name="flask" size={17} />
-        Encontrar equivalência
-      </button>
-    </div>
-
-    <div class="hero-visual" aria-hidden="true">
-      {#if shelf.length >= 3}
-        <div class="hero-shelf">
-          <div class="hero-bottles">
-            <PaintBottle r={shelf[0].r} g={shelf[0].g} b={shelf[0].b} size={96} />
-            <PaintBottle r={shelf[Math.floor(shelf.length / 2)].r} g={shelf[Math.floor(shelf.length / 2)].g} b={shelf[Math.floor(shelf.length / 2)].b} size={124} />
-            <PaintBottle r={shelf[shelf.length - 1].r} g={shelf[shelf.length - 1].g} b={shelf[shelf.length - 1].b} size={96} />
+    {:else}
+      <div class="recipes-list">
+        {#each recipes as r (r.id)}
+          <div class="recipe-row">
+            <div class="recipe-ribbon">
+              <FormulaRibbon
+                segments={r.ingredients.map(i => ({ ...hexToRgb(i.hex), code: i.code, percentage: i.percentage }))}
+                height={30}
+                ruler={false}
+                labels={false}
+              />
+            </div>
+            <div class="recipe-id">
+              <span class="recipe-name">{r.sourceName}</span>
+              <span class="recipe-target font-mono">em {r.targetManufacturer}</span>
+            </div>
+            <span class="recipe-delta font-mono">{r.deltaE.toFixed(1)}</span>
+            <button class="recipe-open" onclick={() => openRecipe(r)}>abrir ›</button>
+            <button class="recipe-del font-mono" onclick={() => removeRecipe(r.id)} aria-label="Excluir receita" title="Excluir">×</button>
           </div>
-          <div class="hero-shelf-line"></div>
-        </div>
-      {:else}
-        <div class="hero-shelf skeleton"></div>
-      {/if}
-    </div>
-  </div>
-
-  <!-- Como funciona (guia inline, sempre visível) -->
-  <div class="mb-10 animate-rise" style="animation-delay: 80ms;">
-    <h2 class="section-title">Como funciona</h2>
-    <div class="steps">
-      {#each steps as s}
-        <div class="step">
-          <div class="step-n">{s.n}</div>
-          <div class="step-title">{s.title}</div>
-          <div class="step-desc">{s.desc}</div>
-        </div>
-      {/each}
-    </div>
-  </div>
-
-  <!-- Prateleira: amostra viva do catálogo -->
-  {#if shelf.length > 0}
-    <div class="mb-10 animate-rise" style="animation-delay: 140ms;">
-      <h2 class="section-title">Na prateleira</h2>
-      <div class="shelf">
-        {#each shelf as paint, i}
-          <button class="shelf-swatch" style="animation-delay: {i * 30}ms;" title="{paint.name} — {paint.manufacturer}" onclick={() => onNavigate('catalog')}>
-            <PaintBottle r={paint.r} g={paint.g} b={paint.b} size={58} />
-          </button>
         {/each}
       </div>
-    </div>
-  {/if}
-
-  <!-- Demais ferramentas -->
-  <div class="mb-8 animate-rise" style="animation-delay: 200ms;">
-    <h2 class="section-title">Ferramentas</h2>
-    <div class="tools-grid">
-      {#each tools as tool}
-        <button class="row-card" onclick={() => onNavigate(tool.view)}>
-          <div class="action-icon"><Icon name={tool.icon} size={20} /></div>
-          <div class="flex-1" style="min-width: 0;">
-            <div class="action-title">{tool.title}</div>
-            <div class="action-desc">{tool.desc}</div>
-          </div>
-        </button>
-      {/each}
-    </div>
+    {/if}
   </div>
 </div>
 
 <style>
-  .hero {
-    display: grid;
-    grid-template-columns: minmax(0, 1.25fr) minmax(220px, 1fr);
-    gap: 48px;
-    align-items: center;
-    padding: 36px 0 40px;
-    margin-bottom: 40px;
-    border-bottom: 1px solid var(--ink-700);
+  .home-hero {
+    padding-top: 20px;
+    margin-bottom: 44px;
   }
 
-  @media (max-width: 940px) {
-    .hero {
-      grid-template-columns: 1fr;
-      gap: 24px;
-    }
+  .home-title {
+    font-size: clamp(2.6rem, 5.4vw, 3.5rem);
+    font-weight: 760;
+    color: var(--grafite);
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    margin-bottom: 12px;
   }
 
-  /* A prateleira: três garrafinhas com cores reais do catálogo apoiadas
-     numa linha — o produto em pessoa dando as boas-vindas. */
-  .hero-shelf {
+  .home-sub {
+    font-size: 14.5px;
+    color: var(--text-2);
+  }
+
+  .stat-row {
+    display: flex;
+    margin-bottom: 44px;
+    flex-wrap: wrap;
+    row-gap: 20px;
+  }
+
+  .stat {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: flex-end;
-    height: 232px;
-    padding: 24px 24px 30px;
-    background: var(--ink-900);
-    border: 1px solid var(--ink-700);
-    border-radius: var(--radius-surface);
+    gap: 8px;
+    padding-right: 40px;
+    margin-right: 40px;
+    border-right: 1px solid var(--hairline);
   }
 
-  .hero-bottles {
-    display: flex;
-    align-items: flex-end;
-    gap: 22px;
+  .stat:last-child {
+    border-right: none;
+    margin-right: 0;
+    padding-right: 0;
   }
 
-  .hero-shelf-line {
-    width: 78%;
-    height: 3px;
-    margin-top: 14px;
-    border-radius: 999px;
-    background: var(--ink-700);
-  }
-
-  .hero-brand {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin-bottom: 26px;
-  }
-
-  .hero-word {
-    font-size: 21px;
-    font-weight: 700;
-    color: var(--paper);
-    letter-spacing: -0.01em;
-  }
-
-  .hero-thesis {
-    font-size: clamp(1.9rem, 4.5vw, 2.9rem);
-    font-weight: 680;
-    line-height: 1.14;
-    color: var(--paper);
-    letter-spacing: -0.02em;
-    margin-bottom: 14px;
-    max-width: 640px;
-  }
-
-  .hero-thesis em {
-    font-style: italic;
-    color: var(--lacquer-deep);
-  }
-
-  .hero-sub {
-    font-size: 14px;
-    color: var(--ink-500);
-    margin-bottom: 26px;
-  }
-
-  .hero-cta {
-    max-width: 300px;
-  }
-
-  .section-title {
-    font-family: var(--font-display);
-    font-size: 1.05rem;
+  .stat-n {
+    font-size: clamp(34px, 4vw, 48px);
     font-weight: 600;
-    color: var(--paper);
-    margin-bottom: 16px;
+    color: var(--grafite);
+    letter-spacing: -0.03em;
+    line-height: 1;
   }
 
-  .shelf {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .shelf-swatch {
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    padding: 0;
-    transition: transform 0.15s ease;
-    animation: rise-in 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
-  }
-
-  .shelf-swatch:hover {
-    transform: translateY(-3px);
-  }
-
-  .tools-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-  }
-
-  .action-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    border-radius: 8px;
-    flex-shrink: 0;
-    background: var(--ink-800);
-    color: var(--lacquer);
-  }
-
-  .action-title {
-    font-weight: 600;
-    font-size: 14px;
-    color: var(--ink-100);
-    margin-bottom: 2px;
-  }
-
-  .action-desc {
+  .stat-label {
     font-size: 12.5px;
-    color: var(--ink-500);
+    color: var(--text-2);
+  }
+
+  .home-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 56px;
+  }
+
+  .recipes-label {
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--hairline);
+    display: block;
+  }
+
+  .recipes-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .recipe-row {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .recipe-ribbon {
+    width: 220px;
+    flex-shrink: 0;
+  }
+
+  .recipe-id {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .recipe-name {
+    font-size: 15px;
+    font-weight: 680;
+    color: var(--grafite);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .recipe-target {
+    font-size: 11.5px;
+    color: var(--text-2);
+  }
+
+  .recipe-delta {
+    flex-shrink: 0;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--grafite);
+    letter-spacing: -0.02em;
+  }
+
+  .recipe-open {
+    flex-shrink: 0;
+    border: none;
+    background: none;
+    padding: 4px 2px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--laca-deep);
+    cursor: pointer;
+  }
+
+  .recipe-open:hover {
+    text-decoration: underline;
+  }
+
+  .recipe-del {
+    flex-shrink: 0;
+    border: none;
+    background: none;
+    padding: 4px 6px;
+    font-size: 14px;
+    color: var(--text-3);
+    cursor: pointer;
+  }
+
+  .recipe-del:hover {
+    color: var(--grafite);
+  }
+
+  /* Estado vazio composto */
+  .recipes-empty {
+    padding: 40px 0 24px;
+    max-width: 420px;
+  }
+
+  .empty-ribbon {
+    display: flex;
+    width: 220px;
+    height: 30px;
+    margin-bottom: 22px;
+    overflow: hidden;
+  }
+
+  .recipes-empty .empty-title {
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--grafite);
+    margin-bottom: 6px;
+  }
+
+  .recipes-empty .empty-hint {
+    font-size: 13px;
+    color: var(--text-2);
+    line-height: 1.55;
+    margin-bottom: 20px;
   }
 </style>

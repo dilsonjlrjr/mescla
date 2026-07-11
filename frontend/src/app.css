@@ -1,125 +1,134 @@
-/* ── MESCLA — Rótulo Theme (claro) ──
-   Linguagem visual: rótulo de lata de tinta sobre bancada clara. Neutros
-   stone, cor de tinta chapada como protagonista, laca cádmio como acento
-   único, grafite #1a1712 da marca como contraste. Display: Bricolage
-   Grotesque; corpo Archivo; etiqueta Plex Mono.
-   Estrutura: barra superior + busca global ⌘K, conteúdo centralizado,
-   campos "cavados" com borda visível e foco em laca.
-   Escala de raio (regra única): botões/badges = pílula, superfícies = 12px,
-   swatches/inputs = 8px.
-   Motivo de marca: o PAR de cores (origem → destino) que se encontram. */
+/* ── MESCLA — Tema "Tintômetro" (claro) ──
+   Direção: o app como instrumento de precisão de cor. A tinta é a interface;
+   o resto é bancada. Paleta de 5 cores: bancada #F6F4EF, papel #FFFFFF,
+   grafite #1A1712, hairline #DCD6C9, laca #E8542C. A cor de tinta (dinâmica)
+   é a protagonista — chapada, raio 0 em painéis grandes.
+   Tipos: Bricolage Grotesque (display), Archivo (corpo), IBM Plex Mono (todo
+   valor medido). Hairlines e whitespace no lugar de cards e sombras.
+   Raios: pílula = ação · 8px = amostra/input · 12px = superfície flutuante ·
+   0 = cor chapada. */
 
 :root {
-  /* Ink (neutros stone — cinza neutro que conversa com o grafite da marca) */
-  --ink-950: #f5f5f4;
-  --ink-900: #ffffff;
-  --ink-850: #fafaf9;
-  --ink-800: #eceae8;
-  --ink-700: #dcdad7;
-  --ink-600: #b9b6b1;
-  --ink-500: #7d7a74;
-  --ink-400: #a19d97;
-  --ink-300: #57544e;
-  --ink-100: #1d1b17;
+  /* Paleta Tintômetro — 5 cores, nada mais */
+  --bancada: #f6f4ef;
+  --papel: #ffffff;
+  --grafite: #1a1712;
+  --hairline: #dcd6c9;
+  --laca: #e8542c;
 
-  --paper: #1a1712;
+  /* Derivados permitidos: grafite com opacidade (texto secundário) e
+     bancada-escura (skeleton / campos cavados) — stone derivado. */
+  --text-2: rgba(26, 23, 18, 0.58);
+  --text-3: rgba(26, 23, 18, 0.4);
+  --bancada-deep: #eae6dc;
+  --laca-deep: #c7431f; /* estado hover/texto da laca sobre claro */
 
-  /* Lacre — acento único (laca cádmio, não dourado genérico).
-     deep/tint escurecem no claro: são usados como COR DE TEXTO nas views. */
-  --lacquer: #e8542c;
-  --lacquer-deep: #b53d1f;
-  --lacquer-tint: #c2451f;
+  /* Aliases legados (views antigas ainda referenciam ink-*) */
+  --ink-950: var(--bancada);
+  --ink-900: var(--papel);
+  --ink-850: var(--bancada-deep);
+  --ink-800: var(--bancada-deep);
+  --ink-700: var(--hairline);
+  --ink-600: var(--hairline);
+  --ink-500: var(--text-2);
+  --ink-400: var(--text-3);
+  --ink-300: rgba(26, 23, 18, 0.8);
+  --ink-100: var(--grafite);
 
-  /* Raios (escala única do app) */
+  --paper: var(--grafite);
+
+  --lacquer: var(--laca);
+  --lacquer-deep: var(--laca-deep);
+  --lacquer-tint: var(--laca-deep);
+
+  /* Raios (regra única) */
   --radius-surface: 12px;
   --radius-control: 8px;
   --radius-pill: 999px;
 
-  /* Delta E — família separada do acento, escurecida pra ler no claro */
-  --delta-excellent: #2f7d49;
-  --delta-good: #96760f;
-  --delta-fair: #a85a1f;
-  --delta-poor: #a13328;
+  /* Delta E — sem cores fora da paleta: bom = laca, resto = grafite */
+  --delta-excellent: var(--laca-deep);
+  --delta-good: var(--grafite);
+  --delta-fair: var(--text-2);
+  --delta-poor: var(--grafite);
 
-  /* Canais RGB (escurecidos pra legibilidade em fundo claro) */
-  --chan-r: #c0392b;
-  --chan-g: #2f7d49;
-  --chan-b: #2f5f9e;
+  /* Canais RGB dos sliders: grafite (leitura de instrumento, não arco-íris) */
+  --chan-r: var(--grafite);
+  --chan-g: var(--grafite);
+  --chan-b: var(--grafite);
 
-  /* Fontes (self-hosted via @fontsource — o desktop não depende de rede) */
+  /* Fontes (self-hosted via @fontsource) */
   --font-display: 'Bricolage Grotesque Variable', system-ui, sans-serif;
   --font-body: 'Archivo Variable', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
 
-  /* SMUI — usado só nos controles de formulário (Textfield/Select/Slider/Dialog) */
-  --mdc-theme-primary: var(--lacquer);
-  --mdc-theme-secondary: var(--lacquer);
-  --mdc-theme-surface: var(--ink-900);
-  --mdc-theme-background: var(--ink-950);
-  --mdc-theme-error: var(--delta-poor);
+  /* SMUI — controles de formulário remanescentes */
+  --mdc-theme-primary: var(--laca);
+  --mdc-theme-secondary: var(--laca);
+  --mdc-theme-surface: var(--papel);
+  --mdc-theme-background: var(--bancada);
+  --mdc-theme-error: var(--laca-deep);
   --mdc-theme-on-primary: white;
   --mdc-theme-on-secondary: white;
-  --mdc-theme-on-surface: var(--ink-300);
-  --mdc-theme-on-background: var(--ink-300);
+  --mdc-theme-on-surface: var(--grafite);
+  --mdc-theme-on-background: var(--grafite);
   --mdc-theme-on-error: white;
 
-  --mdc-text-field-fill-color: var(--ink-850);
-  --mdc-text-field-ink-color: var(--ink-100);
-  --mdc-text-field-label-ink-color: var(--ink-500);
-  --mdc-text-field-outlined-idle-border-color: rgba(0, 0, 0, 0.3);
-  --mdc-text-field-outlined-hover-border-color: rgba(232, 84, 44, 0.55);
-  --mdc-text-field-focused-label-color: var(--lacquer-deep);
+  --mdc-text-field-fill-color: var(--papel);
+  --mdc-text-field-ink-color: var(--grafite);
+  --mdc-text-field-label-ink-color: var(--text-2);
+  --mdc-text-field-outlined-idle-border-color: var(--hairline);
+  --mdc-text-field-outlined-hover-border-color: var(--grafite);
+  --mdc-text-field-focused-label-color: var(--laca-deep);
 
-  --mdc-select-ink-color: var(--ink-100);
-  --mdc-select-label-ink-color: var(--ink-500);
-  --mdc-select-dropdown-icon-color: var(--ink-500);
-  --mdc-select-outlined-idle-border-color: rgba(0, 0, 0, 0.3);
-  --mdc-select-outlined-hover-border-color: rgba(232, 84, 44, 0.55);
+  --mdc-select-ink-color: var(--grafite);
+  --mdc-select-label-ink-color: var(--text-2);
+  --mdc-select-dropdown-icon-color: var(--text-2);
+  --mdc-select-outlined-idle-border-color: var(--hairline);
+  --mdc-select-outlined-hover-border-color: var(--grafite);
 
-  --mdc-slider-handle-color: var(--lacquer);
-  --mdc-slider-focus-handle-color: var(--lacquer);
-  --mdc-slider-ink-color: var(--lacquer);
+  --mdc-slider-handle-color: var(--grafite);
+  --mdc-slider-focus-handle-color: var(--grafite);
+  --mdc-slider-ink-color: var(--grafite);
 }
 
-/* ── Receita única de campo (dark): o campo é CAVADO em relação à superfície
-   (fundo ink-850, mais fundo que o painel ink-900) com borda que APARECE
-   (ink-600) e foco em laca. Baseline com :where() = especificidade zero:
-   estilos escopados das views continuam podendo sobrescrever. ── */
+/* ── Receita única de campo: papel, borda hairline, raio 8, foco laca ── */
 :where(input[type='text']:not(.mdc-text-field__input), input[type='search']:not(.mdc-text-field__input), input[type='number']:not(.mdc-text-field__input), input[type='url']:not(.mdc-text-field__input), textarea:not(.mdc-text-field__input)) {
-  background: var(--ink-850);
-  border: 1px solid var(--ink-600);
+  background: var(--papel);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-control);
-  color: var(--ink-100);
+  color: var(--grafite);
 }
 
 :where(input[type='text']:not(.mdc-text-field__input), input[type='search']:not(.mdc-text-field__input), input[type='number']:not(.mdc-text-field__input), input[type='url']:not(.mdc-text-field__input), textarea:not(.mdc-text-field__input)):focus {
   outline: none;
-  border-color: var(--lacquer);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
+  border-color: var(--laca);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--laca) 18%, transparent);
+}
+
+/* Campos de texto já sinalizam foco pela borda laca + anel — o outline global
+   de :focus-visible em cima disso vira anel duplo. */
+:where(input, textarea, select):focus-visible {
+  outline: none;
+}
+
+/* type=search sem o chrome nativo do WebKit (X escuro destoa do tema) */
+input[type='search']::-webkit-search-cancel-button,
+input[type='search']::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 ::placeholder {
-  color: var(--ink-500);
+  color: var(--text-3);
   opacity: 1;
 }
 
-/* SMUI só remove a borda superior do "notch" quando aplica a classe
-   --notched via JS; se essa medição falhar (comum em WKWebView no boot,
-   e também em Textfields com valor pré-preenchido ou focados), a borda
-   cruza o texto do label. Em vez de confiar nessa classe, reagimos ao
-   estado real do label (flutuado ou não) — cobre Textfield com valor,
-   Textfield focado, etc., sem deixar vão vazio quando o label está
-   inline (Textfield vazio e sem foco, que não tem notch de verdade). */
+/* SMUI: notch do outline (ver comentário histórico — WKWebView) */
 .mdc-notched-outline__notch:has(.mdc-floating-label--float-above) {
   border-top: none;
 }
 
-/* No Select o label deveria ficar SEMPRE flutuado (nunca tem estado "inline"
-   de verdade nesse app), mas a classe --float-above do SMUI se perde de
-   forma intermitente depois de re-renders não relacionados (observado após
-   um sibling reativo mudar de estado) — isso desfaz tanto o float visual
-   quanto a regra acima. Forçamos o Select via CSS puro, sem depender da
-   classe JS: nunca há um caso legítimo de label "não flutuado" pra perder. */
 .mdc-select .mdc-notched-outline__notch {
   border-top: none;
 }
@@ -141,8 +150,8 @@ html, body, #app {
 
 body {
   font-family: var(--font-body);
-  background: var(--ink-950);
-  color: var(--ink-300);
+  background: var(--bancada);
+  color: var(--grafite);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -161,15 +170,15 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--ink-700);
+  background: var(--hairline);
   border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--ink-600);
+  background: var(--text-3);
 }
 
 :focus-visible {
-  outline: 2px solid var(--lacquer);
+  outline: 2px solid var(--laca);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -181,12 +190,12 @@ body {
   }
 }
 
-/* ── Layout: barra superior + conteúdo centralizado ── */
+/* ── Layout: topbar + conteúdo centralizado ── */
 .app-layout {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--ink-950);
+  background: var(--bancada);
 }
 
 .app-main {
@@ -199,7 +208,7 @@ body {
   min-height: 100%;
   max-width: 1180px;
   margin: 0 auto;
-  padding: 36px 40px 56px;
+  padding: 44px 40px 64px;
 }
 
 .page-header {
@@ -209,194 +218,265 @@ body {
 .page-title {
   font-family: var(--font-display);
   font-optical-sizing: auto;
-  font-size: 2.1rem;
+  font-size: 2.4rem;
   font-weight: 750;
-  color: var(--paper);
+  color: var(--grafite);
   letter-spacing: -0.015em;
   line-height: 1.1;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .page-subtitle {
-  font-size: 13px;
-  color: var(--ink-500);
+  font-size: 13.5px;
+  color: var(--text-2);
 }
 
 .page-divider {
   margin-top: 18px;
   height: 1px;
-  background: var(--ink-700);
+  background: var(--hairline);
 }
 
-/* ── Flat surfaces (sem vidro, sem gradiente) ── */
+/* ── Label de seção: mono, uppercase, tracking largo ── */
+.label-mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-2);
+}
+
+/* ── Superfícies: hairline no lugar de card/sombra ── */
 .panel {
-  background: var(--ink-900);
-  border: 1px solid var(--ink-700);
+  background: var(--papel);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-surface);
-}
-
-.row-card {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  background: var(--ink-900);
-  border: 1px solid var(--ink-700);
-  border-left: 2px solid transparent;
-  border-radius: 8px;
-  padding: 16px 18px;
-  cursor: pointer;
-  text-align: left;
-  width: 100%;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.row-card:hover {
-  background: var(--ink-850);
-  border-left-color: var(--lacquer);
 }
 
 .hairline {
   height: 1px;
-  background: var(--ink-700);
+  background: var(--hairline);
   border: none;
 }
 
-/* ── Paint chip — elemento assinatura ── */
-.chip {
-  display: block;
-  width: 100%;
-  padding: 0;
-  font: inherit;
-  color: inherit;
-  background: var(--ink-900);
-  border: 1px solid var(--ink-700);
-  border-radius: var(--radius-surface);
-  overflow: hidden;
-  min-width: 0;
-  cursor: pointer;
-  text-align: left;
-  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.18s ease;
-}
-
-.chip:hover {
-  transform: translateY(-2px) rotate(-0.4deg);
-  border-color: var(--ink-600);
-}
-
-/* Topo do card: sample da cor REAL chapada + a garrafinha do lado, como o
-   pote na prateleira ao lado da cartela pintada. */
-.chip-swatch {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1.35fr 1fr;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  border-radius: calc(var(--radius-surface) - 1px) calc(var(--radius-surface) - 1px) 0 0;
-  overflow: hidden;
-}
-
-.chip-color {
-  display: block;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
-}
-
-.chip-bottle-side {
-  display: flex;
+/* ── Pílulas de ação ── */
+.pill-dark {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--ink-850);
-  border-left: 1px solid var(--ink-700);
-}
-
-/* furo de catálogo — como uma cartela física perfurada (fica sobre a COR) */
-.chip-punch {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: var(--ink-950);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
-}
-
-/* etiqueta mono do rótulo: código · marca — abaixo da cor, nunca sobre ela */
-.chip-code {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 500;
-  color: var(--ink-500);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  gap: 8px;
+  height: 46px;
+  padding: 0 26px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--grafite);
+  color: var(--papel);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 640;
+  cursor: pointer;
   white-space: nowrap;
+  transition: opacity 0.15s ease, transform 0.1s ease;
 }
 
-.chip-label {
-  padding: 10px 12px 12px;
-  border-top: 1px solid var(--ink-700);
+.pill-dark:hover:not(:disabled) {
+  opacity: 0.88;
 }
 
-.chip-name {
-  font-weight: 600;
+.pill-dark:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.pill-dark:disabled {
+  background: var(--hairline);
+  color: var(--text-2);
+  cursor: not-allowed;
+}
+
+.pill-light {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 22px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  background: var(--papel);
+  color: var(--grafite);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 560;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease;
+}
+
+.pill-light:hover:not(:disabled) {
+  border-color: var(--grafite);
+}
+
+.pill-light:disabled {
+  color: var(--text-3);
+  cursor: not-allowed;
+}
+
+/* Pills de filtro: ativa = grafite, inativa = papel + hairline */
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 18px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  background: var(--papel);
+  color: var(--grafite);
+  font-family: var(--font-body);
   font-size: 13px;
-  color: var(--ink-100);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 520;
+  cursor: pointer;
   white-space: nowrap;
-  line-height: 1.3;
-  margin-bottom: 3px;
+  transition: border-color 0.15s ease;
 }
 
-.chip:hover .chip-name {
-  color: var(--lacquer-tint);
+.filter-pill:hover {
+  border-color: var(--grafite);
 }
 
-.chip-finish {
-  display: inline-block;
-  margin-top: 6px;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+.filter-pill.active {
+  background: var(--grafite);
+  border-color: var(--grafite);
+  color: var(--papel);
+  font-weight: 600;
+}
+
+/* Compat: botões antigos ainda referenciados por views não redesenhadas */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 46px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--grafite);
+  color: var(--papel);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 640;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn-primary:disabled {
+  background: var(--hairline);
+  color: var(--text-2);
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  background: var(--papel);
+  color: var(--grafite);
+  font-family: var(--font-body);
+  font-size: 12.5px;
   font-weight: 500;
-  padding: 2px 6px;
-  border-radius: 3px;
-  background: var(--ink-700);
-  color: var(--ink-300);
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
 
-/* Swatch pequeno (linhas de resultado, ingredientes) com o mesmo furo,
-   deslocado pro canto — reduz o motivo em escala sem perder a assinatura. */
+.btn-ghost:hover {
+  border-color: var(--grafite);
+}
+
+/* ── Amostra de cor (swatch): raio 8, chapada ── */
 .swatch-flat {
   position: relative;
-  border-radius: 7px;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius-control);
+  box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.08);
   flex-shrink: 0;
 }
 
-.swatch-flat::after {
-  content: '';
-  position: absolute;
-  top: -1px;
-  left: 9px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--ink-900);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+/* ── Toggle: trilho pílula, laca quando on, knob branco ── */
+.switch {
+  flex-shrink: 0;
+  width: 42px;
+  height: 24px;
+  border-radius: var(--radius-pill);
+  background: var(--hairline);
+  position: relative;
+  border: none;
+  cursor: pointer;
+  transition: background 0.18s ease;
 }
 
-/* ── Delta E ── */
-.delta-excellent { color: var(--delta-excellent); }
-.delta-good { color: var(--delta-good); }
-.delta-fair { color: var(--delta-fair); }
-.delta-poor { color: var(--delta-poor); }
+.switch.on {
+  background: var(--laca);
+}
 
-/* ── Preview de cor grande (sliders) ── */
+.switch .knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--papel);
+  transition: transform 0.18s ease;
+}
+
+.switch.on .knob {
+  transform: translateX(18px);
+}
+
+/* ── Delta E: leitura de instrumento ── */
+.delta-reading {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--grafite);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.delta-reading.good {
+  color: var(--laca-deep);
+}
+
+.delta-verdict {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--grafite);
+}
+
+.delta-verdict.good {
+  color: var(--laca-deep);
+}
+
+/* Compat: classes de texto de ΔE das views antigas */
+.delta-excellent { color: var(--laca-deep); }
+.delta-good { color: var(--grafite); }
+.delta-fair { color: var(--text-2); }
+.delta-poor { color: var(--grafite); }
+
+/* ── Preview de cor grande ── */
 .color-preview {
-  border-radius: 8px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-control);
+  box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.08);
   position: relative;
   overflow: hidden;
 }
@@ -409,7 +489,7 @@ body {
   font-family: var(--font-mono);
   padding: 4px 10px;
   border-radius: 5px;
-  background: rgba(15, 13, 18, 0.6);
+  background: rgba(26, 23, 18, 0.55);
   color: rgba(255, 255, 255, 0.92);
 }
 
@@ -432,12 +512,12 @@ body {
   animation: slide-in 0.35s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
-/* ── Skeleton ── */
+/* ── Skeleton: bancada mais escura ── */
 .skeleton {
-  background: linear-gradient(90deg, var(--ink-850) 25%, var(--ink-800) 50%, var(--ink-850) 75%);
+  background: linear-gradient(90deg, var(--bancada-deep) 25%, #e3dfd3 50%, var(--bancada-deep) 75%);
   background-size: 200% 100%;
   animation: shimmer-load 1.5s ease-in-out infinite;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
 }
 
 @keyframes shimmer-load {
@@ -445,46 +525,40 @@ body {
   100% { background-position: 200% 0; }
 }
 
-/* ── Range slider customizado ── */
+/* ── Range slider: track hairline fino, thumb círculo grafite ── */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
-  height: 4px;
+  height: 3px;
   border-radius: 999px;
   outline: none;
   cursor: pointer;
   width: 100%;
-  background: var(--ink-700);
+  background: var(--hairline);
 }
 
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  border: 2px solid var(--ink-950);
-  box-shadow: 0 0 0 1.5px currentColor;
+  background: var(--grafite);
+  border: 3px solid var(--papel);
+  box-shadow: 0 0 0 1px var(--hairline);
   cursor: pointer;
   transition: transform 0.15s ease;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
+  transform: scale(1.12);
 }
 
 /* ── Grid helpers ── */
 .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-
-/* Grades de cards são responsivas: a coluna se repete o quanto couber na
-   largura atual (auto-fill), então a mesma tela preenche quando maximizada e
-   reduz colunas — sem cortar — quando a janela encolhe. */
 .grid-4 { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
 .grid-5 { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
-
-/* Sem isto o filho da grade herda min-width:auto (min-content) e o nome de
-   tinta em nowrap estoura a coluna, empurrando o card pra fora da tela. */
 .grid-4 > *, .grid-5 > * { min-width: 0; }
 
 /* ── Flex helpers ── */
@@ -521,7 +595,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .ml-auto { margin-left: auto; }
 
 /* ── Text helpers ── */
-.text-white { color: var(--paper); }
+.text-white { color: var(--grafite); } /* legado: "texto forte" no tema claro */
 .text-sm { font-size: 14px; }
 .text-xs { font-size: 12px; }
 .text-lg { font-size: 1.125rem; }
@@ -540,66 +614,12 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .overflow-hidden { overflow: hidden; }
 .flex-shrink-0 { flex-shrink: 0; }
 
-/* ── Botão primário (substitui estilos inline repetidos) ── */
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  height: 46px;
-  border: none;
-  border-radius: var(--radius-pill);
-  background: var(--lacquer);
-  color: white;
-  font-family: var(--font-body);
-  font-size: 14px;
-  font-weight: 640;
-  font-stretch: 110%;
-  cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--lacquer-deep);
-}
-
-.btn-primary:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-.btn-primary:disabled {
-  background: var(--ink-600);
-  cursor: not-allowed;
-}
-
-.btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--ink-600);
-  border-radius: var(--radius-pill);
-  background: var(--ink-900);
-  color: var(--ink-300);
-  font-family: var(--font-body);
-  font-size: 12.5px;
-  font-weight: 500;
-  padding: 7px 14px;
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-
-.btn-ghost:hover {
-  border-color: var(--lacquer);
-  color: var(--lacquer-deep);
-}
-
-/* ── Par de cores (motivo de marca): duas metades que se encontram ── */
+/* ── Par de cores: duas metades que se encontram ── */
 .color-pair {
   display: inline-flex;
   border-radius: 7px;
   overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.12);
   flex-shrink: 0;
 }
 
@@ -609,32 +629,35 @@ input[type="range"]::-webkit-slider-thumb:hover {
   height: 100%;
 }
 
-/* ── Badge de ΔE humanizado ── */
+/* ── Badge de ΔE humanizado (compat GuideDialog/ColorWheelView) ── */
 .delta-badge {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--hairline);
+  background: var(--papel);
   font-size: 12px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
+  color: var(--grafite);
 }
 
 .delta-badge .delta-value {
   font-family: var(--font-mono);
   font-weight: 500;
   font-size: 11px;
-  opacity: 0.75;
+  color: var(--text-2);
 }
 
-.delta-badge.excellent { background: color-mix(in srgb, var(--delta-excellent) 14%, transparent); color: var(--delta-excellent); }
-.delta-badge.good      { background: color-mix(in srgb, var(--delta-good) 16%, transparent);      color: var(--delta-good); }
-.delta-badge.fair      { background: color-mix(in srgb, var(--delta-fair) 14%, transparent);      color: var(--delta-fair); }
-.delta-badge.poor      { background: color-mix(in srgb, var(--delta-poor) 12%, transparent);      color: var(--delta-poor); }
+.delta-badge.excellent { color: var(--laca-deep); border-color: color-mix(in srgb, var(--laca) 45%, transparent); }
+.delta-badge.good      { color: var(--grafite); }
+.delta-badge.fair      { color: var(--text-2); }
+.delta-badge.poor      { color: var(--text-2); }
 
-/* ── Toasts ── */
+/* ── Toasts (superfície flutuante: sombra permitida) ── */
 .toast-region {
   position: fixed;
   bottom: 20px;
@@ -654,17 +677,17 @@ input[type="range"]::-webkit-slider-thumb:hover {
   gap: 10px;
   padding: 10px 18px;
   border-radius: var(--radius-pill);
-  background: var(--paper);
-  color: var(--ink-950);
+  background: var(--grafite);
+  color: var(--papel);
   font-size: 13px;
   font-weight: 500;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 6px 24px rgba(26, 23, 18, 0.22);
   animation: rise-in 0.25s cubic-bezier(0.4, 0, 0.2, 1) both;
   pointer-events: auto;
 }
 
 .toast.error {
-  background: var(--delta-poor);
+  background: var(--laca-deep);
   color: white;
 }
 
@@ -672,7 +695,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--lacquer);
+  background: var(--laca);
   flex-shrink: 0;
 }
 
@@ -680,7 +703,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   background: rgba(255, 255, 255, 0.85);
 }
 
-/* ── Passos (jornada / guia) ── */
+/* ── Passos (guia) ── */
 .steps {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -689,9 +712,9 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 .step {
   padding: 16px;
-  border: 1px solid var(--ink-700);
-  border-radius: 10px;
-  background: var(--ink-900);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-surface);
+  background: var(--papel);
 }
 
 .step-n {
@@ -701,8 +724,8 @@ input[type="range"]::-webkit-slider-thumb:hover {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: var(--ink-800);
-  color: var(--lacquer-deep);
+  background: var(--bancada);
+  color: var(--laca-deep);
   font-family: var(--font-mono);
   font-size: 11.5px;
   font-weight: 600;
@@ -712,37 +735,77 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .step-title {
   font-weight: 600;
   font-size: 13.5px;
-  color: var(--ink-100);
+  color: var(--grafite);
   margin-bottom: 4px;
 }
 
 .step-desc {
   font-size: 12.5px;
-  color: var(--ink-500);
+  color: var(--text-2);
   line-height: 1.5;
 }
 
-/* ── Estado vazio com direção ── */
+/* ── Estado vazio ── */
 .empty-state {
   text-align: center;
   padding: 64px 24px;
 }
 
 .empty-state .empty-icon {
-  color: var(--ink-500);
+  color: var(--text-3);
   display: flex;
   justify-content: center;
   margin-bottom: 14px;
 }
 
 .empty-state .empty-title {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--ink-300);
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: 17px;
+  color: var(--grafite);
   margin-bottom: 4px;
 }
 
 .empty-state .empty-hint {
   font-size: 12.5px;
-  color: var(--ink-500);
+  color: var(--text-2);
+}
+
+/* ── Card de erro/aviso: papel raio 12, barra laca 3px à esquerda ── */
+.notice-card {
+  position: relative;
+  background: var(--papel);
+  border-radius: var(--radius-surface);
+  border-left: 3px solid var(--laca);
+  box-shadow: 0 10px 30px rgba(26, 23, 18, 0.08);
+  padding: 18px 22px;
+}
+
+.notice-card .notice-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--grafite);
+  margin-bottom: 6px;
+}
+
+.notice-card .notice-text {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.55;
+  margin: 0 0 10px;
+}
+
+.notice-card .notice-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--laca-deep);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.notice-card .notice-link:hover {
+  text-decoration: underline;
 }

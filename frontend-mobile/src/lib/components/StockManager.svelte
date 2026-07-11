@@ -3,6 +3,7 @@
   // Renderizado dentro da sub-tela "Meu estoque" da aba Mais. A crítica do CSV
   // e o modelo vêm do WASM (pkg/stock), a mesma do desktop.
   import Icon from './Icon.svelte';
+  import PaintBottle from './PaintBottle.svelte';
   import BottomSheet from './BottomSheet.svelte';
   import { allManufacturers } from '../services/catalog';
   import {
@@ -15,7 +16,15 @@
     addStockPaints,
   } from '../services/stock.svelte';
   import { parseStockCSV, stockCSVTemplate, stockToCSV, type StockPaint, type StockRowError } from '../services/engine';
+  import { appState } from '../appState.svelte';
   import { toast } from '../toast.svelte';
+
+  interface Props {
+    /** volta pro menu Mais (o header "‹ Mais" mora aqui dentro). */
+    onBack?: () => void;
+  }
+
+  let { onBack }: Props = $props();
 
   let search = $state('');
   let formOpen = $state(false);
@@ -47,6 +56,17 @@
       );
     }),
   );
+
+  // "Tenho outra parecida" (detalhe da tinta): abre o form já com cor + marca.
+  $effect(() => {
+    if (appState.pendingStockPrefill) {
+      const pre = appState.pendingStockPrefill;
+      appState.pendingStockPrefill = null;
+      openAdd();
+      fMfr = pre.manufacturerId;
+      fHex = pre.hex;
+    }
+  });
 
   function hexToRgb(hex: string): { r: number; g: number; b: number } {
     const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
@@ -116,9 +136,13 @@
     formOpen = false;
   }
 
-  function remove(p: StockPaint) {
+  function removeEditing() {
+    if (editingId === null) return;
+    const p = stock.paints.find(x => x.id === editingId);
+    if (!p) return;
     if (!confirm(`Remover "${p.name}" do seu estoque?`)) return;
     removeStockPaint(p.id);
+    formOpen = false;
     toast('Tinta removida.');
   }
 
@@ -173,68 +197,79 @@
 </script>
 
 <div class="stock">
-  <p class="stock-sub">
-    {#if stock.paints.length === 0}
-      Cadastre as tintas que você tem — a aba Mesclar pode priorizar o que já é seu.
-    {:else}
-      {stock.paints.length} {stock.paints.length === 1 ? 'tinta' : 'tintas'} · {stockBrands().length} {stockBrands().length === 1 ? 'marca' : 'marcas'}
-    {/if}
+  {#if onBack}
+    <button class="stock-back pressable" onclick={onBack}>
+      <Icon name="chevron-left" size={16} /> Mais
+    </button>
+  {/if}
+
+  <div class="stock-head">
+    <h1 class="screen-title">Meu estoque</h1>
+    <button class="stock-add pressable" onclick={openAdd} aria-label="Nova tinta do estoque">
+      <Icon name="plus" size={20} />
+    </button>
+  </div>
+  <p class="stock-count font-mono">
+    {stock.paints.length} {stock.paints.length === 1 ? 'tinta' : 'tintas'} · {stockBrands().length} {stockBrands().length === 1 ? 'fabricante' : 'fabricantes'}
   </p>
 
   <div class="stock-actions">
-    <button class="btn-primary" onclick={openAdd}>
-      <Icon name="plus" size={18} /> Adicionar tinta
-    </button>
-    <div class="csv-row">
-      <button class="btn-ghost" onclick={pickFile}><Icon name="upload" size={15} /> Importar</button>
-      {#if stock.paints.length > 0}
-        <button class="btn-ghost" onclick={exportCsv}><Icon name="download" size={15} /> Exportar</button>
-      {/if}
-      <button class="btn-ghost" onclick={downloadTemplate}><Icon name="book" size={15} /> Modelo</button>
-    </div>
-    <input bind:this={fileInput} type="file" accept=".csv,text/csv" style="display: none;" onchange={onFileChosen} />
+    <button class="btn-ghost" onclick={pickFile}>Importar CSV</button>
+    <button class="btn-ghost" onclick={exportCsv} disabled={stock.paints.length === 0}>Exportar CSV</button>
+    <button class="stock-template pressable" onclick={downloadTemplate}>modelo</button>
   </div>
+  <input bind:this={fileInput} type="file" accept=".csv,text/csv" style="display: none;" onchange={onFileChosen} aria-label="Arquivo CSV do estoque" />
 
   {#if stock.paints.length > 0}
-    <div class="stock-search">
-      <Icon name="search" size={17} />
-      <input type="text" bind:value={search} placeholder="Buscar no meu estoque…" />
-    </div>
+    <input
+      type="search"
+      class="stock-search"
+      bind:value={search}
+      placeholder="Buscar no meu estoque…"
+      aria-label="Buscar no estoque"
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      spellcheck="false"
+    />
   {/if}
 
   {#if stock.paints.length === 0}
-    <div class="empty-state">
-      <span class="empty-icon"><Icon name="box" size={36} /></span>
-      <p class="empty-title">Estoque vazio</p>
-      <p class="empty-hint">Adicione uma tinta ou importe um CSV.</p>
+    <!-- Board Estados: estoque vazio -->
+    <div class="stock-empty">
+      <span class="stock-empty-art" aria-hidden="true">
+        <span class="stock-empty-dash"></span>
+        <PaintBottle r={224} g={218} b={200} size={64} />
+      </span>
+      <p class="stock-empty-title font-display">Sua estante ainda está vazia</p>
+      <p class="stock-empty-hint">Cadastre a primeira tinta ou importe um CSV com tudo de uma vez.</p>
+      <button class="btn-primary" style="margin-top: 14px;" onclick={openAdd}>+ Nova tinta</button>
     </div>
   {:else if filtered.length === 0}
     <div class="empty-state">
-      <span class="empty-icon"><Icon name="search-off" size={36} /></span>
       <p class="empty-title">Nada com esse nome</p>
     </div>
   {:else}
     <div class="stock-list">
       {#each filtered as p (p.id)}
-        <div class="stock-row">
-          <span class="swatch-flat" style="width: 44px; height: 44px; background: rgb({p.r}, {p.g}, {p.b});"></span>
-          <button class="stock-main pressable" onclick={() => openEdit(p)}>
+        <button class="stock-row pressable" onclick={() => openEdit(p)}>
+          <span class="stock-swatch" style="background: rgb({p.r}, {p.g}, {p.b});"></span>
+          <PaintBottle r={p.r} g={p.g} b={p.b} size={42} />
+          <span class="stock-text">
             <span class="stock-name">{p.name}</span>
-            <span class="stock-meta">
-              {p.manufacturer}{#if p.code} · <span class="font-mono">{p.code}</span>{/if}{#if p.volume} · {p.volume}{/if}
+            <span class="stock-meta font-mono">
+              {p.code || 's/ código'} · {p.manufacturer}{p.volume ? ` · ${p.volume}` : ''}
             </span>
-          </button>
-          <button class="row-trash pressable" onclick={() => remove(p)} aria-label="Remover">
-            <Icon name="trash" size={17} />
-          </button>
-        </div>
+          </span>
+          <span class="stock-chev"><Icon name="chevron-right" size={16} /></span>
+        </button>
       {/each}
     </div>
   {/if}
 </div>
 
 <!-- Form add/editar -->
-<BottomSheet open={formOpen} onClose={() => (formOpen = false)} title={editingId === null ? 'Adicionar tinta' : 'Editar tinta'}>
+<BottomSheet open={formOpen} onClose={() => (formOpen = false)} title={editingId === null ? 'Nova tinta' : 'Editar tinta'}>
   <div class="form">
     <div class="form-color">
       <span class="swatch-flat" style="width: 52px; height: 52px; background: rgb({hexToRgb(fHex).r}, {hexToRgb(fHex).g}, {hexToRgb(fHex).b});"></span>
@@ -242,7 +277,7 @@
         <span class="form-label">Cor</span>
         <div class="color-row">
           <input type="color" bind:value={fHex} class="color-swatch" aria-label="Escolher cor" />
-          <input type="text" bind:value={fHex} class="hex-input font-mono" maxlength="7" aria-label="Hex" />
+          <input type="text" bind:value={fHex} class="hex-input font-mono" maxlength="7" aria-label="Hex" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
         </div>
       </div>
     </div>
@@ -272,8 +307,11 @@
     <input id="stk-notes" type="text" bind:value={fNotes} class="form-field" placeholder="opcional" />
 
     <button class="btn-primary" style="margin-top: 8px;" onclick={save} disabled={saving}>
-      <Icon name="check" size={18} /> {saving ? 'Salvando…' : 'Salvar'}
+      {saving ? 'Salvando…' : 'Salvar'}
     </button>
+    {#if editingId !== null}
+      <button class="btn-ghost" style="width: 100%;" onclick={removeEditing}>Excluir do estoque</button>
+    {/if}
   </div>
 </BottomSheet>
 
@@ -303,90 +341,115 @@
   .stock {
     display: flex;
     flex-direction: column;
-    gap: 14px;
   }
 
-  .stock-sub {
-    font-size: 13px;
+  .stock-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    align-self: flex-start;
+    min-height: 40px;
+    font-size: 14px;
+    font-weight: 600;
     color: var(--ink-500);
-    line-height: 1.5;
+  }
+
+  .stock-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  /* botão circular grafite (board Estoque) */
+  .stock-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: var(--grafite);
+    color: var(--papel);
+    flex-shrink: 0;
+  }
+
+  .stock-count {
+    font-size: 12px;
+    color: var(--ink-500);
+    margin: 4px 0 14px;
   }
 
   .stock-actions {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .csv-row {
-    display: flex;
-    gap: 10px;
-  }
-
-  .csv-row .btn-ghost {
-    flex: 1;
-  }
-
-  .stock-search {
-    display: flex;
     align-items: center;
-    gap: 8px;
-    min-height: 48px;
-    padding: 0 12px;
-    border: 1px solid var(--ink-600);
-    border-radius: var(--radius-control);
-    background: var(--ink-850);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .stock-actions .btn-ghost {
+    min-height: 44px;
+    padding: 0 16px;
+    font-size: 14px;
+  }
+
+  .stock-actions .btn-ghost:disabled {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  .stock-template {
+    min-height: 44px;
+    padding: 0 6px;
+    font-size: 14px;
+    font-weight: 500;
     color: var(--ink-500);
   }
 
-  .stock-search:focus-within {
-    border-color: var(--lacquer);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
-  }
-
-  .stock-search input {
-    flex: 1;
-    min-width: 0;
-    border: none;
-    background: transparent;
-    color: var(--ink-100);
+  .stock-search {
+    width: 100%;
+    min-height: 48px;
+    padding: 0 12px;
     font-size: 16px;
-    outline: none;
-    box-shadow: none;
+    margin-bottom: 6px;
   }
 
   .stock-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
   }
 
   .stock-row {
     display: flex;
     align-items: center;
     gap: 12px;
-    min-height: 60px;
-    padding: 8px 12px;
-    border: 1px solid var(--ink-700);
-    border-radius: var(--radius-surface);
-    background: var(--ink-900);
+    width: 100%;
+    min-height: 64px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--hairline);
+    text-align: left;
   }
 
-  .stock-main {
+  .stock-swatch {
+    width: 48px;
+    height: 42px;
+    border-radius: var(--radius-control);
+    box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.1);
+    flex-shrink: 0;
+  }
+
+  .stock-text {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    text-align: left;
-    background: transparent;
-    border: none;
+    gap: 1px;
   }
 
   .stock-name {
     font-size: 15px;
-    font-weight: 600;
-    color: var(--ink-100);
+    font-weight: 700;
+    color: var(--grafite);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -395,19 +458,50 @@
   .stock-meta {
     font-size: 12px;
     color: var(--ink-500);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .row-trash {
-    flex-shrink: 0;
-    width: 44px;
-    height: 44px;
+  .stock-chev {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    border-radius: var(--radius-pill);
-    background: transparent;
+    color: var(--hairline);
+    flex-shrink: 0;
+  }
+
+  /* ── Estado vazio (board Estados) ── */
+  .stock-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 24px 0;
+  }
+
+  .stock-empty-art {
+    display: flex;
+    align-items: flex-end;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+
+  .stock-empty-dash {
+    width: 110px;
+    height: 76px;
+    border: 2px dashed var(--hairline);
+    border-radius: var(--radius-control);
+  }
+
+  .stock-empty-title {
+    font-size: 20px;
+    font-weight: 750;
+    color: var(--grafite);
+  }
+
+  .stock-empty-hint {
+    font-size: 14px;
     color: var(--ink-500);
+    margin-top: 4px;
+    max-width: 300px;
   }
 
   /* Form */
@@ -441,36 +535,26 @@
     width: 52px;
     height: 44px;
     padding: 0;
-    border: 1px solid var(--ink-600);
+    border: 1px solid var(--hairline);
     border-radius: var(--radius-control);
     background: transparent;
   }
 
   .color-swatch:focus {
     outline: none;
-    border-color: var(--lacquer);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
+    border-color: var(--laca);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--laca) 20%, transparent);
   }
 
   .hex-input {
     width: 104px;
     min-height: 44px;
     padding: 0 10px;
-    border: 1px solid var(--ink-600);
-    border-radius: var(--radius-control);
-    background: var(--ink-850);
-    color: var(--ink-100);
     font-size: 16px;
     text-transform: uppercase;
   }
 
-  .hex-input:focus {
-    outline: none;
-    border-color: var(--lacquer);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
-  }
-
-  /* Label-etiqueta: mono, caixa alta, espaçada — padrão de rótulo. */
+  /* Label-etiqueta: mono, caixa alta, espaçada. */
   .form-label {
     font-family: var(--font-mono);
     font-size: 11px;
@@ -484,17 +568,7 @@
     width: 100%;
     min-height: 48px;
     padding: 11px 12px;
-    border: 1px solid var(--ink-600);
-    border-radius: var(--radius-control);
-    background: var(--ink-850);
-    color: var(--ink-100);
     font-size: 16px;
-    outline: none;
-  }
-
-  .form-field:focus {
-    border-color: var(--lacquer);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
   }
 
   .form-two {
@@ -522,12 +596,12 @@
     padding: 12px 14px;
     border-radius: var(--radius-surface);
     background: var(--ink-800);
-    color: var(--ink-300);
+    color: var(--ink-500);
     font-size: 14px;
   }
 
   .import-summary.ok {
-    color: var(--ink-100);
+    color: var(--grafite);
   }
 
   .err-list {
@@ -555,6 +629,6 @@
   }
 
   .err-msg {
-    color: var(--ink-300);
+    color: var(--ink-500);
   }
 </style>

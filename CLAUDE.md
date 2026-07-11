@@ -25,19 +25,32 @@ e [Manutenção / Correções](#manutenção--correções).
 - **Tipos:** `color.RGB{R,G,B uint8}`, `color.Lab{L,A,B float64}` — structs no pacote `color`
 - **Desktop:** Wails v3 (v3.0.0-alpha) + Svelte 5 (runes: $state, $derived, $effect) + TailwindCSS v4.
   `main.go` usa `application.New`; o `PaintService` é registrado como service em `Options.Services`
-- **Design:** tema "Rótulo" (CLARO, nos dois frontends) — rótulo de lata de tinta sobre
-  bancada clara: neutros stone, cor de tinta chapada como protagonista, laca `#e8542c`
-  como acento único, grafite `#1a1712` da marca como contraste. Display Bricolage
-  Grotesque Variable + corpo Archivo Variable + etiquetas IBM Plex Mono, raios
-  padronizados (botões/badges = pílula, superfícies = 12px, swatches/inputs = 8px).
-  Fontes self-hosted via `@fontsource` (sem Google Fonts — PWA offline e desktop sem
-  rede). ⚠️ Dark mode ("Estúdio") foi implementado e REJEITADO pelo usuário em
-  2026-07-10 — não propor de novo sem ele pedir.
-  **Estrutura:** desktop = barra superior (marca + nav em pills + busca global ⌘K via
-  `CommandPalette.svelte` — navega e acha tinta pelo nome, caindo na Equivalência) com
-  conteúdo centralizado (1180px); mobile = dock flutuante em pílula (padrão iOS 26).
-  **Inputs:** receita única — campo "cavado" (`--ink-850`), borda `--ink-600` visível,
-  foco laca + anel; baseline `:where()` nos dois app.css + vars SMUI no desktop
+- **Design:** tema "Tintômetro" (CLARO, nos dois frontends; evolução do "Rótulo", spec
+  no Penpot — 19 boards) — o app como instrumento de precisão de cor: a tinta é a
+  interface, o resto é bancada. Paleta de 5 cores: bancada `#f6f4ef`, papel `#ffffff`,
+  grafite `#1a1712`, hairline `#dcd6c9` (borda/divisória universal 1px), laca `#e8542c`
+  (acento único). Cor de tinta chapada como protagonista (raio 0 em painéis grandes);
+  hairlines e whitespace no lugar de cards/sombras (sombra só em superfície flutuante:
+  modal, sheet, dock). Display Bricolage Grotesque Variable + corpo Archivo Variable +
+  **todo valor medido em IBM Plex Mono** (hex, RGB, ΔE, códigos, gotas, labels de seção
+  uppercase). Raios: pílula = ação · 8px = amostra/input · 12px = superfície flutuante ·
+  0 = cor chapada. Assinaturas: fita de fórmula proporcional (`FormulaRibbon.svelte`,
+  nos dois frontends), ΔE00 gigante em mono com verdicto textual (escala 0-1/1-2/2-4/
+  4-8/8+ em `lib/ui.ts` dos dois), garrafinha `PaintBottle.svelte`, catálogo como
+  arquivo (índice No., ordem por matiz). Fontes self-hosted via `@fontsource` (sem
+  Google Fonts — PWA offline e desktop sem rede). ⚠️ Dark mode ("Estúdio") foi
+  implementado e REJEITADO pelo usuário em 2026-07-10 — não propor de novo sem ele pedir.
+  **Estrutura:** desktop = barra superior (marca + nav em TEXTO com sublinhado laca +
+  busca global ⌘K via `CommandPalette.svelte` com ações de teclado ↵/E/C) com conteúdo
+  centralizado (1180px); Equivalência = split com painel de cor chapada em altura cheia;
+  Estoque = master-detail; **receitas salvas** em localStorage `mescla.recipes.v1`
+  (`recipes.svelte.ts`: salvar na Equivalência, reabrir pela Home, contagem no Estoque).
+  Mobile = dock flutuante em pílula (ativa = pílula laca), 4 abas (Roda virou sub-tela
+  em Mais), catálogo agrupado por fabricante com tag "no estoque" (virtualização intacta).
+  **Inputs:** papel + borda hairline, raio 8, foco = borda laca + anel suave (SEM o
+  outline global de `:focus-visible` — excluído pra não duplicar anel); `type=search`
+  sem chrome nativo do WebKit; inputs de busca/hex com autocomplete/autocorrect/
+  autocapitalize/spellcheck off; baseline `:where()` nos dois app.css + vars SMUI no desktop
 - **Build:** `go build` + `npm run build` + `wails3 generate bindings -ts` (bindings gerados em
   `frontend/bindings/paint-match-ai/`, gitignorado — importados como `* as PaintService from '../../../bindings/paint-match-ai/paintservice'`)
 

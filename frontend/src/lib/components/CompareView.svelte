@@ -1,8 +1,12 @@
 <script lang="ts">
+  // Comparar (Tintômetro): todas contra a âncora, ordenadas por distância de
+  // cor. Painel-âncora chapado à esquerda; à direita, amostras duplas
+  // (metade âncora, metade candidata) com ΔE00 e verdicto.
   import { onMount } from 'svelte';
-  import Button from '@smui/button';
-  import Icon from './Icon.svelte';
-  import DeltaBadge from './DeltaBadge.svelte';
+  import PaintSearchInput from './PaintSearchInput.svelte';
+  import PaintBottle from './PaintBottle.svelte';
+  import { contrastOn, hexOf, deltaIsGood } from '../ui';
+  import { rgbToHsl } from '../color/theory';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   interface Paint {
@@ -10,40 +14,48 @@
     name: string;
     code: string;
     manufacturer: string;
+    productLine?: string;
     r: number;
     g: number;
     b: number;
   }
 
+  interface Props {
+    initialAnchorId?: number | null;
+  }
+
+  let { initialAnchorId = null }: Props = $props();
+
   let allPaints: Paint[] = $state([]);
-  let selectedIDs: number[] = $state([]);
+  let anchor: Paint | null = $state(null);
+  let candidateIds: number[] = $state([]);
   let results: any[] = $state([]);
-  let loading = $state(true);
   let comparing = $state(false);
+  let pickingAnchor = $state(false);
+  let addingPaint = $state(false);
 
   onMount(async () => {
     try {
-      allPaints = await PaintService.GetAllPaints() || [];
+      allPaints = (await PaintService.GetAllPaints()) || [];
+      if (initialAnchorId) {
+        anchor = allPaints.find(p => p.id === initialAnchorId) || null;
+      }
     } catch (e) {
       console.error('Erro:', e);
-    } finally {
-      loading = false;
     }
   });
 
-  function togglePaint(id: number) {
-    if (selectedIDs.includes(id)) {
-      selectedIDs = selectedIDs.filter(x => x !== id);
-    } else if (selectedIDs.length < 6) {
-      selectedIDs = [...selectedIDs, id];
-    }
-  }
-
   async function doCompare() {
-    if (selectedIDs.length < 2) return;
+    if (!anchor || candidateIds.length === 0) {
+      results = [];
+      return;
+    }
     comparing = true;
     try {
-      results = await PaintService.CompareColors(selectedIDs) || [];
+      const raw = (await PaintService.CompareColors([anchor.id, ...candidateIds])) || [];
+      results = raw
+        .filter((r: any) => r.paintId !== anchor!.id)
+        .sort((a: any, b: any) => a.deltaE - b.deltaE);
     } catch (e) {
       console.error('Erro comparando:', e);
       results = [];
@@ -52,100 +64,163 @@
     }
   }
 
-  function getSelectedPaints(): Paint[] {
-    return selectedIDs.map(id => allPaints.find(p => p.id === id)).filter(Boolean) as Paint[];
+  function setAnchor(p: Paint) {
+    anchor = p;
+    pickingAnchor = false;
+    candidateIds = candidateIds.filter(id => id !== p.id);
+    doCompare();
   }
 
+  function addCandidate(p: Paint) {
+    addingPaint = false;
+    if (!anchor) {
+      anchor = p;
+      return;
+    }
+    if (p.id === anchor.id || candidateIds.includes(p.id) || candidateIds.length >= 6) return;
+    candidateIds = [...candidateIds, p.id];
+    doCompare();
+  }
+
+  function removeCandidate(paintId: number) {
+    candidateIds = candidateIds.filter(id => id !== paintId);
+    results = results.filter((r: any) => r.paintId !== paintId);
+  }
+
+  const hueNames: { max: number; name: string }[] = [
+    { max: 20, name: 'o vermelho' },
+    { max: 50, name: 'o laranja' },
+    { max: 70, name: 'o amarelo' },
+    { max: 160, name: 'o verde' },
+    { max: 200, name: 'o ciano' },
+    { max: 250, name: 'o azul' },
+    { max: 290, name: 'o violeta' },
+    { max: 345, name: 'o magenta' },
+    { max: 361, name: 'o vermelho' },
+  ];
+
+  // Verdicto: escala de ΔE00 + comparação HSL simples (claridade, matiz).
+  function verdictOf(r: any): string {
+    if (!anchor) return '';
+    if (r.deltaE < 2) return 'Equivalência excelente';
+    if (r.deltaE < 4) return 'Boa sob luz de bancada';
+    const a = rgbToHsl({ r: anchor.r, g: anchor.g, b: anchor.b });
+    const c = rgbToHsl({ r: r.r, g: r.g, b: r.b });
+    if (r.deltaE < 8) {
+      const dl = c.l - a.l;
+      if (dl > 0.06) return 'Visivelmente mais clara';
+      if (dl < -0.06) return 'Visivelmente mais escura';
+      return 'Diferença perceptível';
+    }
+    const hue = hueNames.find(h => c.h < h.max)?.name ?? 'outro matiz';
+    return `Distante: puxa pra ${hue}`;
+  }
 </script>
 
 <div class="page-container">
   <div class="page-header animate-rise">
-    <h1 class="page-title">Comparar tintas</h1>
-    <p class="page-subtitle">Selecione até 6 tintas para comparar lado a lado</p>
-    <div class="page-divider"></div>
+    <h1 class="page-title">Comparar</h1>
+    <p class="page-subtitle">Todas contra a âncora, ordenadas por distância de cor.</p>
   </div>
 
   <div class="compare-layout">
-    <!-- Selection Panel -->
-    <div class="panel p-5 animate-rise" style="animation-delay: 80ms;">
-      <h3 class="font-display text-sm font-semibold text-white mb-2">Selecionar tintas</h3>
-      <div style="font-size: 11px; font-weight: 500; margin-bottom: 16px; color: var(--ink-500);">
-        {selectedIDs.length}/6 selecionadas
-      </div>
-
-      <!-- Selected chips -->
-      {#if selectedIDs.length > 0}
-        <div class="flex gap-2 mb-4 flex-wrap">
-          {#each getSelectedPaints() as paint}
-            <button class="selected-chip" onclick={() => togglePaint(paint.id)}>
-              <span class="chip-swatch-sm" style="background: rgb({paint.r}, {paint.g}, {paint.b});"></span>
-              <span class="truncate" style="max-width: 70px;">{paint.name}</span>
-              <Icon name="close" size={12} />
-            </button>
-          {/each}
+    <!-- Âncora -->
+    <div class="anchor-side animate-rise" style="animation-delay: 60ms;">
+      {#if anchor && !pickingAnchor}
+        <div class="anchor-panel" style="background: rgb({anchor.r}, {anchor.g}, {anchor.b}); color: {contrastOn(anchor.r, anchor.g, anchor.b)};">
+          <span class="label-mono inherit">Âncora</span>
+          <div>
+            <h2 class="anchor-name font-display">{anchor.name}</h2>
+            <p class="anchor-meta">{anchor.manufacturer}{anchor.productLine ? ` · ${anchor.productLine}` : ''}</p>
+            <p class="anchor-hex font-mono">{hexOf(anchor.r, anchor.g, anchor.b)}</p>
+          </div>
+        </div>
+        <button class="pill-light mt-4" onclick={() => (pickingAnchor = true)}>Trocar âncora</button>
+      {:else}
+        <div class="anchor-empty">
+          <span class="label-mono">Âncora</span>
+          <p class="anchor-pick-title font-display">Escolha a tinta de referência.</p>
+          <PaintSearchInput
+            paints={allPaints}
+            selected={null}
+            onSelect={setAnchor}
+            onClear={() => {}}
+            label="Nome, código ou marca"
+          />
+          {#if anchor}
+            <button class="cancel-pick font-mono" onclick={() => (pickingAnchor = false)}>cancelar</button>
+          {/if}
         </div>
       {/if}
-
-      <!-- Paint list -->
-      <div class="pick-list">
-        {#each allPaints as paint (paint.id)}
-          {@const isSelected = selectedIDs.includes(paint.id)}
-          <button class="pick-item" class:selected={isSelected} onclick={() => togglePaint(paint.id)}>
-            <span class="chip-swatch-sm" style="background: rgb({paint.r}, {paint.g}, {paint.b});"></span>
-            <span class="pick-text">
-              <span class="pick-name">{paint.name}</span>
-              <span class="pick-code">{paint.code}</span>
-            </span>
-          </button>
-        {/each}
-      </div>
-
-      <Button variant="raised" onclick={doCompare} disabled={selectedIDs.length < 2 || comparing} style="width: 100%; margin-top: 16px; background: var(--lacquer); color: white; font-weight: 600; border-radius: var(--radius-pill); height: 44px;">
-        {comparing ? 'Comparando…' : 'Comparar selecionadas'}
-      </Button>
     </div>
 
-    <!-- Results -->
-    <div class="animate-rise" style="animation-delay: 160ms;">
-      {#if results.length > 0}
-        <div style="display: flex; flex-direction: column; gap: 20px;">
-          <div class="font-mono" style="font-size: 11.5px; color: var(--ink-500);">
-            {results.length} comparações
-          </div>
+    <!-- Candidatas -->
+    <div class="candidates animate-rise" style="animation-delay: 120ms;">
+      <p class="label-mono cand-label">ΔE00</p>
 
-          <!-- Veredito visual: as cores COLADAS, junção limpa — nada por cima -->
-          <div class="panel p-5">
-            <div class="compare-strip" style="grid-template-columns: repeat({getSelectedPaints().length}, 1fr);">
-              {#each getSelectedPaints() as paint}
-                <div class="compare-band" style="background: rgb({paint.r}, {paint.g}, {paint.b});"></div>
-              {/each}
-            </div>
-            <div class="compare-labels" style="grid-template-columns: repeat({getSelectedPaints().length}, 1fr);">
-              {#each getSelectedPaints() as paint}
-                <div class="compare-label">
-                  <div class="compare-name">{paint.name}</div>
-                  <div class="compare-meta font-mono">rgb({paint.r},{paint.g},{paint.b})</div>
-                </div>
-              {/each}
-            </div>
-          </div>
-
-          <!-- Delta E Results -->
-          {#each results as result, i}
-            <div class="panel result-row animate-slide" style="animation-delay: {i * 50}ms;">
-              <div style="flex: 1;">
-                <div class="text-sm font-medium text-white">{result.name}</div>
-                <div style="font-size: 12px; color: var(--ink-500);">{result.manufacturer}</div>
+      {#if comparing}
+        <div class="cand-skel">
+          {#each Array(3) as _, i (i)}
+            <div class="skel-row">
+              <div class="skeleton" style="width: 168px; height: 76px; border-radius: 0;"></div>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+                <div class="skeleton" style="height: 12px; width: 40%;"></div>
+                <div class="skeleton" style="height: 10px; width: 28%;"></div>
               </div>
-              <DeltaBadge deltaE={result.deltaE} />
+              <div class="skeleton" style="width: 60px; height: 26px;"></div>
             </div>
           {/each}
         </div>
       {:else}
-        <div class="panel" style="text-align: center; padding: 80px 0;">
-          <span style="color: var(--ink-500); display: flex; justify-content: center;"><Icon name="swap" size={40} /></span>
-          <p class="font-medium mt-4" style="color: var(--ink-500);">Selecione tintas e clique em comparar</p>
-        </div>
+        {#each results as r (r.paintId)}
+          <div class="cand-row">
+            <span class="dual-swatch" aria-hidden="true">
+              <span style="background: rgb({anchor?.r}, {anchor?.g}, {anchor?.b});"></span>
+              <span style="background: rgb({r.r}, {r.g}, {r.b});"></span>
+            </span>
+            <PaintBottle r={r.r} g={r.g} b={r.b} size={48} />
+            <div class="cand-text">
+              <span class="cand-name">{r.name}</span>
+              <span class="cand-meta font-mono">{r.manufacturer}</span>
+            </div>
+            <span class="delta-reading" class:good={deltaIsGood(r.deltaE)} style="font-size: 30px;">{r.deltaE.toFixed(1)}</span>
+            <span class="cand-verdict" class:good-text={deltaIsGood(r.deltaE)}>{verdictOf(r)}</span>
+            <button class="cand-del font-mono" onclick={() => removeCandidate(r.paintId)} aria-label="Remover da comparação" title="Remover">×</button>
+          </div>
+        {/each}
+
+        {#if anchor && results.length === 0}
+          <div class="cand-empty">
+            <p class="empty-title font-display">Adicione tintas pra comparar</p>
+            <p class="empty-hint">Cada tinta entra na lista com a distância de cor até a âncora.</p>
+          </div>
+        {/if}
+
+        {#if !anchor}
+          <div class="cand-empty">
+            <p class="empty-title font-display">Comece pela âncora</p>
+            <p class="empty-hint">Escolha a tinta de referência no painel ao lado.</p>
+          </div>
+        {/if}
+
+        {#if anchor}
+          {#if addingPaint}
+            <div class="add-picker">
+              <PaintSearchInput
+                paints={allPaints}
+                selected={null}
+                onSelect={addCandidate}
+                onClear={() => {}}
+                label="Nome, código ou marca"
+              />
+              <button class="cancel-pick font-mono" onclick={() => (addingPaint = false)}>cancelar</button>
+            </div>
+          {:else}
+            <button class="pill-light add-row" onclick={() => (addingPaint = true)} disabled={candidateIds.length >= 6}>
+              + Adicionar tinta à comparação
+            </button>
+          {/if}
+        {/if}
       {/if}
     </div>
   </div>
@@ -154,135 +229,190 @@
 <style>
   .compare-layout {
     display: grid;
-    grid-template-columns: 300px 1fr;
-    gap: 24px;
+    grid-template-columns: 360px minmax(0, 1fr);
+    gap: 56px;
+    align-items: start;
   }
 
-  .result-row {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 12px 16px;
+  @media (max-width: 900px) {
+    .compare-layout {
+      grid-template-columns: 1fr;
+    }
   }
 
-  .selected-chip {
+  .anchor-panel {
     display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px 4px 6px;
-    border-radius: var(--radius-pill);
-    background: var(--ink-700);
-    color: var(--paper);
+    flex-direction: column;
+    justify-content: space-between;
+    height: 560px;
+    border-radius: var(--radius-surface);
+    padding: 24px 26px 28px;
+  }
+
+  .label-mono.inherit {
+    color: inherit;
+    opacity: 0.85;
+  }
+
+  .anchor-name {
+    font-size: clamp(1.9rem, 3vw, 2.6rem);
+    font-weight: 720;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin-bottom: 10px;
+    overflow-wrap: anywhere;
+  }
+
+  .anchor-meta {
+    font-size: 13.5px;
+    font-weight: 560;
+    margin-bottom: 6px;
+  }
+
+  .anchor-hex {
+    font-size: 12px;
+    opacity: 0.9;
+  }
+
+  .anchor-empty {
+    padding: 24px;
+    border: 1px dashed var(--hairline);
+    border-radius: var(--radius-surface);
+  }
+
+  .anchor-pick-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--grafite);
+    margin: 14px 0 16px;
+  }
+
+  .cancel-pick {
+    margin-top: 12px;
     border: none;
-    font-size: 11px;
-    font-weight: 500;
+    background: none;
+    padding: 0;
+    font-size: 11.5px;
+    color: var(--text-2);
     cursor: pointer;
-    transition: background 0.15s ease;
   }
 
-  .selected-chip:hover {
-    background: var(--ink-600);
+  .cancel-pick:hover {
+    color: var(--grafite);
   }
 
-  .chip-swatch-sm {
-    width: 12px;
-    height: 12px;
-    border-radius: 3px;
+  .cand-label {
+    display: block;
+    text-align: right;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .cand-row {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  /* Amostra dupla: metade âncora, metade candidata — raio 0, junção limpa */
+  .dual-swatch {
+    display: flex;
+    width: 168px;
+    height: 76px;
     flex-shrink: 0;
   }
 
-  .pick-list {
-    max-height: 400px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+  .dual-swatch > span {
+    display: block;
+    width: 50%;
+    height: 100%;
   }
 
-  .pick-item {
+  .cand-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .cand-name {
+    font-size: 14.5px;
+    font-weight: 680;
+    color: var(--grafite);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cand-meta {
+    font-size: 11.5px;
+    color: var(--text-2);
+  }
+
+  .cand-verdict {
+    flex-shrink: 0;
+    width: 190px;
+    font-size: 12.5px;
+    color: var(--text-2);
+  }
+
+  .cand-verdict.good-text {
+    color: var(--laca-deep);
+    font-weight: 600;
+  }
+
+  .cand-del {
+    flex-shrink: 0;
+    border: none;
+    background: none;
+    padding: 4px 6px;
+    font-size: 14px;
+    color: var(--text-3);
+    cursor: pointer;
+  }
+
+  .cand-del:hover {
+    color: var(--grafite);
+  }
+
+  .add-row {
+    width: 100%;
+    margin-top: 18px;
+  }
+
+  .add-picker {
+    margin-top: 18px;
+  }
+
+  .cand-empty {
+    padding: 40px 0;
+  }
+
+  .cand-empty .empty-title {
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--grafite);
+    margin-bottom: 6px;
+  }
+
+  .cand-empty .empty-hint {
+    font-size: 13px;
+    color: var(--text-2);
+  }
+
+  .cand-skel {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding-top: 18px;
+  }
+
+  .skel-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 8px 10px;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    background: transparent;
-    cursor: pointer;
-    text-align: left;
-    transition: background 0.15s ease, border-color 0.15s ease;
-  }
-
-  .pick-item:hover {
-    background: var(--ink-850);
-  }
-
-  .pick-item.selected {
-    background: rgba(232, 84, 44, 0.08);
-    border-color: rgba(232, 84, 44, 0.25);
-  }
-
-  .pick-text {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-
-  .pick-name {
-    font-size: 13px;
-    color: var(--ink-300);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .pick-item.selected .pick-name {
-    color: var(--paper);
-  }
-
-  .pick-code {
-    font-size: 10.5px;
-    font-family: var(--font-mono);
-    color: var(--ink-500);
-  }
-
-  /* Faixa de comparação: metades adjacentes, sem gap — a junção fica limpa */
-  .compare-strip {
-    display: grid;
-    height: 120px;
-    border-radius: var(--radius-surface);
-    overflow: hidden;
-    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
-  }
-
-  .compare-band {
-    min-width: 0;
-  }
-
-  /* Etiquetas ABAIXO de cada faixa, alinhadas às colunas de cor */
-  .compare-labels {
-    display: grid;
-    gap: 0;
-    margin-top: 10px;
-  }
-
-  .compare-label {
-    min-width: 0;
-    padding: 0 6px;
-    text-align: center;
-  }
-
-  .compare-name {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--paper);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .compare-meta {
-    font-size: 10px;
-    color: var(--ink-500);
+    gap: 16px;
   }
 </style>

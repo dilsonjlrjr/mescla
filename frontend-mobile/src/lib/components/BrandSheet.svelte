@@ -44,7 +44,7 @@
 <BottomSheet {open} {onClose} height="tall" title={mode === 'shelf' ? 'Tenho tintas de…' : 'Filtrar por marca'}>
   <div class="brand-filter">
     <Icon name="search" size={16} />
-    <input bind:value={filter} type="search" placeholder="Buscar marca…" autocomplete="off" />
+    <input bind:value={filter} type="search" placeholder="Buscar marca…" aria-label="Buscar marca" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
   </div>
 
   {#if mode === 'single'}

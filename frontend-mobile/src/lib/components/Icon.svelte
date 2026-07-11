@@ -7,8 +7,8 @@
       | 'home' | 'grid' | 'pipette' | 'swap' | 'flask' | 'chevron-left'
       | 'search' | 'close' | 'info' | 'search-off' | 'building' | 'layers'
       | 'palette' | 'flag' | 'droplet' | 'dots' | 'share' | 'copy' | 'check'
-      | 'trash' | 'plus' | 'chevron-down' | 'camera' | 'wheel' | 'book'
-      | 'box' | 'edit' | 'upload' | 'download';
+      | 'trash' | 'plus' | 'chevron-down' | 'chevron-right' | 'camera'
+      | 'wheel' | 'book' | 'box' | 'edit' | 'upload' | 'download';
     size?: number;
   }
 
@@ -51,6 +51,8 @@
     <path d="M14.5 5 8 12l6.5 7" />
   {:else if name === 'chevron-down'}
     <path d="M5 9.5 12 16l7-6.5" />
+  {:else if name === 'chevron-right'}
+    <path d="M9.5 5 16 12l-6.5 7" />
   {:else if name === 'search'}
     <circle cx="10.5" cy="10.5" r="6.2" />
     <path d="M19 19l-4.3-4.3" />
