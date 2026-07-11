@@ -24,7 +24,7 @@
   let manufacturers: { id: number; name: string }[] = $state([]);
   let loading = $state(true);
   let searchQuery = $state('');
-  let selectedManufacturer = $state('');
+  let selectedBrands: string[] = $state([]);
   let selectedId: number | null = $state(null);
 
   // Form (add/editar)
@@ -85,7 +85,7 @@
 
   let filtered = $derived(
     paints.filter(p => {
-      if (selectedManufacturer && p.manufacturer !== selectedManufacturer) return false;
+      if (selectedBrands.length > 0 && !selectedBrands.includes(p.manufacturer)) return false;
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
       return (
@@ -295,9 +295,14 @@
     <!-- Filtros -->
     <div class="stock-filters animate-rise" style="animation-delay: 60ms;">
       <div class="brand-pills">
-        <button class="filter-pill" class:active={selectedManufacturer === ''} onclick={() => (selectedManufacturer = '')}>Todas</button>
+        <button class="filter-pill" class:active={selectedBrands.length === 0} onclick={() => (selectedBrands = [])}>Todas</button>
         {#each ownedBrands as name (name)}
-          <button class="filter-pill" class:active={selectedManufacturer === name} onclick={() => (selectedManufacturer = selectedManufacturer === name ? '' : name)}>{name}</button>
+          <button
+            class="filter-pill"
+            class:active={selectedBrands.includes(name)}
+            aria-pressed={selectedBrands.includes(name)}
+            onclick={() => (selectedBrands = selectedBrands.includes(name) ? selectedBrands.filter(b => b !== name) : [...selectedBrands, name])}
+          >{name}</button>
         {/each}
       </div>
       <input type="search" class="stock-search" bind:value={searchQuery} placeholder="Buscar no estoque" aria-label="Buscar no estoque" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />

@@ -39,7 +39,7 @@
   let loading = $state(true);
   let searchQuery = $state('');
   // svelte-ignore state_referenced_locally -- captura intencional do valor inicial
-  let selectedManufacturer = $state(initialManufacturer ?? '');
+  let selectedBrands: string[] = $state(initialManufacturer ? [initialManufacturer] : []);
   let manufacturers: { id: number; name: string }[] = $state([]);
   let selectedPaint: Paint | null = $state(null);
   let dialogOpen = $state(false);
@@ -79,8 +79,8 @@
         p.manufacturer.toLowerCase().includes(q)
       );
     }
-    if (selectedManufacturer) {
-      result = result.filter(p => p.manufacturer === selectedManufacturer);
+    if (selectedBrands.length > 0) {
+      result = result.filter(p => selectedBrands.includes(p.manufacturer));
     }
     const sorted = [...result];
     if (sortBy === 'hue') sorted.sort((a, b) => hueOf(a.r, a.g, a.b) - hueOf(b.r, b.g, b.b));
@@ -91,7 +91,7 @@
 
   $effect(() => {
     // qualquer mudança de filtro/ordem volta pra primeira página
-    searchQuery; selectedManufacturer; sortBy;
+    searchQuery; selectedBrands; sortBy;
     visibleCount = PAGE;
   });
 
@@ -112,8 +112,11 @@
     toast(`${hexOf(p.r, p.g, p.b)} copiado`);
   }
 
+  // Multi-seleção: cada pill liga/desliga; "Todas" limpa o conjunto.
   function pickBrand(name: string) {
-    selectedManufacturer = selectedManufacturer === name ? '' : name;
+    selectedBrands = selectedBrands.includes(name)
+      ? selectedBrands.filter(b => b !== name)
+      : [...selectedBrands, name];
   }
 </script>
 
@@ -127,9 +130,14 @@
       </p>
     </div>
     <div class="brand-pills">
-      <button class="filter-pill" class:active={selectedManufacturer === ''} onclick={() => (selectedManufacturer = '')}>Todas</button>
+      <button class="filter-pill" class:active={selectedBrands.length === 0} onclick={() => (selectedBrands = [])}>Todas</button>
       {#each manufacturers as mfr (mfr.id)}
-        <button class="filter-pill" class:active={selectedManufacturer === mfr.name} onclick={() => pickBrand(mfr.name)}>{mfr.name}</button>
+        <button
+          class="filter-pill"
+          class:active={selectedBrands.includes(mfr.name)}
+          aria-pressed={selectedBrands.includes(mfr.name)}
+          onclick={() => pickBrand(mfr.name)}
+        >{mfr.name}</button>
       {/each}
     </div>
   </div>

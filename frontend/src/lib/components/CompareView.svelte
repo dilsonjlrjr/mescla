@@ -244,7 +244,9 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    height: 560px;
+    /* Encolhe com a janela: painel + botão "Trocar âncora" precisam caber
+       na dobra (topbar 64 + header da página + rodapé). 560px só em tela alta. */
+    height: clamp(340px, calc(100dvh - 420px), 560px);
     border-radius: var(--radius-surface);
     padding: 24px 26px 28px;
   }

@@ -12,6 +12,7 @@
   import { findSimilar, type SearchResult } from '../services/engine';
   import { appState } from '../appState.svelte';
   import { hslToRgb, rgbToHsl, rgbToHex, hexToRgb, harmony, HARMONY_LABEL, type HarmonyKind } from '../color/theory';
+  import { deltaIsGood } from '../ui';
 
   let hue = $state(165);
   let sat = $state(0.62);
@@ -224,7 +225,7 @@
             <span class="near-name">{res.name}</span>
             <span class="near-meta font-mono">{res.code} · {res.manufacturer}</span>
           </span>
-          <span class="near-delta font-mono" class:best={i === 0}>{res.deltaE.toFixed(1)}</span>
+          <span class="near-delta font-mono" class:best={deltaIsGood(res.deltaE)}>{res.deltaE.toFixed(1)}</span>
         </button>
       {/each}
     {/if}

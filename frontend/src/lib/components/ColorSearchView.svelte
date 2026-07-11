@@ -135,7 +135,7 @@
                 <span class="result-meta font-mono">{r.manufacturer}</span>
               </div>
               <div class="result-delta">
-                <span class="delta-reading" class:good={i === 0 && deltaIsGood(r.deltaE)} style="font-size: 26px;">{r.deltaE.toFixed(1)}</span>
+                <span class="delta-reading" class:good={deltaIsGood(r.deltaE)} style="font-size: 26px;">{r.deltaE.toFixed(1)}</span>
                 {#if i === 0}
                   <span class="best-tag font-mono">melhor</span>
                 {/if}

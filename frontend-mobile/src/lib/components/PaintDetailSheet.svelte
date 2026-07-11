@@ -11,6 +11,7 @@
   import { toast } from '../toast.svelte';
   import { addToCompare, appState } from '../appState.svelte';
   import { switchTab } from '../nav.svelte';
+  import { deltaIsGood } from '../ui';
 
   interface Props {
     paint: Paint | null;
@@ -118,7 +119,7 @@
               <span class="pd-sim-swatch" style="background: rgb({s.r}, {s.g}, {s.b});"></span>
               <PaintBottle r={s.r} g={s.g} b={s.b} size={40} />
             </span>
-            <span class="pd-sim-delta font-mono">ΔE {s.deltaE.toFixed(1)}</span>
+            <span class="pd-sim-delta font-mono" class:good={deltaIsGood(s.deltaE)}>ΔE {s.deltaE.toFixed(1)}</span>
           </div>
         {/each}
       </div>
@@ -255,6 +256,10 @@
   .pd-sim-delta {
     font-size: 11px;
     color: var(--ink-500);
+  }
+
+  .pd-sim-delta.good {
+    color: var(--laca);
   }
 
   .pd-actions {
