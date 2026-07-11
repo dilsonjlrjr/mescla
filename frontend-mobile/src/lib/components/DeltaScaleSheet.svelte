@@ -64,7 +64,7 @@
     align-items: center;
     gap: 14px;
     padding: 12px 14px;
-    border-radius: 10px;
+    border-radius: var(--radius-surface);
     background: var(--ink-900);
     border: 1px solid var(--ink-700);
     opacity: 0.75;

@@ -68,7 +68,7 @@
 <div class="cat">
   <div class="cat-top">
     <h1 class="screen-title">Catálogo</h1>
-    <p class="cat-count">{filtered.length.toLocaleString('pt-BR')} tintas</p>
+    <p class="cat-count font-mono">{filtered.length.toLocaleString('pt-BR')} tintas</p>
 
     <div class="cat-search">
       <Icon name="search" size={18} />
@@ -120,12 +120,12 @@
           <div class="cat-row">
             {#each pair as p (p.id)}
               <button class="cat-card pressable" onclick={() => (detailPaint = p)}>
-                <span class="cat-card-swatch" style="background: color-mix(in srgb, rgb({p.r}, {p.g}, {p.b}) 22%, var(--ink-800));">
-                  <PaintBottle r={p.r} g={p.g} b={p.b} size={72} />
-                  <span class="cat-card-code font-mono">{p.code}</span>
+                <span class="cat-card-swatch">
+                  <span class="cat-card-color" style="background: rgb({p.r}, {p.g}, {p.b});"></span>
+                  <span class="cat-card-bottle"><PaintBottle r={p.r} g={p.g} b={p.b} size={68} /></span>
                 </span>
                 <span class="cat-card-name">{p.name}</span>
-                <span class="cat-card-mfr">{p.manufacturer}</span>
+                <span class="cat-card-meta"><span class="font-mono">{p.code}</span> · {p.manufacturer}</span>
               </button>
             {/each}
             {#if pair.length === 1}
@@ -174,10 +174,15 @@
     gap: 10px;
     min-height: 52px;
     padding: 0 14px;
-    border: 1px solid var(--ink-700);
+    border: 1px solid var(--ink-600);
     border-radius: 12px;
-    background: var(--ink-900);
+    background: var(--ink-850);
     color: var(--ink-500);
+  }
+
+  .cat-search:focus-within {
+    border-color: var(--lacquer);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
   }
 
   .cat-search input {
@@ -185,6 +190,7 @@
     min-width: 0;
     border: none;
     outline: none;
+    box-shadow: none;
     background: transparent;
     font: inherit;
     font-size: 16px;
@@ -255,47 +261,59 @@
     height: 100%;
   }
 
+  /* Cartela de tinta: cor chapada honesta (a tinta real, sem lavar) com o
+     furo de catálogo da assinatura, código como etiqueta impressa abaixo. */
   .cat-card {
     display: flex;
     flex-direction: column;
     border: 1px solid var(--ink-700);
-    border-radius: 10px;
-    background: var(--ink-850);
+    border-radius: var(--radius-surface);
+    background: var(--ink-900);
     overflow: hidden;
     text-align: left;
     min-width: 0;
   }
 
+  /* Topo do card: sample da cor chapada + a garrafinha do lado. */
   .cat-card-swatch {
     position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: 1.35fr 1fr;
     height: 96px;
     flex-shrink: 0;
   }
 
-  .cat-card-code {
+  .cat-card-color {
+    display: block;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink-100) 12%, transparent);
+  }
+
+  .cat-card-bottle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ink-850);
+    border-left: 1px solid var(--ink-700);
+  }
+
+  /* furo de catálogo — sempre sobre a COR */
+  .cat-card-swatch::after {
+    content: '';
     position: absolute;
-    bottom: 6px;
+    top: 6px;
     left: 6px;
-    font-size: 10px;
-    font-weight: 500;
-    padding: 2px 7px;
-    border-radius: 4px;
-    background: rgba(26, 23, 18, 0.55);
-    color: rgba(255, 255, 255, 0.92);
-    max-width: calc(100% - 12px);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ink-950);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
   }
 
   .cat-card-name {
     font-size: 13.5px;
     font-weight: 600;
     color: var(--ink-100);
-    padding: 8px 10px 0;
+    padding: 9px 11px 0;
     line-height: 1.25;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -304,10 +322,10 @@
     overflow: hidden;
   }
 
-  .cat-card-mfr {
+  .cat-card-meta {
     font-size: 11px;
     color: var(--ink-500);
-    padding: 2px 10px 8px;
+    padding: 3px 11px 9px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

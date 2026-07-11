@@ -31,18 +31,30 @@
 </nav>
 
 <style>
+  /* Dock flutuante em pílula: destacado do rodapé, o conteúdo passa por
+     baixo — a navegação vira um objeto na bancada, não uma parede. */
   .tab-bar {
     position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    bottom: calc(12px + var(--safe-bottom));
+    left: 50%;
+    transform: translateX(-50%);
     z-index: 50;
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    height: calc(var(--tab-bar-h) + var(--safe-bottom));
-    padding-bottom: var(--safe-bottom);
-    background: var(--ink-900);
-    border-top: 1px solid var(--ink-700);
+    display: flex;
+    gap: 2px;
+    padding: 7px 9px;
+    background: color-mix(in srgb, var(--ink-900) 90%, transparent);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--ink-700);
+    border-radius: var(--radius-pill);
+    box-shadow: 0 16px 40px rgba(26, 23, 18, 0.18);
+    max-width: calc(100vw - 24px);
+  }
+
+  @supports not (backdrop-filter: blur(16px)) {
+    .tab-bar {
+      background: var(--ink-900);
+    }
   }
 
   .tab-item {
@@ -51,7 +63,9 @@
     align-items: center;
     justify-content: center;
     gap: 2px;
-    font-size: 11px;
+    width: 62px;
+    padding: 2px 0 4px;
+    font-size: 10.5px;
     font-weight: 500;
     color: var(--ink-500);
     transition: color 0.15s ease;

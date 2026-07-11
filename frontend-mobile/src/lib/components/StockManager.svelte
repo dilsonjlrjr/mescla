@@ -3,7 +3,6 @@
   // Renderizado dentro da sub-tela "Meu estoque" da aba Mais. A crítica do CSV
   // e o modelo vêm do WASM (pkg/stock), a mesma do desktop.
   import Icon from './Icon.svelte';
-  import PaintBottle from './PaintBottle.svelte';
   import BottomSheet from './BottomSheet.svelte';
   import { allManufacturers } from '../services/catalog';
   import {
@@ -218,7 +217,7 @@
     <div class="stock-list">
       {#each filtered as p (p.id)}
         <div class="stock-row">
-          <PaintBottle r={p.r} g={p.g} b={p.b} size={40} label={p.code} />
+          <span class="swatch-flat" style="width: 44px; height: 44px; background: rgb({p.r}, {p.g}, {p.b});"></span>
           <button class="stock-main pressable" onclick={() => openEdit(p)}>
             <span class="stock-name">{p.name}</span>
             <span class="stock-meta">
@@ -238,7 +237,7 @@
 <BottomSheet open={formOpen} onClose={() => (formOpen = false)} title={editingId === null ? 'Adicionar tinta' : 'Editar tinta'}>
   <div class="form">
     <div class="form-color">
-      <PaintBottle r={hexToRgb(fHex).r} g={hexToRgb(fHex).g} b={hexToRgb(fHex).b} size={52} label={fCode} />
+      <span class="swatch-flat" style="width: 52px; height: 52px; background: rgb({hexToRgb(fHex).r}, {hexToRgb(fHex).g}, {hexToRgb(fHex).b});"></span>
       <div class="color-inputs">
         <span class="form-label">Cor</span>
         <div class="color-row">
@@ -332,20 +331,28 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 12px;
-    border: 1px solid var(--ink-700);
-    border-radius: 10px;
-    background: var(--ink-800);
+    min-height: 48px;
+    padding: 0 12px;
+    border: 1px solid var(--ink-600);
+    border-radius: var(--radius-control);
+    background: var(--ink-850);
     color: var(--ink-500);
+  }
+
+  .stock-search:focus-within {
+    border-color: var(--lacquer);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
   }
 
   .stock-search input {
     flex: 1;
+    min-width: 0;
     border: none;
     background: transparent;
-    color: var(--paper);
-    font-size: 14px;
+    color: var(--ink-100);
+    font-size: 16px;
     outline: none;
+    box-shadow: none;
   }
 
   .stock-list {
@@ -358,9 +365,10 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 10px 12px;
+    min-height: 60px;
+    padding: 8px 12px;
     border: 1px solid var(--ink-700);
-    border-radius: 10px;
+    border-radius: var(--radius-surface);
     background: var(--ink-900);
   }
 
@@ -376,10 +384,9 @@
   }
 
   .stock-name {
-    font-family: var(--font-display);
     font-size: 15px;
     font-weight: 600;
-    color: var(--paper);
+    color: var(--ink-100);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -392,13 +399,13 @@
 
   .row-trash {
     flex-shrink: 0;
-    width: 38px;
-    height: 38px;
+    width: 44px;
+    height: 44px;
     display: flex;
     align-items: center;
     justify-content: center;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-pill);
     background: transparent;
     color: var(--ink-500);
   }
@@ -431,26 +438,41 @@
   }
 
   .color-swatch {
-    width: 46px;
-    height: 38px;
+    width: 52px;
+    height: 44px;
     padding: 0;
-    border: 1px solid var(--ink-700);
-    border-radius: 8px;
+    border: 1px solid var(--ink-600);
+    border-radius: var(--radius-control);
     background: transparent;
+  }
+
+  .color-swatch:focus {
+    outline: none;
+    border-color: var(--lacquer);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
   }
 
   .hex-input {
     width: 104px;
-    padding: 9px 10px;
-    border: 1px solid var(--ink-700);
-    border-radius: 8px;
-    background: var(--ink-800);
-    color: var(--paper);
-    font-size: 14px;
+    min-height: 44px;
+    padding: 0 10px;
+    border: 1px solid var(--ink-600);
+    border-radius: var(--radius-control);
+    background: var(--ink-850);
+    color: var(--ink-100);
+    font-size: 16px;
     text-transform: uppercase;
   }
 
+  .hex-input:focus {
+    outline: none;
+    border-color: var(--lacquer);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
+  }
+
+  /* Label-etiqueta: mono, caixa alta, espaçada — padrão de rótulo. */
   .form-label {
+    font-family: var(--font-mono);
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -460,17 +482,19 @@
 
   .form-field {
     width: 100%;
+    min-height: 48px;
     padding: 11px 12px;
-    border: 1px solid var(--ink-700);
-    border-radius: 10px;
-    background: var(--ink-800);
-    color: var(--paper);
-    font-size: 15px;
+    border: 1px solid var(--ink-600);
+    border-radius: var(--radius-control);
+    background: var(--ink-850);
+    color: var(--ink-100);
+    font-size: 16px;
     outline: none;
   }
 
   .form-field:focus {
     border-color: var(--lacquer);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
   }
 
   .form-two {
@@ -496,14 +520,14 @@
     align-items: center;
     gap: 10px;
     padding: 12px 14px;
-    border-radius: 10px;
+    border-radius: var(--radius-surface);
     background: var(--ink-800);
     color: var(--ink-300);
     font-size: 14px;
   }
 
   .import-summary.ok {
-    color: var(--paper);
+    color: var(--ink-100);
   }
 
   .err-list {
@@ -519,13 +543,13 @@
     gap: 10px;
     align-items: baseline;
     padding: 8px 10px;
-    border-radius: 8px;
+    border-radius: var(--radius-control);
     background: var(--ink-800);
     font-size: 12.5px;
   }
 
   .err-line {
-    color: #f0a86a;
+    color: var(--lacquer-deep);
     flex-shrink: 0;
     font-size: 11.5px;
   }

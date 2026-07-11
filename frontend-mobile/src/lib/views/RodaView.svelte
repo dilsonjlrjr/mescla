@@ -229,7 +229,9 @@
       />
     </div>
 
-    <div class="selected-chip" style="background: {baseHex};">
+    <!-- Cor escolhida chapada; a etiqueta hex fica ao lado, fora da cor. -->
+    <div class="selected-row">
+      <span class="selected-chip swatch-flat" style="background: {baseHex};"></span>
       <span class="selected-hex font-mono">{baseHex}</span>
     </div>
 
@@ -473,11 +475,12 @@
     gap: 12px;
   }
   .light-label {
+    font-family: var(--font-mono);
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    color: var(--ink-400);
+    color: var(--ink-500);
     width: 34px;
   }
   .light-row input[type='range'] {
@@ -508,20 +511,20 @@
     border: 2px solid var(--paper);
   }
 
-  .selected-chip {
-    height: 56px;
-    border-radius: 12px;
+  .selected-row {
     display: flex;
-    align-items: flex-end;
-    padding: 8px 10px;
-    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+    align-items: center;
+    gap: 12px;
+  }
+  .selected-chip {
+    flex: 1;
+    height: 56px;
   }
   .selected-hex {
     font-size: 13px;
-    padding: 4px 9px;
-    border-radius: 6px;
-    background: rgba(26, 23, 18, 0.5);
-    color: rgba(255, 255, 255, 0.95);
+    letter-spacing: 0.04em;
+    color: var(--ink-300);
+    flex-shrink: 0;
   }
 
   .hex-row {
@@ -533,15 +536,16 @@
     min-width: 0;
     min-height: 46px;
     padding: 0 14px;
-    border: 1px solid var(--ink-700);
-    border-radius: 12px;
-    background: var(--ink-900);
+    border: 1px solid var(--ink-600);
+    border-radius: var(--radius-control);
+    background: var(--ink-850);
     font-size: 16px;
     color: var(--ink-100);
     outline: none;
   }
   .hex-row input:focus {
     border-color: var(--lacquer);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
   }
 
   .block {
@@ -555,7 +559,7 @@
   }
   .block-title {
     font-size: 17px;
-    font-weight: 600;
+    font-weight: 640;
     color: var(--ink-100);
     margin-bottom: 10px;
   }
@@ -569,9 +573,9 @@
   .seg {
     padding: 10px 2px;
     border: 1px solid var(--ink-700);
-    border-radius: 9px;
+    border-radius: var(--radius-pill);
     background: transparent;
-    color: var(--ink-400);
+    color: var(--ink-300);
     font-size: 12px;
     font-weight: 600;
   }
@@ -584,7 +588,7 @@
   .hint {
     font-size: 13px;
     line-height: 1.5;
-    color: var(--ink-400);
+    color: var(--ink-300);
     margin-bottom: 14px;
   }
   .hint strong {
@@ -610,7 +614,7 @@
   .hs-color {
     width: 60px;
     height: 60px;
-    border-radius: 12px;
+    border-radius: var(--radius-control);
     box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
   }
   .hs-role {
@@ -631,7 +635,7 @@
   }
   .ramp-cell {
     height: 64px;
-    border-radius: 8px;
+    border-radius: var(--radius-control);
     box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
   }
   .ramp-cell.is-base {
@@ -669,16 +673,17 @@
     width: 100%;
     min-height: 44px;
     padding: 0 12px;
-    border: 1px solid var(--ink-700);
-    border-radius: 10px;
-    background: var(--ink-900);
+    border: 1px solid var(--ink-600);
+    border-radius: var(--radius-control);
+    background: var(--ink-850);
     color: var(--ink-100);
-    font-size: 15px;
+    font-size: 16px;
     font-family: var(--font-body);
     outline: none;
   }
   .col-brand:focus {
     border-color: var(--lacquer);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
   }
 
   .step-empty {
@@ -694,7 +699,7 @@
     gap: 6px;
     padding: 9px 14px;
     border: 1px solid var(--lacquer);
-    border-radius: 10px;
+    border-radius: var(--radius-pill);
     background: transparent;
     color: var(--lacquer);
     font-size: 14px;
@@ -715,21 +720,21 @@
   .mix-target {
     width: 46px;
     height: 46px;
-    border-radius: 11px;
+    border-radius: var(--radius-control);
     flex-shrink: 0;
     box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
   }
   .mix-target-text {
     font-size: 13.5px;
     line-height: 1.4;
-    color: var(--ink-400);
+    color: var(--ink-300);
   }
   .mix-loading,
   .mix-error {
     text-align: center;
     padding: 24px 0;
     font-size: 14px;
-    color: var(--ink-400);
+    color: var(--ink-500);
   }
   .mix-error {
     color: var(--delta-poor);
@@ -743,7 +748,7 @@
     color: var(--delta-fair);
     background: color-mix(in srgb, var(--delta-fair) 12%, transparent);
     padding: 11px 13px;
-    border-radius: 10px;
+    border-radius: var(--radius-surface);
     margin-bottom: 16px;
   }
   .mix-ingredients {
@@ -757,7 +762,7 @@
     gap: 12px;
     padding: 10px 12px;
     border: 1px solid var(--ink-700);
-    border-radius: 12px;
+    border-radius: var(--radius-surface);
     background: var(--ink-900);
   }
   .mix-ing-info {
@@ -795,7 +800,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    color: var(--ink-400);
+    color: var(--ink-500);
   }
   .mix-swatch-col {
     display: flex;
@@ -806,7 +811,7 @@
   .mix-swatch {
     width: 44px;
     height: 44px;
-    border-radius: 10px;
+    border-radius: var(--radius-control);
     box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
   }
   .mix-swatch-label {
@@ -849,7 +854,7 @@
   .step-swatch {
     width: 42px;
     height: 42px;
-    border-radius: 10px;
+    border-radius: var(--radius-control);
     flex-shrink: 0;
     box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
   }
@@ -858,7 +863,7 @@
   }
   .step-why {
     font-size: 13px;
-    color: var(--ink-400);
+    color: var(--ink-300);
   }
   .step-result {
     display: flex;

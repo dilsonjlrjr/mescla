@@ -5,7 +5,6 @@
   import LinearProgress from '@smui/linear-progress';
   import Icon from './Icon.svelte';
   import DeltaBadge from './DeltaBadge.svelte';
-  import PaintBottle from './PaintBottle.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   let targetR = $state(180);
@@ -30,6 +29,9 @@
     }
   }
 
+  let targetHex = $derived(
+    '#' + [targetR, targetG, targetB].map(n => n.toString(16).padStart(2, '0').toUpperCase()).join('')
+  );
 </script>
 
 <div class="page-container">
@@ -44,10 +46,11 @@
     <div class="panel p-5 animate-rise" style="animation-delay: 80ms;">
       <h3 class="font-display text-sm font-semibold text-white mb-4">Cor alvo</h3>
 
-      <!-- Preview -->
-      <div class="color-preview" style="width: 100%; aspect-ratio: 16/10; background: rgb({targetR}, {targetG}, {targetB});">
-        <div class="color-preview-badge">RGB({targetR}, {targetG}, {targetB})</div>
+      <!-- Preview: cor chapada com furo; a etiqueta fica FORA da cor -->
+      <div class="target-preview" style="background: rgb({targetR}, {targetG}, {targetB});">
+        <span class="target-punch"></span>
       </div>
+      <div class="target-tag font-mono">{targetHex} · rgb({targetR}, {targetG}, {targetB})</div>
 
       <!-- Sliders -->
       <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 16px;">
@@ -59,7 +62,7 @@
           <div>
             <div class="flex justify-between mb-2">
               <span style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: {channel.color};">{channel.label}</span>
-              <span class="font-mono" style="font-size: 12px; color: var(--ink-400);">{channel.value}</span>
+              <span class="font-mono" style="font-size: 12px; color: var(--ink-500);">{channel.value}</span>
             </div>
             <Slider
               min={0}
@@ -78,7 +81,7 @@
         <Textfield variant="outlined" bind:value={maxResults} label="Máx. resultados" type="number" style="width: 100%;" />
       </div>
 
-      <Button variant="raised" onclick={doSearch} disabled={searching} style="width: 100%; margin-top: 20px; background: var(--lacquer); color: white; font-weight: 600; border-radius: 8px; height: 46px;">
+      <Button variant="raised" onclick={doSearch} disabled={searching} style="width: 100%; margin-top: 20px; background: var(--lacquer); color: white; font-weight: 600; border-radius: var(--radius-pill); height: 46px;">
         {searching ? 'Buscando…' : 'Buscar tintas similares'}
       </Button>
     </div>
@@ -97,15 +100,15 @@
         </div>
       {:else if results.length > 0}
         <div style="display: flex; flex-direction: column; gap: 10px;">
-          <div class="text-sm font-medium mb-2" style="color: var(--ink-400);">
+          <div class="font-mono mb-2" style="font-size: 11.5px; color: var(--ink-500);">
             {results.length} tintas encontradas
           </div>
           {#each results as result, i}
             <div class="panel result-row animate-slide" style="animation-delay: {i * 40}ms;">
-              <PaintBottle r={result.r} g={result.g} b={result.b} size={52} />
+              <span class="swatch-flat" style="width: 46px; height: 46px; background: rgb({result.r}, {result.g}, {result.b});"></span>
               <div style="flex: 1; min-width: 0;">
                 <div class="font-semibold text-sm text-white truncate">{result.name}</div>
-                <div style="font-size: 12px; color: var(--ink-500);">{result.manufacturer}</div>
+                <div class="font-mono" style="font-size: 11px; color: var(--ink-500);">{result.manufacturer}</div>
               </div>
               <DeltaBadge
                 deltaE={result.deltaE}
@@ -143,5 +146,32 @@
 
   .result-row:hover {
     border-color: var(--ink-600);
+  }
+
+  /* Cor-alvo chapada, com o furo de catálogo no canto */
+  .target-preview {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    border-radius: var(--radius-control);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  }
+
+  .target-punch {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--ink-950);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+
+  /* Etiqueta da cor: fora do swatch, nunca por cima */
+  .target-tag {
+    margin-top: 8px;
+    font-size: 11.5px;
+    color: var(--ink-500);
   }
 </style>

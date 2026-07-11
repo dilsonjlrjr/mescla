@@ -29,7 +29,7 @@
   ];
 </script>
 
-<Dialog bind:open onSMUIDialogClosed={onClose} surface$style="background: var(--ink-900); border: 1px solid var(--ink-700); border-radius: 12px; max-width: 640px; width: 100%;">
+<Dialog bind:open onSMUIDialogClosed={onClose} surface$style="background: var(--ink-900); border: 1px solid var(--ink-700); border-radius: var(--radius-surface); max-width: 640px; width: 100%;">
   <DialogContent>
     <div style="padding: 12px 8px 8px;">
       <div class="flex items-center gap-3 mb-2">
@@ -57,7 +57,7 @@
       </div>
 
       <div class="panel p-4 mb-5" style="background: var(--ink-850);">
-        <div style="font-size: 12px; font-weight: 600; color: var(--ink-300); margin-bottom: 8px;">Como ler o selo de proximidade</div>
+        <div class="font-mono" style="font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-500); margin-bottom: 8px;">Como ler o selo de proximidade</div>
         <div class="flex flex-wrap gap-2">
           <span class="delta-badge excellent" style="font-size: 11px;">Idêntica <span class="delta-value">ΔE &lt; 1</span></span>
           <span class="delta-badge excellent" style="font-size: 11px;">Muito próxima <span class="delta-value">ΔE &lt; 3</span></span>

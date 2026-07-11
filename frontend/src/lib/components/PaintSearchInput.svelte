@@ -1,7 +1,6 @@
 <script lang="ts">
   import Textfield from '@smui/textfield';
   import Icon from './Icon.svelte';
-  import PaintBottle from './PaintBottle.svelte';
 
   interface PaintOption {
     id: number;
@@ -43,10 +42,10 @@
 
 {#if selected}
   <div class="paint-search-chip">
-    <PaintBottle r={selected.r} g={selected.g} b={selected.b} size={44} />
+    <span class="swatch-flat" style="width: 40px; height: 40px; background: rgb({selected.r}, {selected.g}, {selected.b});"></span>
     <div style="flex: 1; min-width: 0;">
       <div class="font-semibold text-sm text-white truncate">{selected.name}</div>
-      <div style="font-size: 11px; color: var(--ink-500);">{selected.manufacturer}</div>
+      <div class="font-mono" style="font-size: 10.5px; color: var(--ink-500);">{selected.manufacturer}</div>
     </div>
     <button class="paint-search-swap" onclick={onClear}>Trocar</button>
   </div>
@@ -63,10 +62,10 @@
         {#if results.length > 0}
           {#each results as p (p.id)}
             <button class="paint-search-result" onclick={() => pick(p)}>
-              <PaintBottle r={p.r} g={p.g} b={p.b} size={32} />
+              <span class="swatch-flat" style="width: 30px; height: 30px; background: rgb({p.r}, {p.g}, {p.b});"></span>
               <div style="flex: 1; min-width: 0;">
                 <div class="font-medium text-sm text-white truncate">{p.name}</div>
-                <div style="font-size: 11px; color: var(--ink-500);">{p.manufacturer}</div>
+                <div class="font-mono" style="font-size: 10.5px; color: var(--ink-500);">{p.manufacturer}</div>
               </div>
             </button>
           {/each}
@@ -88,6 +87,9 @@
     max-height: 260px;
     overflow-y: auto;
     padding: 6px;
+    background: var(--ink-900);
+    border: 1px solid var(--ink-700);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
   }
 
   .paint-search-result {
@@ -114,7 +116,7 @@
     gap: 12px;
     padding: 10px 12px;
     border: 1px solid var(--ink-700);
-    border-radius: 8px;
+    border-radius: var(--radius-control);
     background: var(--ink-900);
   }
 

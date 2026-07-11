@@ -40,7 +40,8 @@
   </div>
 {:else if !booted}
   <div class="boot">
-    <BrandMark size={44} />
+    <BrandMark size={52} />
+    <p class="boot-word font-display">Mescla</p>
     <p class="boot-tag font-mono">cor certa, qualquer marca</p>
   </div>
 {:else}
@@ -68,6 +69,15 @@
     background: var(--ink-950);
   }
 
+  .boot-word {
+    font-size: 36px;
+    font-weight: 750;
+    color: var(--paper);
+    letter-spacing: -0.015em;
+    line-height: 1;
+    margin-top: 2px;
+  }
+
   .boot-tag {
     font-size: 11px;
     letter-spacing: 0.14em;
@@ -84,7 +94,8 @@
   .views {
     height: 100dvh;
     padding-top: var(--safe-top);
-    padding-bottom: calc(var(--tab-bar-h) + var(--safe-bottom));
+    /* dock flutuante: altura da pílula + o respiro de 12px embaixo dela */
+    padding-bottom: calc(var(--tab-bar-h) + var(--safe-bottom) + 26px);
   }
 
   .view {

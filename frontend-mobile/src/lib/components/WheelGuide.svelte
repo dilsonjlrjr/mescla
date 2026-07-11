@@ -153,7 +153,7 @@
   }
   .guide-chevron {
     display: flex;
-    color: var(--ink-400);
+    color: var(--ink-500);
     transition: transform 0.22s ease;
   }
   .guide-chevron.flipped {
@@ -195,7 +195,7 @@
   .card p {
     font-size: 13.5px;
     line-height: 1.5;
-    color: var(--ink-400);
+    color: var(--ink-300);
   }
   .card strong {
     color: var(--ink-100);
@@ -316,7 +316,7 @@
   .steps li {
     font-size: 13.5px;
     line-height: 1.5;
-    color: var(--ink-400);
+    color: var(--ink-300);
   }
   .steps strong {
     color: var(--ink-100);

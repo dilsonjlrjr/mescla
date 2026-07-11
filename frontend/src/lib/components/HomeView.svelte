@@ -66,27 +66,45 @@
 </script>
 
 <div class="page-container">
-  <!-- Hero: a tese do produto -->
+  <!-- Hero: a tese do produto à esquerda; à direita o motivo da marca em
+       escala real — duas tintas do catálogo se encontrando na costura. -->
   <div class="hero animate-rise">
-    <div class="hero-brand">
-      <BrandMark size={52} />
-      <div class="hero-word font-display">Mescla</div>
+    <div class="hero-copy">
+      <div class="hero-brand">
+        <BrandMark size={52} />
+        <div class="hero-word font-display">Mescla</div>
+      </div>
+      <h1 class="hero-thesis font-display">
+        Você tem a cor em <em>uma</em> marca.<br />
+        Precisa dela em <em>outra</em>.
+      </h1>
+      <p class="hero-sub">
+        {#if loading}
+          Carregando o catálogo…
+        {:else if stats}
+          {stats.paints.toLocaleString('pt-BR')} tintas de {stats.manufacturers} marcas, comparadas como o olho vê — offline.
+        {/if}
+      </p>
+      <button class="btn-primary hero-cta" onclick={() => onNavigate('mix')}>
+        <Icon name="flask" size={17} />
+        Encontrar equivalência
+      </button>
     </div>
-    <h1 class="hero-thesis font-display">
-      Você tem a cor em <em>uma</em> marca.<br />
-      Precisa dela em <em>outra</em>.
-    </h1>
-    <p class="hero-sub">
-      {#if loading}
-        Carregando o catálogo…
-      {:else if stats}
-        {stats.paints.toLocaleString('pt-BR')} tintas de {stats.manufacturers} marcas, comparadas como o olho vê — offline.
+
+    <div class="hero-visual" aria-hidden="true">
+      {#if shelf.length >= 3}
+        <div class="hero-shelf">
+          <div class="hero-bottles">
+            <PaintBottle r={shelf[0].r} g={shelf[0].g} b={shelf[0].b} size={96} />
+            <PaintBottle r={shelf[Math.floor(shelf.length / 2)].r} g={shelf[Math.floor(shelf.length / 2)].g} b={shelf[Math.floor(shelf.length / 2)].b} size={124} />
+            <PaintBottle r={shelf[shelf.length - 1].r} g={shelf[shelf.length - 1].g} b={shelf[shelf.length - 1].b} size={96} />
+          </div>
+          <div class="hero-shelf-line"></div>
+        </div>
+      {:else}
+        <div class="hero-shelf skeleton"></div>
       {/if}
-    </p>
-    <button class="btn-primary hero-cta" onclick={() => onNavigate('mix')}>
-      <Icon name="flask" size={17} />
-      Encontrar equivalência
-    </button>
+    </div>
   </div>
 
   <!-- Como funciona (guia inline, sempre visível) -->
@@ -136,9 +154,48 @@
 
 <style>
   .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(220px, 1fr);
+    gap: 48px;
+    align-items: center;
     padding: 36px 0 40px;
     margin-bottom: 40px;
     border-bottom: 1px solid var(--ink-700);
+  }
+
+  @media (max-width: 940px) {
+    .hero {
+      grid-template-columns: 1fr;
+      gap: 24px;
+    }
+  }
+
+  /* A prateleira: três garrafinhas com cores reais do catálogo apoiadas
+     numa linha — o produto em pessoa dando as boas-vindas. */
+  .hero-shelf {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 232px;
+    padding: 24px 24px 30px;
+    background: var(--ink-900);
+    border: 1px solid var(--ink-700);
+    border-radius: var(--radius-surface);
+  }
+
+  .hero-bottles {
+    display: flex;
+    align-items: flex-end;
+    gap: 22px;
+  }
+
+  .hero-shelf-line {
+    width: 78%;
+    height: 3px;
+    margin-top: 14px;
+    border-radius: 999px;
+    background: var(--ink-700);
   }
 
   .hero-brand {

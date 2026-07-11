@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import Sidebar from './lib/components/Sidebar.svelte';
+  import TopBar from './lib/components/TopBar.svelte';
+  import CommandPalette from './lib/components/CommandPalette.svelte';
   import HomeView from './lib/components/HomeView.svelte';
   import CatalogView from './lib/components/CatalogView.svelte';
   import ManufacturersView from './lib/components/ManufacturersView.svelte';
@@ -15,9 +16,9 @@
   type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock';
 
   let currentView: View = $state('home');
-  let sidebarCollapsed = $state(false);
   let recipeSourcePaintId: number | null = $state(null);
   let guideOpen = $state(false);
+  let paletteOpen = $state(false);
 
   function handleNavigate(view: View, paintId?: number) {
     currentView = view;
@@ -26,8 +27,16 @@
     }
   }
 
+  // ⌘K / Ctrl+K abre a busca global de qualquer tela.
+  function onKeydown(e: KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      paletteOpen = !paletteOpen;
+    }
+  }
+
   onMount(() => {
-    // Guia abre sozinho só na primeira execução; depois fica no "?" da sidebar.
+    // Guia abre sozinho só na primeira execução; depois fica no "?" da barra.
     if (!localStorage.getItem('mescla_guided')) {
       guideOpen = true;
     }
@@ -38,13 +47,14 @@
   }
 </script>
 
+<svelte:window onkeydown={onKeydown} />
+
 <div class="app-layout">
-  <Sidebar
+  <TopBar
     {currentView}
-    collapsed={sidebarCollapsed}
     onNavigate={handleNavigate}
-    onToggle={() => sidebarCollapsed = !sidebarCollapsed}
-    onHelp={() => guideOpen = true}
+    onSearch={() => (paletteOpen = true)}
+    onHelp={() => (guideOpen = true)}
   />
 
   <main class="app-main">
@@ -68,5 +78,6 @@
   </main>
 </div>
 
+<CommandPalette open={paletteOpen} onClose={() => (paletteOpen = false)} onNavigate={handleNavigate} />
 <GuideDialog bind:open={guideOpen} onClose={closeGuide} />
 <ToastRegion />

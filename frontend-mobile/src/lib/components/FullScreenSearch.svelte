@@ -4,7 +4,6 @@
   // Padrão iFood/Spotify: campo no topo com foco automático, lista embaixo,
   // back/✕ cancela (integrado ao histórico via nav.pushLayer).
   import Icon from './Icon.svelte';
-  import PaintBottle from './PaintBottle.svelte';
   import { pushLayer } from '../nav.svelte';
   import { searchPaints, type Paint } from '../services/catalog';
   import { shelf } from '../services/shelf.svelte';
@@ -76,17 +75,19 @@
 {#if open}
   <div class="fss" role="dialog" aria-modal="true" aria-label="Buscar tinta">
     <div class="fss-bar">
-      <span class="fss-icon"><Icon name="search" size={19} /></span>
-      <input
-        bind:this={input}
-        bind:value={query}
-        type="search"
-        {placeholder}
-        autocomplete="off"
-        autocapitalize="off"
-        spellcheck="false"
-        enterkeyhint="search"
-      />
+      <div class="fss-field">
+        <span class="fss-icon"><Icon name="search" size={19} /></span>
+        <input
+          bind:this={input}
+          bind:value={query}
+          type="search"
+          {placeholder}
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          enterkeyhint="search"
+        />
+      </div>
       <button class="fss-cancel pressable" onclick={onClose}>Cancelar</button>
     </div>
 
@@ -103,7 +104,7 @@
         {/if}
         {#each results as p (p.id)}
           <button class="fss-row pressable" onclick={() => pick(p)}>
-            <PaintBottle r={p.r} g={p.g} b={p.b} size={44} />
+            <span class="swatch-flat" style="width: 40px; height: 40px; background: rgb({p.r}, {p.g}, {p.b});"></span>
             <span class="fss-row-text">
               <span class="fss-row-name">{p.name}</span>
               <span class="fss-row-meta">
@@ -138,24 +139,45 @@
     background: var(--ink-900);
   }
 
+  /* Campo cavado dentro da barra: fundo ink-850 + borda ink-600, foco em laca
+     no wrapper (:focus-within); o input interno fica transparente, sem caixa. */
+  .fss-field {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 0 12px;
+    background: var(--ink-850);
+    border: 1px solid var(--ink-600);
+    border-radius: var(--radius-control);
+  }
+
+  .fss-field:focus-within {
+    border-color: var(--lacquer);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
+  }
+
   .fss-icon {
     color: var(--ink-500);
     display: flex;
     flex-shrink: 0;
   }
 
-  .fss-bar input {
+  .fss-field input {
     flex: 1;
     min-width: 0;
     border: none;
     outline: none;
+    box-shadow: none;
     background: transparent;
     font: inherit;
     font-size: 16px; /* <16px dispara zoom automático */
     color: var(--ink-100);
   }
 
-  .fss-bar input::placeholder {
+  .fss-field input::placeholder {
     color: var(--ink-500);
   }
 
@@ -177,7 +199,8 @@
   }
 
   .fss-caption {
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -192,7 +215,7 @@
     width: 100%;
     min-height: 64px;
     padding: 8px 8px;
-    border-radius: 10px;
+    border-radius: var(--radius-control);
     text-align: left;
   }
 

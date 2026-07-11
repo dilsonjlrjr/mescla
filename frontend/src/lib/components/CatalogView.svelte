@@ -114,27 +114,46 @@
   </div>
 
   <!-- Filters -->
-  <div class="panel p-3 flex gap-3 mb-6 animate-rise" style="animation-delay: 80ms; position: relative; z-index: 1;">
-    <div class="flex-1">
-      <Textfield
-        variant="outlined"
-        bind:value={searchQuery}
-        label="Buscar por nome, código ou fabricante..."
-        style="width: 100%;"
-      >
-        {#snippet leadingIcon()}
-          <span class="mdc-text-field__icon mdc-text-field__icon--leading" style="color: var(--ink-500); display: flex;"><Icon name="search" size={17} /></span>
-        {/snippet}
-      </Textfield>
+  <div class="panel p-3 mb-6 animate-rise" style="animation-delay: 80ms; position: relative; z-index: 1;">
+    <div class="flex gap-3">
+      <div class="flex-1">
+        <Textfield
+          variant="outlined"
+          bind:value={searchQuery}
+          label="Buscar por nome, código ou fabricante..."
+          style="width: 100%;"
+        >
+          {#snippet leadingIcon()}
+            <span class="mdc-text-field__icon mdc-text-field__icon--leading" style="color: var(--ink-500); display: flex;"><Icon name="search" size={17} /></span>
+          {/snippet}
+        </Textfield>
+      </div>
+      <div style="min-width: 240px;">
+        <Select variant="outlined" bind:value={selectedManufacturer} label="Fabricante" style="width: 100%;">
+          <Option value="">Todos os fabricantes</Option>
+          {#each manufacturers as mfr}
+            <Option value={mfr.name}>{mfr.name}</Option>
+          {/each}
+        </Select>
+      </div>
     </div>
-    <div style="min-width: 240px;">
-      <Select variant="outlined" bind:value={selectedManufacturer} label="Fabricante" style="width: 100%;">
-        <Option value="">Todos os fabricantes</Option>
-        {#each manufacturers as mfr}
-          <Option value={mfr.name}>{mfr.name}</Option>
-        {/each}
-      </Select>
-    </div>
+
+    <!-- Filtros ativos como chips-pílula + contagem em etiqueta mono -->
+    {#if searchQuery || selectedManufacturer}
+      <div class="filter-meta">
+        {#if searchQuery}
+          <button class="filter-chip" onclick={() => searchQuery = ''} title="Limpar busca">
+            "{searchQuery}" <Icon name="close" size={11} />
+          </button>
+        {/if}
+        {#if selectedManufacturer}
+          <button class="filter-chip" onclick={() => selectedManufacturer = ''} title="Limpar filtro de marca">
+            {selectedManufacturer} <Icon name="close" size={11} />
+          </button>
+        {/if}
+        <span class="count-tag font-mono">{filtered.length.toLocaleString('pt-BR')} de {paints.length.toLocaleString('pt-BR')}</span>
+      </div>
+    {/if}
   </div>
 
   <!-- Grid -->
@@ -164,7 +183,7 @@
         <button class="btn-ghost" onclick={() => visibleCount += PAGE * 2}>
           Mostrar mais {Math.min(PAGE * 2, filtered.length - visibleCount)} tintas
         </button>
-        <span style="font-size: 11.5px; color: var(--ink-500);">exibindo {visibleCount} de {filtered.length.toLocaleString('pt-BR')}</span>
+        <span class="font-mono" style="font-size: 11px; color: var(--ink-500);">exibindo {visibleCount} de {filtered.length.toLocaleString('pt-BR')}</span>
       </div>
     {/if}
 
@@ -179,13 +198,14 @@
 </div>
 
 <!-- Detail Dialog -->
-<Dialog bind:open={dialogOpen} surface$style="background: var(--ink-900); border: 1px solid var(--ink-700); border-radius: 10px; max-width: 560px; width: 100%;">
+<Dialog bind:open={dialogOpen} surface$style="background: var(--ink-900); border: 1px solid var(--ink-700); border-radius: var(--radius-surface); max-width: 560px; width: 100%;">
   {#if selectedPaint}
-    <!-- Color hero -->
+    <!-- Color hero: a cor real da tinta, chapada, com o furo de catálogo -->
     <div class="color-hero" style="background: rgb({selectedPaint.r}, {selectedPaint.g}, {selectedPaint.b});">
-      <div class="hero-bottle">
-        <PaintBottle r={selectedPaint.r} g={selectedPaint.g} b={selectedPaint.b} size={104} label={selectedPaint.code} />
-      </div>
+      <span class="hero-punch"></span>
+      <span class="hero-bottle">
+        <PaintBottle r={selectedPaint.r} g={selectedPaint.g} b={selectedPaint.b} size={106} label={selectedPaint.code} />
+      </span>
       <button class="close-btn" onclick={() => dialogOpen = false} aria-label="Fechar">
         <Icon name="close" size={18} />
       </button>
@@ -198,7 +218,7 @@
       </div>
 
       <div class="flex items-center gap-2 mb-5">
-        <span class="font-mono text-xs font-medium" style="padding: 4px 10px; border-radius: 5px; background: var(--ink-800); color: var(--lacquer-tint);">{selectedPaint.code}</span>
+        <span class="font-mono text-xs font-medium" style="padding: 4px 12px; border-radius: var(--radius-pill); background: var(--ink-800); color: var(--lacquer-tint);">{selectedPaint.code}</span>
       </div>
 
       <div class="grid-2">
@@ -253,19 +273,32 @@
     position: relative;
   }
 
-  .hero-bottle {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
-  }
-
-  .close-btn {
+  /* furo de catálogo — assinatura do swatch chapado */
+  .hero-punch {
     position: absolute;
     top: 12px;
     right: 12px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--ink-950);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+
+  /* a garrafinha em pé na frente da parede pintada, apoiada na base do hero */
+  .hero-bottle {
+    position: absolute;
+    right: 26px;
+    bottom: -1px;
+    display: flex;
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3));
+  }
+
+  /* fechar à esquerda pra não cobrir o furo (e casar com o padrão macOS) */
+  .close-btn {
+    position: absolute;
+    top: 12px;
+    left: 12px;
     width: 30px;
     height: 30px;
     display: flex;
@@ -302,8 +335,44 @@
     border-color: var(--lacquer);
   }
 
+  /* Filtros ativos: pílulas removíveis + etiqueta mono de contagem */
+  .filter-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border: 1px solid var(--ink-600);
+    border-radius: var(--radius-pill);
+    background: var(--ink-850);
+    color: var(--ink-300);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .filter-chip:hover {
+    border-color: var(--lacquer);
+    color: var(--lacquer-deep);
+  }
+
+  .count-tag {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--ink-500);
+  }
+
   :global(.mdc-dialog__surface) {
-    border-radius: 10px !important;
+    border-radius: var(--radius-surface) !important;
     overflow: hidden;
   }
 </style>

@@ -25,12 +25,19 @@ e [Manutenção / Correções](#manutenção--correções).
 - **Tipos:** `color.RGB{R,G,B uint8}`, `color.Lab{L,A,B float64}` — structs no pacote `color`
 - **Desktop:** Wails v3 (v3.0.0-alpha) + Svelte 5 (runes: $state, $derived, $effect) + TailwindCSS v4.
   `main.go` usa `application.New`; o `PaintService` é registrado como service em `Options.Services`
-- **Design:** tema "Rótulo" (claro, nos dois frontends) — rótulo industrial de lata de tinta:
-  Archivo Variable (display expandido `font-stretch: 122%` + body) + IBM Plex Mono (etiquetas),
-  neutros stone, acento único laca `#e8542c` + grafite `#1a1712` (cores do ícone), raios
+- **Design:** tema "Rótulo" (CLARO, nos dois frontends) — rótulo de lata de tinta sobre
+  bancada clara: neutros stone, cor de tinta chapada como protagonista, laca `#e8542c`
+  como acento único, grafite `#1a1712` da marca como contraste. Display Bricolage
+  Grotesque Variable + corpo Archivo Variable + etiquetas IBM Plex Mono, raios
   padronizados (botões/badges = pílula, superfícies = 12px, swatches/inputs = 8px).
-  Fontes self-hosted via `@fontsource` (sem Google Fonts — PWA offline e desktop sem rede).
-  Claro-only de propósito: avaliar cor de tinta exige superfície clara consistente
+  Fontes self-hosted via `@fontsource` (sem Google Fonts — PWA offline e desktop sem
+  rede). ⚠️ Dark mode ("Estúdio") foi implementado e REJEITADO pelo usuário em
+  2026-07-10 — não propor de novo sem ele pedir.
+  **Estrutura:** desktop = barra superior (marca + nav em pills + busca global ⌘K via
+  `CommandPalette.svelte` — navega e acha tinta pelo nome, caindo na Equivalência) com
+  conteúdo centralizado (1180px); mobile = dock flutuante em pílula (padrão iOS 26).
+  **Inputs:** receita única — campo "cavado" (`--ink-850`), borda `--ink-600` visível,
+  foco laca + anel; baseline `:where()` nos dois app.css + vars SMUI no desktop
 - **Build:** `go build` + `npm run build` + `wails3 generate bindings -ts` (bindings gerados em
   `frontend/bindings/paint-match-ai/`, gitignorado — importados como `* as PaintService from '../../../bindings/paint-match-ai/paintservice'`)
 
@@ -125,7 +132,7 @@ paint-match-ai/
 │   ├── package.json
 │   ├── vite.config.ts
 │   └── src/
-│       ├── app.css          # Rótulo theme: stone neutrals, laca accent, Archivo
+│       ├── app.css          # Estúdio theme: dark grafite, laca accent, Bricolage/Archivo
 │       ├── App.svelte       # Sidebar + router (repassa paintId pré-selecionado entre rotas)
 │       └── lib/components/
 │           ├── Sidebar.svelte

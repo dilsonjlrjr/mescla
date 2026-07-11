@@ -1,10 +1,10 @@
 /* ── MESCLA MOBILE — Rótulo Theme (claro) ──
-   Linguagem visual: rótulo industrial de lata de tinta. Grotesca expandida
-   (Archivo) no display, etiqueta mono nos números, cor chapada, neutros
-   monocromáticos — não vidro, não gradiente, não creme.
-   Marca preservada: laca cádmio #e8542c + grafite #1a1712 (cores do ícone).
-   Claro-only de propósito: avaliar cor de tinta exige superfície clara
-   consistente — dark mode distorceria a leitura dos swatches.
+   Linguagem visual: rótulo de lata de tinta sobre bancada clara. Neutros
+   stone, cor de tinta chapada como protagonista, papel branco, laca cádmio
+   como acento único, grafite #1a1712 da marca como contraste. Display:
+   Bricolage Grotesque; corpo Archivo; etiqueta Plex Mono.
+   Estrutura: dock flutuante em pílula (navegação), campos "cavados" com
+   borda visível e foco em laca.
    Escala de raio (regra única): botões/badges = pílula, superfícies = 12px,
    swatches/inputs = 8px. */
 
@@ -21,26 +21,27 @@
   --ink-300: #57544e;
   --ink-100: #1d1b17;
 
-  --paper: #1a1712; /* grafite da marca — superfície escura (toasts, bench) */
+  --paper: #1a1712; /* grafite da marca — o CONTRASTE escuro (toasts, destaques) */
 
-  /* Lacre — acento único (laca cádmio, cor do ícone) */
+  /* Lacre — acento único (laca cádmio, cor do ícone).
+     deep/tint escurecem no claro: são usados como COR DE TEXTO nas views. */
   --lacquer: #e8542c;
   --lacquer-deep: #b53d1f;
   --lacquer-tint: #c2451f;
 
-  /* Delta E — família separada do acento */
+  /* Delta E — família separada do acento, escurecida pra ler no claro */
   --delta-excellent: #2f7d49;
   --delta-good: #96760f;
   --delta-fair: #a85a1f;
   --delta-poor: #a13328;
 
-  /* Canais RGB */
+  /* Canais RGB (escurecidos pra legibilidade em fundo claro) */
   --chan-r: #c0392b;
   --chan-g: #2f7d49;
   --chan-b: #2f5f9e;
 
   /* Fontes (self-hosted via @fontsource — o PWA é offline-first) */
-  --font-display: 'Archivo Variable', system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', system-ui, sans-serif;
   --font-body: 'Archivo Variable', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
 
@@ -84,6 +85,27 @@ body {
 input,
 textarea {
   user-select: text;
+}
+
+/* ── Receita única de campo (dark): campo CAVADO em relação à superfície
+   (fundo ink-850) com borda que APARECE (ink-600) e foco em laca. Baseline
+   com :where() = especificidade zero: estilos escopados podem sobrescrever. ── */
+:where(input[type='text'], input[type='search'], input[type='number'], textarea, select) {
+  background: var(--ink-850);
+  border: 1px solid var(--ink-600);
+  border-radius: var(--radius-control);
+  color: var(--ink-100);
+}
+
+:where(input[type='text'], input[type='search'], input[type='number'], textarea, select):focus {
+  outline: none;
+  border-color: var(--lacquer);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
+}
+
+::placeholder {
+  color: var(--ink-500);
+  opacity: 1;
 }
 
 button {
@@ -167,9 +189,9 @@ button {
 /* ── Tipografia ── */
 .font-display {
   font-family: var(--font-display);
-  font-stretch: 122%;
-  font-weight: 640;
-  letter-spacing: -0.015em;
+  font-optical-sizing: auto;
+  font-weight: 680;
+  letter-spacing: -0.01em;
 }
 
 .font-mono {
@@ -178,12 +200,12 @@ button {
 
 .screen-title {
   font-family: var(--font-display);
-  font-stretch: 122%;
-  font-size: 26px;
-  font-weight: 680;
-  color: var(--ink-100);
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  font-optical-sizing: auto;
+  font-size: 30px;
+  font-weight: 750;
+  color: var(--paper);
+  letter-spacing: -0.015em;
+  line-height: 1.1;
 }
 
 /* ── Par de cores (motivo de marca) ── */
@@ -274,7 +296,7 @@ button {
 /* ── Toasts (acima da tab bar) ── */
 .toast-region {
   position: fixed;
-  bottom: calc(var(--tab-bar-h) + var(--safe-bottom) + 16px);
+  bottom: calc(var(--tab-bar-h) + var(--safe-bottom) + 30px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 100;

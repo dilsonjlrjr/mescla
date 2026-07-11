@@ -183,7 +183,7 @@
   }
   .guide-chevron {
     display: flex;
-    color: var(--ink-400);
+    color: var(--ink-500);
     transition: transform 0.22s ease;
   }
   .guide-chevron.flipped {
@@ -229,7 +229,7 @@
   .card-text p {
     font-size: 13px;
     line-height: 1.5;
-    color: var(--ink-400);
+    color: var(--ink-300);
   }
   .card-text strong {
     color: var(--ink-100);
@@ -246,7 +246,7 @@
     width: 64px;
     height: 64px;
     border-radius: 50%;
-    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
   }
 
   .temp-bar {
@@ -255,7 +255,7 @@
     height: 64px;
     border-radius: 10px;
     overflow: hidden;
-    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
   }
   .temp-warm,
   .temp-cool {
@@ -300,7 +300,7 @@
     width: 26px;
     height: 26px;
     border-radius: 7px;
-    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
   }
   .harmony-note {
     font-size: 12px;
@@ -321,7 +321,7 @@
     flex: 1;
     height: 34px;
     border-radius: 7px;
-    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
   }
   .shift-sw.base {
     box-shadow: inset 0 0 0 2px var(--lacquer);
@@ -348,7 +348,7 @@
   .steps li {
     font-size: 13px;
     line-height: 1.5;
-    color: var(--ink-400);
+    color: var(--ink-300);
   }
   .steps strong {
     color: var(--ink-100);

@@ -96,7 +96,7 @@
     position: fixed;
     inset: 0;
     z-index: 60;
-    background: rgba(26, 23, 18, 0.42);
+    background: rgba(0, 0, 0, 0.45);
     animation: fade-in 0.2s ease both;
   }
 
@@ -109,7 +109,9 @@
     display: flex;
     flex-direction: column;
     max-height: 85dvh;
-    background: var(--ink-950);
+    background: var(--ink-900);
+    border: 1px solid var(--ink-700);
+    border-bottom: none;
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.25);
     animation: sheet-up 0.28s cubic-bezier(0.32, 0.72, 0, 1) both;

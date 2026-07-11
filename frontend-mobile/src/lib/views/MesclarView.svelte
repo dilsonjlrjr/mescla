@@ -215,6 +215,12 @@
     appState.corPreset = { r: active.sourceR, g: active.sourceG, b: active.sourceB };
     switchTab('cor');
   }
+
+  // Texto legível sobre a cor da tinta escolhida (a metade de cima do bilhete
+  // se pinta com ela — luma decide grafite ou papel).
+  function readableOn(r: number, g: number, b: number): string {
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.58 ? '#1a1712' : '#f5f5f4';
+  }
 </script>
 
 <div class="mesclar">
@@ -368,40 +374,49 @@
       <p class="mesclar-tagline">cor certa, qualquer marca</p>
     </header>
 
-    <p class="field-label">Quero esta cor</p>
-    {#if sourcePaint}
-      <button class="field-filled pressable" onclick={() => (searchOpen = true)}>
-        <PaintBottle r={sourcePaint.r} g={sourcePaint.g} b={sourcePaint.b} size={44} label={sourcePaint.code} />
-        <span class="field-filled-text">
-          <span class="field-filled-name">{sourcePaint.name}</span>
-          <span class="field-filled-meta"><span class="font-mono">{sourcePaint.code}</span> · {sourcePaint.manufacturer}</span>
-        </span>
-        <span class="field-swap">Trocar</span>
-      </button>
-    {:else}
-      <button class="field-empty pressable" onclick={() => (searchOpen = true)}>
-        <Icon name="search" size={19} />
-        <span>Nome ou código da tinta…</span>
-      </button>
-    {/if}
-
-    <p class="field-label" style="margin-top: 18px;">Tenho tintas de</p>
-    <button class="field-empty pressable" class:has-brands={shelfNames.length > 0} onclick={() => (brandSheetOpen = true)}>
-      {#if shelfNames.length === 0}
-        <Icon name="building" size={19} />
-        <span>Escolher marcas…</span>
+    <!-- O bilhete: as duas metades do ícone viram o formulário — em cima a
+         cor que quero (a metade se pinta com ela), embaixo o grafite do
+         destino (as marcas que tenho), com a costura na junção. -->
+    <div class="pair-card">
+      {#if sourcePaint}
+        <button
+          class="pair-top filled pressable"
+          style="background: rgb({sourcePaint.r}, {sourcePaint.g}, {sourcePaint.b}); color: {readableOn(sourcePaint.r, sourcePaint.g, sourcePaint.b)};"
+          onclick={() => (searchOpen = true)}
+        >
+          <span class="pair-tag font-mono">quero esta cor</span>
+          <span class="pair-paint">
+            <span class="pair-paint-name">{sourcePaint.name}</span>
+            <span class="pair-paint-meta"><span class="font-mono">{sourcePaint.code}</span> · {sourcePaint.manufacturer}</span>
+          </span>
+          <span class="pair-swap"><Icon name="swap" size={14} /> Trocar</span>
+        </button>
       {:else}
-        <span class="brand-chips">
-          {#each shelfNames.slice(0, 3) as name}
-            <span class="mini-chip">{name}</span>
-          {/each}
-          {#if shelfNames.length > 3}
-            <span class="mini-chip more">+{shelfNames.length - 3}</span>
-          {/if}
-        </span>
+        <button class="pair-top empty pressable" onclick={() => (searchOpen = true)}>
+          <span class="pair-tag font-mono">quero esta cor</span>
+          <span class="pair-prompt"><Icon name="search" size={18} /> Nome ou código da tinta…</span>
+        </button>
       {/if}
-      <Icon name="chevron-down" size={16} />
-    </button>
+
+      <div class="pair-seam" aria-hidden="true"><span></span></div>
+
+      <button class="pair-bottom pressable" onclick={() => (brandSheetOpen = true)}>
+        <span class="pair-tag font-mono">tenho tintas de</span>
+        {#if shelfNames.length === 0}
+          <span class="pair-prompt"><Icon name="building" size={18} /> Escolher marcas…</span>
+        {:else}
+          <span class="brand-chips">
+            {#each shelfNames.slice(0, 3) as name}
+              <span class="mini-chip">{name}</span>
+            {/each}
+            {#if shelfNames.length > 3}
+              <span class="mini-chip more">+{shelfNames.length - 3}</span>
+            {/if}
+          </span>
+        {/if}
+        <span class="pair-chevron"><Icon name="chevron-down" size={16} /></span>
+      </button>
+    </div>
 
     {#if stock.paints.length > 0}
       <button
@@ -568,53 +583,126 @@
     margin-bottom: 8px;
   }
 
-  .field-empty,
-  .field-filled {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-    min-height: 64px;
-    padding: 10px 16px;
+  /* ── O bilhete (par origem × destino — o ícone da marca virando form) ── */
+  .pair-card {
+    position: relative;
+    border-radius: var(--radius-surface);
+    overflow: hidden;
     border: 1px solid var(--ink-700);
-    border-radius: 12px;
     background: var(--ink-900);
-    text-align: left;
-    color: var(--ink-500);
-    font-size: 16px;
   }
 
-  .field-empty.has-brands {
-    justify-content: space-between;
-  }
-
-  .field-filled-text {
+  .pair-top,
+  .pair-bottom {
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 1px;
-    flex: 1;
-    min-width: 0;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    text-align: left;
+    padding: 14px 16px 16px;
   }
 
-  .field-filled-name {
-    font-size: 16px;
+  .pair-top {
+    min-height: 112px;
+  }
+
+  .pair-top.empty {
+    background: var(--ink-850);
+    color: var(--ink-500);
+  }
+
+  .pair-top.filled {
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  }
+
+  /* A metade de baixo é o grafite da marca: o destino ainda desconhecido. */
+  .pair-bottom {
+    min-height: 92px;
+    background: var(--paper);
+    color: rgba(245, 245, 244, 0.68);
+  }
+
+  .pair-tag {
+    font-size: 10.5px;
     font-weight: 600;
-    color: var(--ink-100);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    opacity: 0.72;
+  }
+
+  .pair-prompt {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+  }
+
+  .pair-paint {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .pair-paint-name {
+    font-family: var(--font-display);
+    font-optical-sizing: auto;
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    max-width: 100%;
   }
 
-  .field-filled-meta {
+  .pair-paint-meta {
     font-size: 13px;
-    color: var(--ink-500);
+    opacity: 0.78;
   }
 
-  .field-swap {
-    flex-shrink: 0;
-    font-size: 14px;
+  .pair-swap {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
     font-weight: 600;
-    color: var(--lacquer-deep);
+    opacity: 0.85;
+  }
+
+  .pair-chevron {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    display: flex;
+    opacity: 0.7;
+  }
+
+  /* A costura: a mesma pílula vertical do ícone, cruzando a junção. */
+  .pair-seam {
+    position: relative;
+    height: 0;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .pair-seam span {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    transform: translate(-50%, -50%);
+    width: 5px;
+    height: 30px;
+    border-radius: var(--radius-pill);
+    background: var(--ink-950);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.07);
   }
 
   .brand-chips {
@@ -837,7 +925,7 @@
     font-size: 10px;
     padding: 3px 8px;
     border-radius: 4px;
-    background: rgba(26, 23, 18, 0.55);
+    background: rgba(0, 0, 0, 0.55);
     color: rgba(255, 255, 255, 0.92);
   }
 

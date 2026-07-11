@@ -30,7 +30,7 @@
   <rect x="21" y="14" width="18" height="9" rx="2.5" fill="#2c2c32" />
   <!-- corpo do frasco (a tinta) -->
   <rect x="13" y="23" width="34" height="73" rx="8" fill={fill} />
-  <!-- contorno sutil pro corpo não sumir em cores claras -->
+  <!-- contorno sutil pro corpo não sumir em cores escuras -->
   <rect x="13" y="23" width="34" height="73" rx="8" fill="none" stroke="rgba(0,0,0,0.28)" stroke-width="1" />
   <!-- reflexo -->
   <rect x="18" y="28" width="5" height="62" rx="2.5" fill="rgba(255,255,255,0.30)" />

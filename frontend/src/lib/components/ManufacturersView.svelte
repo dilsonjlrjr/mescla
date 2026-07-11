@@ -78,25 +78,29 @@
   {:else}
     <div class="grid-4">
       {#each filtered as mfr, i (mfr.id)}
-        <div class="panel p-4 mfr-card animate-rise" style="animation-delay: {Math.min(i * 25, 200)}ms;">
-          <div class="mfr-logo">
-            {#if mfr.logoPath}
-              <img
-                src="file://{mfr.logoPath}"
-                alt={mfr.name}
-                loading="lazy"
-                onerror={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
-              />
-            {:else}
-              <Icon name="building" size={22} />
-            {/if}
+        <div class="panel mfr-card animate-rise" style="animation-delay: {Math.min(i * 25, 200)}ms;">
+          <div class="mfr-head">
+            <div class="mfr-logo">
+              {#if mfr.logoPath}
+                <img
+                  src="file://{mfr.logoPath}"
+                  alt={mfr.name}
+                  loading="lazy"
+                  onerror={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
+                />
+              {:else}
+                <Icon name="building" size={22} />
+              {/if}
+            </div>
+            <div class="mfr-id">
+              <div class="mfr-name font-display">{mfr.name}</div>
+              {#if mfr.country}
+                <div class="mfr-country">{mfr.country}</div>
+              {/if}
+            </div>
           </div>
-          <div class="mfr-name">{mfr.name}</div>
-          {#if mfr.country}
-            <div class="mfr-country">{mfr.country}</div>
-          {/if}
           <div class="mfr-footer">
-            <span class="chip-finish">{mfr.paintCount} {mfr.paintCount === 1 ? 'tinta' : 'tintas'}</span>
+            <span class="mfr-count font-mono">{mfr.paintCount} {mfr.paintCount === 1 ? 'tinta' : 'tintas'}</span>
             {#if mfr.website}
               <a class="mfr-link" href={mfr.website} target="_blank" rel="noopener noreferrer">site</a>
             {/if}
@@ -107,7 +111,7 @@
 
     {#if filtered.length === 0}
       <div style="text-align: center; padding: 80px 0;">
-        <div style="color: var(--ink-600); display: flex; justify-content: center; margin-bottom: 16px;"><Icon name="search-off" size={40} /></div>
+        <div style="color: var(--ink-500); display: flex; justify-content: center; margin-bottom: 16px;"><Icon name="search-off" size={40} /></div>
         <p class="font-medium" style="color: var(--ink-500);">Nenhum fabricante encontrado</p>
       </div>
     {/if}
@@ -115,19 +119,28 @@
 </div>
 
 <style>
+  /* Card composto: identidade (logo + nome/país) em cima, etiqueta embaixo */
   .mfr-card {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    overflow: hidden;
+  }
+
+  .mfr-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    flex: 1;
   }
 
   .mfr-logo {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
+    width: 46px;
+    height: 46px;
+    border-radius: var(--radius-control);
     background: var(--ink-800);
     color: var(--ink-500);
     overflow: hidden;
@@ -141,23 +154,39 @@
     padding: 6px;
   }
 
+  .mfr-id {
+    min-width: 0;
+  }
+
   .mfr-name {
-    font-weight: 600;
-    font-size: 14px;
+    font-weight: 640;
+    font-size: 14.5px;
     color: var(--ink-100);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .mfr-country {
     font-size: 11.5px;
     color: var(--ink-500);
-    margin-top: -6px;
+    margin-top: 1px;
   }
 
   .mfr-footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-top: 4px;
+    padding: 9px 16px;
+    border-top: 1px solid var(--ink-700);
+    background: var(--ink-850);
+  }
+
+  /* Contagem como etiqueta mono, tipo linha de rótulo */
+  .mfr-count {
+    font-size: 10.5px;
+    font-weight: 500;
+    color: var(--ink-500);
   }
 
   .mfr-link {

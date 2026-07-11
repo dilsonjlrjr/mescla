@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.2.8",
+    "@fontsource-variable/bricolage-grotesque": "^5.2.10",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@smui/button": "^9.0.1",
     "@smui/card": "^9.0.1",

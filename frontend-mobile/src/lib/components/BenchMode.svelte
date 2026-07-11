@@ -112,8 +112,10 @@
     align-items: center;
     gap: 12px;
     font-family: var(--font-display);
+    font-optical-sizing: auto;
     font-size: 20px;
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: -0.015em;
     color: var(--ink-100);
     min-width: 0;
   }
@@ -130,7 +132,7 @@
     justify-content: center;
     width: 56px;
     height: 56px;
-    border-radius: 14px;
+    border-radius: var(--radius-pill);
     border: 1px solid var(--ink-700);
     background: var(--ink-900);
     color: var(--ink-300);
@@ -151,7 +153,7 @@
     align-items: center;
     gap: 16px;
     padding: 18px;
-    border-radius: 16px;
+    border-radius: var(--radius-surface);
     background: var(--ink-900);
     border: 1px solid var(--ink-700);
   }
@@ -159,7 +161,7 @@
   .bench-swatch {
     width: 56px;
     height: 56px;
-    border-radius: 12px;
+    border-radius: var(--radius-control);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink-100) 15%, transparent);
     flex-shrink: 0;
   }
@@ -222,7 +224,7 @@
   .bench-mult-btn {
     width: 64px;
     height: 64px;
-    border-radius: 16px;
+    border-radius: var(--radius-pill);
     border: 1px solid var(--ink-700);
     background: var(--ink-900);
     font-family: var(--font-mono);

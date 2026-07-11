@@ -3,7 +3,6 @@
   // Preview gigante no topo (o usuário olha a COR, não os números), sliders
   // com gradiente real do canal, campo HEX e resultados ao vivo.
   import Icon from '../components/Icon.svelte';
-  import PaintBottle from '../components/PaintBottle.svelte';
   import DeltaBadge from '../components/DeltaBadge.svelte';
   import DeltaScaleSheet from '../components/DeltaScaleSheet.svelte';
   import PaintDetailSheet from '../components/PaintDetailSheet.svelte';
@@ -99,10 +98,11 @@
 </script>
 
 <div class="cor">
+  <!-- Cor chapada, sem nada por cima — a etiqueta fica abaixo, fora da cor. -->
   <div class="cor-preview" style="background: rgb({r}, {g}, {b});">
-    <span class="cor-hex font-mono">{currentHex} · {r}, {g}, {b}</span>
     <!-- slot reservado: captura por câmera entra na fase APK (Capacitor) -->
   </div>
+  <p class="cor-readout font-mono">{currentHex} · {r}, {g}, {b}</p>
 
   <div class="cor-controls">
     {#each channels as ch (ch.key)}
@@ -162,7 +162,7 @@
     {:else}
       {#each visible as res (res.paintId)}
         <button class="cor-row pressable" onclick={() => openDetail(res)}>
-          <PaintBottle r={res.r} g={res.g} b={res.b} size={44} />
+          <span class="swatch-flat" style="width: 44px; height: 44px; background: rgb({res.r}, {res.g}, {res.b});"></span>
           <span class="cor-row-text">
             <span class="cor-row-name">{res.name}</span>
             <span class="cor-row-meta"><span class="font-mono">{res.code}</span> · {res.manufacturer}</span>
@@ -190,22 +190,19 @@
     position: relative;
     height: 30dvh;
     min-height: 160px;
-    display: flex;
-    align-items: flex-end;
-    padding: 14px;
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink-100) 12%, transparent);
   }
 
-  .cor-hex {
-    font-size: 13px;
-    padding: 5px 10px;
-    border-radius: 6px;
-    background: rgba(26, 23, 18, 0.55);
-    color: rgba(255, 255, 255, 0.92);
+  /* Etiqueta impressa abaixo da cor — nunca por cima dela. */
+  .cor-readout {
+    font-size: 12.5px;
+    letter-spacing: 0.04em;
+    color: var(--ink-500);
+    padding: 10px 16px 0;
   }
 
   .cor-controls {
-    padding: 16px;
+    padding: 12px 16px 16px;
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -275,9 +272,9 @@
     min-width: 0;
     min-height: 48px;
     padding: 0 14px;
-    border: 1px solid var(--ink-700);
-    border-radius: 12px;
-    background: var(--ink-900);
+    border: 1px solid var(--ink-600);
+    border-radius: var(--radius-control);
+    background: var(--ink-850);
     font-size: 16px;
     color: var(--ink-100);
     outline: none;
@@ -285,6 +282,7 @@
 
   .cor-hex-row input:focus {
     border-color: var(--lacquer);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
   }
 
   .cor-only-shelf {

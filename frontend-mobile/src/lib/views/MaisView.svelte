@@ -3,7 +3,6 @@
   // Comparar e Marcas abrem como sub-telas dentro da aba (camadas de
   // histórico: o back volta pro menu).
   import Icon from '../components/Icon.svelte';
-  import PaintBottle from '../components/PaintBottle.svelte';
   import DeltaBadge from '../components/DeltaBadge.svelte';
   import DeltaScaleSheet from '../components/DeltaScaleSheet.svelte';
   import FullScreenSearch from '../components/FullScreenSearch.svelte';
@@ -149,7 +148,7 @@
     {:else if anchor}
       <!-- Âncora: a pergunta é "qual destas é mais parecida com ELA?" -->
       <div class="anchor-card panel">
-        <PaintBottle r={anchor.r} g={anchor.g} b={anchor.b} size={52} label={anchor.code} />
+        <span class="swatch-flat" style="width: 52px; height: 52px; background: rgb({anchor.r}, {anchor.g}, {anchor.b});"></span>
         <div class="anchor-text">
           <span class="anchor-eyebrow">comparando com</span>
           <span class="anchor-name">{anchor.name}</span>
@@ -237,14 +236,21 @@
     min-height: 60px;
     padding: 8px 14px;
     border: 1px solid var(--ink-700);
-    border-radius: 12px;
+    border-radius: var(--radius-surface);
     background: var(--ink-900);
     margin-bottom: 10px;
     text-align: left;
   }
 
+  /* Ícone em quadrado suave — a linha ganha composição de rótulo. */
   .menu-icon {
     display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-control);
+    background: var(--ink-800);
     color: var(--lacquer-deep);
     flex-shrink: 0;
   }
@@ -252,7 +258,7 @@
   .menu-text {
     flex: 1;
     min-width: 0;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
     color: var(--ink-100);
     white-space: nowrap;
@@ -265,7 +271,7 @@
     font-size: 12px;
     font-weight: 600;
     padding: 4px 10px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--lacquer);
     color: white;
   }
@@ -289,7 +295,7 @@
 
   .about-name {
     font-size: 20px;
-    font-weight: 600;
+    font-weight: 640;
     color: var(--ink-300);
   }
 
@@ -319,7 +325,7 @@
     justify-content: center;
     width: 44px;
     height: 44px;
-    border-radius: 12px;
+    border-radius: var(--radius-pill);
     border: 1px solid var(--ink-700);
     background: var(--ink-900);
     color: var(--ink-300);
@@ -388,7 +394,7 @@
     min-height: 60px;
     padding: 8px 12px;
     border: 1px solid var(--ink-700);
-    border-radius: 12px;
+    border-radius: var(--radius-surface);
     background: var(--ink-900);
     text-align: left;
   }
@@ -424,7 +430,7 @@
     justify-content: center;
     width: 44px;
     height: 44px;
-    border-radius: 10px;
+    border-radius: var(--radius-pill);
     color: var(--ink-500);
     flex-shrink: 0;
   }

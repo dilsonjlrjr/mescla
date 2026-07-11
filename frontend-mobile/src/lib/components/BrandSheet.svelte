@@ -105,10 +105,11 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 14px;
-    border: 1px solid var(--ink-700);
-    border-radius: 10px;
-    background: var(--ink-900);
+    min-height: 48px;
+    padding: 4px 14px;
+    border: 1px solid var(--ink-600);
+    border-radius: var(--radius-control);
+    background: var(--ink-850);
     color: var(--ink-500);
     margin-bottom: 12px;
     position: sticky;
@@ -116,11 +117,17 @@
     z-index: 1;
   }
 
+  .brand-filter:focus-within {
+    border-color: var(--lacquer);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
+  }
+
   .brand-filter input {
     flex: 1;
     min-width: 0;
     border: none;
     outline: none;
+    box-shadow: none;
     background: transparent;
     font: inherit;
     font-size: 16px;
@@ -128,7 +135,8 @@
   }
 
   .brand-caption {
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -143,7 +151,7 @@
     width: 100%;
     min-height: 52px;
     padding: 6px 12px;
-    border-radius: 10px;
+    border-radius: var(--radius-control);
     text-align: left;
   }
 
@@ -182,6 +190,6 @@
     position: sticky;
     bottom: 0;
     padding: 12px 0 4px;
-    background: linear-gradient(transparent, var(--ink-950) 30%);
+    background: linear-gradient(transparent, var(--ink-900) 30%);
   }
 </style>

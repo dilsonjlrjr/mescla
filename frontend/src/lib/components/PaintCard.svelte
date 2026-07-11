@@ -26,17 +26,17 @@
 </script>
 
 <button class="chip" {onclick}>
-  <div class="chip-swatch" style="background: color-mix(in srgb, rgb({paint.r}, {paint.g}, {paint.b}) 22%, var(--ink-800));">
-    <div class="chip-bottle">
-      <PaintBottle r={paint.r} g={paint.g} b={paint.b} size={96} />
-    </div>
+  <div class="chip-swatch">
+    <span class="chip-color" style="background: rgb({paint.r}, {paint.g}, {paint.b});"></span>
+    <span class="chip-bottle-side">
+      <PaintBottle r={paint.r} g={paint.g} b={paint.b} size={96} label={paint.code} />
+    </span>
     <span class="chip-punch"></span>
-    <span class="chip-code">{paint.code}</span>
   </div>
 
   <div class="chip-label">
     <div class="chip-name">{paint.name}</div>
-    <div class="chip-mfr">{paint.manufacturer}</div>
+    <div class="chip-code">{paint.code ? `${paint.code} · ${paint.manufacturer}` : paint.manufacturer}</div>
     {#if paint.finishType}
       <span class="chip-finish">{paint.finishType}</span>
     {/if}

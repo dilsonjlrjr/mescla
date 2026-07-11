@@ -6,7 +6,6 @@
   import Select, { Option } from '@smui/select';
   import Dialog, { Content as DialogContent, Title as DialogTitle } from '@smui/dialog';
   import Icon from './Icon.svelte';
-  import PaintBottle from './PaintBottle.svelte';
   import { toast } from '../toast.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
   import type { UserPaintDTO, CSVImportResultDTO } from '../../../bindings/paint-match-ai/models';
@@ -271,7 +270,7 @@
     <div class="stock-list">
       {#each Array(6) as _}
         <div class="panel p-3" style="display: flex; gap: 12px; align-items: center;">
-          <div class="skeleton" style="width: 40px; height: 52px; border-radius: 6px;"></div>
+          <div class="skeleton" style="width: 46px; height: 46px; border-radius: var(--radius-control);"></div>
           <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
             <div class="skeleton" style="height: 12px; width: 40%;"></div>
             <div class="skeleton" style="height: 10px; width: 25%;"></div>
@@ -295,7 +294,7 @@
     <div class="stock-list">
       {#each filtered as p, i (p.id)}
         <div class="stock-row panel p-3 animate-rise" style="animation-delay: {Math.min(i * 15, 180)}ms;">
-          <PaintBottle r={p.r} g={p.g} b={p.b} size={44} label={p.code} />
+          <span class="swatch-flat" style="width: 46px; height: 46px; background: rgb({p.r}, {p.g}, {p.b});"></span>
           <div class="stock-main">
             <div class="stock-name">{p.name}</div>
             <div class="stock-meta">
@@ -316,12 +315,12 @@
 </div>
 
 <!-- Form add/editar -->
-<Dialog bind:open={formOpen} surface$style="background: var(--ink-900); border: 1px solid var(--ink-700); border-radius: 10px; max-width: 480px; width: 100%;">
+<Dialog bind:open={formOpen} surface$style="background: var(--ink-900); border: 1px solid var(--ink-700); border-radius: var(--radius-surface); max-width: 480px; width: 100%;">
   <DialogTitle>{editingId === null ? 'Adicionar tinta' : 'Editar tinta'}</DialogTitle>
   <DialogContent>
     <div style="display: flex; flex-direction: column; gap: 16px; padding-top: 8px;">
       <div style="display: flex; gap: 14px; align-items: center;">
-        <PaintBottle r={hexToRgb(fHex).r} g={hexToRgb(fHex).g} b={hexToRgb(fHex).b} size={56} label={fCode} />
+        <span class="swatch-flat" style="width: 56px; height: 56px; background: rgb({hexToRgb(fHex).r}, {hexToRgb(fHex).g}, {hexToRgb(fHex).b});"></span>
         <div style="display: flex; flex-direction: column; gap: 6px;">
           <span class="detail-label">Cor</span>
           <div style="display: flex; gap: 8px; align-items: center;">
@@ -354,7 +353,7 @@
 </Dialog>
 
 <!-- Resultado da importação -->
-<Dialog bind:open={importOpen} surface$style="background: var(--ink-900); border: 1px solid var(--ink-700); border-radius: 10px; max-width: 520px; width: 100%;">
+<Dialog bind:open={importOpen} surface$style="background: var(--ink-900); border: 1px solid var(--ink-700); border-radius: var(--radius-surface); max-width: 520px; width: 100%;">
   <DialogTitle>Importação de CSV</DialogTitle>
   <DialogContent>
     {#if importResult}
@@ -451,11 +450,13 @@
     text-overflow: ellipsis;
   }
 
+  /* Etiqueta do pote: marca, código e volume em mono, como rótulo de catálogo */
   .stock-meta {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 12.5px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
     color: var(--ink-500);
     margin-top: 2px;
   }
@@ -466,7 +467,7 @@
 
   .stock-notes {
     font-size: 12px;
-    color: var(--ink-400);
+    color: var(--ink-500);
     margin-top: 4px;
     font-style: italic;
   }
@@ -484,9 +485,9 @@
     align-items: center;
     justify-content: center;
     border: 1px solid var(--ink-700);
-    border-radius: 7px;
+    border-radius: var(--radius-pill);
     background: transparent;
-    color: var(--ink-400);
+    color: var(--ink-500);
     cursor: pointer;
     transition: all 0.15s ease;
   }
@@ -505,19 +506,25 @@
     width: 44px;
     height: 34px;
     padding: 0;
-    border: 1px solid var(--ink-700);
-    border-radius: 7px;
+    border: 1px solid var(--ink-600);
+    border-radius: var(--radius-control);
     background: transparent;
     cursor: pointer;
+  }
+
+  .color-swatch:focus-visible {
+    outline: none;
+    border-color: var(--lacquer);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
   }
 
   .hex-input {
     width: 96px;
     padding: 8px 10px;
-    border: 1px solid var(--ink-700);
-    border-radius: 7px;
-    background: var(--ink-800);
-    color: var(--paper);
+    border: 1px solid var(--ink-600);
+    border-radius: var(--radius-control);
+    background: var(--ink-850);
+    color: var(--ink-100);
     font-size: 13px;
     text-transform: uppercase;
   }
@@ -525,6 +532,7 @@
   .hex-input:focus {
     outline: none;
     border-color: var(--lacquer);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--lacquer) 20%, transparent);
   }
 
   .detail-label {

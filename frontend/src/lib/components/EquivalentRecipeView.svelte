@@ -425,15 +425,28 @@
             </ul>
           </div>
         {/if}
+      {:else if sourcePaint}
+        <!-- O par em aberto: a cor-alvo já ocupa a metade dela; a mistura
+             ainda é uma incógnita — o cálculo preenche a outra metade. -->
+        <div class="panel p-5">
+          <div class="verdict-pair preview">
+            <div class="verdict-half" style="background: rgb({sourcePaint.r}, {sourcePaint.g}, {sourcePaint.b});">
+              <span class="verdict-tag">{sourcePaint.name} · {sourcePaint.manufacturer}</span>
+            </div>
+            <div class="verdict-half pending">
+              <span class="pending-mark font-mono">?</span>
+              <span class="verdict-tag">sua mistura</span>
+            </div>
+          </div>
+          <p class="preview-hint">
+            {useStock ? 'Calcule — a receita prioriza as tintas do seu estoque.' : 'Escolha a marca e calcule: a mistura aparece aqui, colada na cor-alvo.'}
+          </p>
+        </div>
       {:else}
         <div class="panel empty-state">
           <span class="empty-icon"><Icon name="flask" size={40} /></span>
-          <p class="empty-title">
-            {step === 1 ? 'Comece buscando a tinta que você quer' : useStock ? 'Pronto — é só calcular' : 'Agora escolha a marca que você tem'}
-          </p>
-          <p class="empty-hint">
-            {step === 1 ? 'Digite o nome no campo ao lado — ou venha do Catálogo pelo botão da tinta.' : useStock ? 'A receita vai priorizar as tintas do seu estoque.' : 'A receita usa só as tintas dessa marca.'}
-          </p>
+          <p class="empty-title">Comece buscando a tinta que você quer</p>
+          <p class="empty-hint">Digite o nome no campo ao lado — ou venha do Catálogo pelo botão da tinta.</p>
         </div>
       {/if}
     </div>
@@ -485,14 +498,39 @@
   .verdict-pair {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    height: 120px;
-    border-radius: 8px;
+    height: 168px;
+    border-radius: var(--radius-surface);
     overflow: hidden;
     box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.22);
   }
 
   .verdict-half {
     position: relative;
+  }
+
+  /* Metade pendente (antes do cálculo): a incógnita do par */
+  .verdict-pair.preview {
+    height: 192px;
+  }
+
+  .verdict-half.pending {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ink-850);
+    border-left: 1px dashed var(--ink-600);
+  }
+
+  .pending-mark {
+    font-size: 36px;
+    font-weight: 600;
+    color: var(--ink-500);
+  }
+
+  .preview-hint {
+    margin-top: 12px;
+    font-size: 12.5px;
+    color: var(--ink-500);
   }
 
   /* Legenda do par + escala de ΔE */
@@ -504,11 +542,11 @@
     margin: 0 0 12px;
     font-size: 12.5px;
     line-height: 1.55;
-    color: var(--ink-400);
+    color: var(--ink-300);
   }
 
   .legend-desc strong {
-    color: var(--ink-200);
+    color: var(--ink-100);
     font-weight: 600;
   }
 
@@ -609,7 +647,7 @@
     border: none;
     border-radius: 6px;
     background: transparent;
-    color: var(--ink-400);
+    color: var(--ink-300);
     cursor: pointer;
     transition: background 0.15s ease, color 0.15s ease;
   }
@@ -689,7 +727,7 @@
 
   .stock-toggle-icon {
     display: flex;
-    color: var(--ink-400);
+    color: var(--ink-500);
     flex-shrink: 0;
   }
 

@@ -100,7 +100,7 @@
         {/each}
       </div>
 
-      <Button variant="raised" onclick={doCompare} disabled={selectedIDs.length < 2 || comparing} style="width: 100%; margin-top: 16px; background: var(--lacquer); color: white; font-weight: 600; border-radius: 8px; height: 44px;">
+      <Button variant="raised" onclick={doCompare} disabled={selectedIDs.length < 2 || comparing} style="width: 100%; margin-top: 16px; background: var(--lacquer); color: white; font-weight: 600; border-radius: var(--radius-pill); height: 44px;">
         {comparing ? 'Comparando…' : 'Comparar selecionadas'}
       </Button>
     </div>
@@ -109,20 +109,22 @@
     <div class="animate-rise" style="animation-delay: 160ms;">
       {#if results.length > 0}
         <div style="display: flex; flex-direction: column; gap: 20px;">
-          <div class="text-sm font-medium" style="color: var(--ink-400);">
+          <div class="font-mono" style="font-size: 11.5px; color: var(--ink-500);">
             {results.length} comparações
           </div>
 
-          <!-- Visual comparison -->
+          <!-- Veredito visual: as cores COLADAS, junção limpa — nada por cima -->
           <div class="panel p-5">
-            <div class="flex gap-3">
+            <div class="compare-strip" style="grid-template-columns: repeat({getSelectedPaints().length}, 1fr);">
               {#each getSelectedPaints() as paint}
-                <div style="flex: 1;">
-                  <div class="swatch-flat" style="width: 100%; aspect-ratio: 1; background: rgb({paint.r}, {paint.g}, {paint.b});"></div>
-                  <div style="text-align: center; margin-top: 10px;">
-                    <div style="font-size: 12px; font-weight: 500; color: var(--paper); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{paint.name}</div>
-                    <div style="font-size: 10px; font-family: var(--font-mono); color: var(--ink-500);">rgb({paint.r},{paint.g},{paint.b})</div>
-                  </div>
+                <div class="compare-band" style="background: rgb({paint.r}, {paint.g}, {paint.b});"></div>
+              {/each}
+            </div>
+            <div class="compare-labels" style="grid-template-columns: repeat({getSelectedPaints().length}, 1fr);">
+              {#each getSelectedPaints() as paint}
+                <div class="compare-label">
+                  <div class="compare-name">{paint.name}</div>
+                  <div class="compare-meta font-mono">rgb({paint.r},{paint.g},{paint.b})</div>
                 </div>
               {/each}
             </div>
@@ -141,7 +143,7 @@
         </div>
       {:else}
         <div class="panel" style="text-align: center; padding: 80px 0;">
-          <span style="color: var(--ink-600); display: flex; justify-content: center;"><Icon name="swap" size={40} /></span>
+          <span style="color: var(--ink-500); display: flex; justify-content: center;"><Icon name="swap" size={40} /></span>
           <p class="font-medium mt-4" style="color: var(--ink-500);">Selecione tintas e clique em comparar</p>
         </div>
       {/if}
@@ -167,8 +169,8 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 8px 4px 6px;
-    border-radius: 6px;
+    padding: 4px 10px 4px 6px;
+    border-radius: var(--radius-pill);
     background: var(--ink-700);
     color: var(--paper);
     border: none;
@@ -241,6 +243,46 @@
   .pick-code {
     font-size: 10.5px;
     font-family: var(--font-mono);
-    color: var(--ink-600);
+    color: var(--ink-500);
+  }
+
+  /* Faixa de comparação: metades adjacentes, sem gap — a junção fica limpa */
+  .compare-strip {
+    display: grid;
+    height: 120px;
+    border-radius: var(--radius-surface);
+    overflow: hidden;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  }
+
+  .compare-band {
+    min-width: 0;
+  }
+
+  /* Etiquetas ABAIXO de cada faixa, alinhadas às colunas de cor */
+  .compare-labels {
+    display: grid;
+    gap: 0;
+    margin-top: 10px;
+  }
+
+  .compare-label {
+    min-width: 0;
+    padding: 0 6px;
+    text-align: center;
+  }
+
+  .compare-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--paper);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .compare-meta {
+    font-size: 10px;
+    color: var(--ink-500);
   }
 </style>
