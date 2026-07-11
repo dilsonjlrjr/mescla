@@ -21,6 +21,15 @@
   import { deltaVerdict, deltaIsGood } from '../ui';
 
   let subView: 'menu' | 'comparar' | 'estoque' = $state('menu');
+  // Estante colapsada por padrão: com 35 marcas, a lista inteira empurrava
+  // as Ferramentas pra fora da dobra. Mostra só as marcas ativas + expansor.
+  let shelfExpanded = $state(false);
+  let visibleShelfBrands = $derived(
+    shelfExpanded
+      ? allManufacturers()
+      : allManufacturers().filter(m => shelf.manufacturerIds.includes(m.id))
+  );
+  let hiddenShelfCount = $derived(allManufacturers().length - visibleShelfBrands.length);
   let deltaSheetOpen = $state(false);
   let aboutOpen = $state(false);
   let searchOpen = $state(false);
@@ -124,20 +133,7 @@
       <h1 class="head-title font-display">Mais</h1>
     </header>
 
-    <p class="section-label" style="margin-top: 18px;">Minha estante</p>
-    <p class="shelf-hint">Receitas são calculadas só com as marcas que você tem.</p>
-
-    <div class="shelf-list">
-      {#each allManufacturers() as m (m.id)}
-        {@const on = shelf.manufacturerIds.includes(m.id)}
-        <button class="shelf-row pressable" onclick={() => toggleBrand(m.id)} aria-pressed={on}>
-          <span class="shelf-name">{m.name}</span>
-          <span class="switch" class:on><span class="knob"></span></span>
-        </button>
-      {/each}
-    </div>
-
-    <p class="section-label" style="margin-top: 26px;">Ferramentas</p>
+    <p class="section-label" style="margin-top: 18px;">Ferramentas</p>
     <div class="tools">
       <button class="tool-row pressable" onclick={() => openSub('estoque')}>
         <span class="tool-name">Meu estoque</span>
@@ -169,6 +165,31 @@
         <span class="tool-value font-mono">v1.0</span>
         <span class="tool-chev"><Icon name="chevron-right" size={15} /></span>
       </button>
+    </div>
+
+    <p class="section-label" style="margin-top: 26px;">Minha estante</p>
+    <p class="shelf-hint">Receitas são calculadas só com as marcas que você tem.</p>
+
+    <div class="shelf-list">
+      {#each visibleShelfBrands as m (m.id)}
+        {@const on = shelf.manufacturerIds.includes(m.id)}
+        <button class="shelf-row pressable" onclick={() => toggleBrand(m.id)} aria-pressed={on}>
+          <span class="shelf-name">{m.name}</span>
+          <span class="switch" class:on><span class="knob"></span></span>
+        </button>
+      {/each}
+      {#if !shelfExpanded && hiddenShelfCount > 0}
+        <button class="shelf-row shelf-expand pressable" onclick={() => (shelfExpanded = true)}>
+          <span class="shelf-name" style="color: var(--laca); font-weight: 600;">
+            {shelf.manufacturerIds.length > 0 ? `Mostrar todas as ${allManufacturers().length} marcas` : `Escolher marcas (${allManufacturers().length})`}
+          </span>
+          <span class="tool-chev"><Icon name="chevron-right" size={15} /></span>
+        </button>
+      {:else if shelfExpanded}
+        <button class="shelf-row shelf-expand pressable" onclick={() => (shelfExpanded = false)}>
+          <span class="shelf-name" style="color: var(--laca); font-weight: 600;">Mostrar só as minhas</span>
+        </button>
+      {/if}
     </div>
   {:else if subView === 'comparar'}
     <header class="sub-head">
@@ -534,7 +555,8 @@
   .delta-link {
     display: block;
     margin: 14px auto 0;
-    min-height: 40px;
+    min-height: 44px; /* alvo de toque */
+    padding: 0 12px;
     font-size: 12px;
     color: var(--ink-500);
   }

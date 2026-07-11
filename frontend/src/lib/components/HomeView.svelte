@@ -3,6 +3,7 @@
   // ações em pílulas e a lista de receitas salvas com mini fita de fórmula.
   import { onMount } from 'svelte';
   import FormulaRibbon from './FormulaRibbon.svelte';
+  import BrandMark from './BrandMark.svelte';
   import { recipes, removeRecipe, type SavedRecipe } from '../recipes.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
@@ -56,8 +57,13 @@
 
 <div class="page-container">
   <div class="home-hero animate-rise">
-    <h1 class="home-title font-display">Bancada pronta.</h1>
-    <p class="home-sub">Tudo que você precisa pra chegar na cor certa antes do pincel.</p>
+    <div class="hero-text">
+      <h1 class="home-title font-display">Bancada pronta.</h1>
+      <p class="home-sub">Tudo que você precisa pra chegar na cor certa antes do pincel.</p>
+    </div>
+    <div class="hero-mark" aria-hidden="true">
+      <BrandMark size={230} />
+    </div>
   </div>
 
   <!-- Stats: números gigantes mono, separados por hairlines verticais -->
@@ -130,8 +136,26 @@
 
 <style>
   .home-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 32px;
     padding-top: 20px;
     margin-bottom: 44px;
+  }
+
+  /* A gota da marca ancora o lado direito do hero (decorativa).
+     Margem negativa: a gota pode vazar do fluxo sem empurrar os stats pra baixo. */
+  .hero-mark {
+    flex-shrink: 0;
+    padding-right: 24px;
+    margin: -20px 0 -40px;
+  }
+
+  @media (max-width: 860px) {
+    .hero-mark {
+      display: none;
+    }
   }
 
   .home-title {

@@ -3,6 +3,7 @@
   // Form de 2 campos + CTA; resultado renderiza NA MESMA tela (o back do
   // Android re-expande o form via pilha de histórico). A receita é calculada
   // por marca da estante — a melhor aparece primeiro, as outras viram pills.
+  import { fly } from 'svelte/transition';
   import Icon from '../components/Icon.svelte';
   import PaintBottle from '../components/PaintBottle.svelte';
   import BrandMark from '../components/BrandMark.svelte';
@@ -244,14 +245,22 @@
       style="background: rgb({active.sourceR}, {active.sourceG}, {active.sourceB}); color: {contrastOn(active.sourceR, active.sourceG, active.sourceB)};"
       onclick={() => (searchOpen = true)}
     >
-      <span class="origin-tag font-mono">Tinta de origem</span>
+      <span class="origin-top">
+        <span class="origin-tag font-mono">Tinta de origem</span>
+        <span class="origin-swap font-mono">trocar ›</span>
+      </span>
       <span class="origin-name">{active.sourceName}</span>
       <span class="origin-meta font-mono">
         {active.sourceManufacturer}{sourcePaint?.line ? ` · ${sourcePaint.line}` : ''}&nbsp;&nbsp;&nbsp;#{[active.sourceR, active.sourceG, active.sourceB].map(n => n.toString(16).padStart(2, '0').toUpperCase()).join('')}
       </span>
     </button>
 
-    <div class="result-body">
+    <div class="result-body" in:fly={{ y: 14, duration: 240 }}>
+      <!-- Reiniciar sem depender do back do Android: volta pro formulário -->
+      <button class="btn-ghost new-mescla pressable" onclick={collapseResult}>
+        <Icon name="chevron-left" size={15} /> Nova mescla
+      </button>
+
       {#if recipes.length > 1}
         <div class="brand-tabs">
           {#each recipes as r, i (r.targetManufacturer)}
@@ -366,7 +375,10 @@
         style="background: rgb({sourcePaint.r}, {sourcePaint.g}, {sourcePaint.b}); color: {contrastOn(sourcePaint.r, sourcePaint.g, sourcePaint.b)};"
         onclick={() => (searchOpen = true)}
       >
-        <span class="origin-tag font-mono">Tinta de origem</span>
+        <span class="origin-top">
+          <span class="origin-tag font-mono">1 · Tinta de origem</span>
+          <span class="origin-swap font-mono">trocar ›</span>
+        </span>
         <span class="origin-name">{sourcePaint.name}</span>
         <span class="origin-meta font-mono">
           {sourcePaint.manufacturer}{sourcePaint.line ? ` · ${sourcePaint.line}` : ''}&nbsp;&nbsp;&nbsp;{hexOf(sourcePaint)}
@@ -374,12 +386,26 @@
       </button>
     {:else}
       <button class="origin empty pressable" onclick={() => (searchOpen = true)}>
-        <span class="origin-tag font-mono">Tinta de origem</span>
+        <span class="origin-tag font-mono">1 · Tinta de origem</span>
         <span class="origin-prompt"><Icon name="search" size={18} /> Nome ou código da tinta…</span>
       </button>
     {/if}
 
-    <div class="form-body">
+    <div class="form-body" in:fly={{ y: 14, duration: 240 }}>
+      {#if !computing}
+        <!-- Passo 2 no fluxo, não escondido no header: a fórmula sai do
+             catálogo das marcas escolhidas aqui. -->
+        <button class="field-row pressable" onclick={() => (brandSheetOpen = true)}>
+          <span class="field-text">
+            <span class="origin-tag font-mono">2 · Marca de destino</span>
+            <span class="field-value" class:placeholder={shelfNames.length === 0}>
+              {shelfNames.length > 0 ? shelfNames.join(', ') : 'Escolher as marcas que você tem…'}
+            </span>
+          </span>
+          <Icon name="chevron-down" size={15} />
+        </button>
+      {/if}
+
       {#if computing}
         <!-- Board Estados: skeleton + linha mono -->
         <div class="calc" aria-live="polite">
@@ -525,6 +551,21 @@
     opacity: 0.8;
   }
 
+  .origin-top {
+    display: contents;
+  }
+
+  /* Dica de troca: mesma linha do rótulo, canto direito */
+  .origin-swap {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    opacity: 0.8;
+  }
+
   .origin-name {
     font-family: var(--font-display);
     font-optical-sizing: auto;
@@ -560,6 +601,55 @@
   .result-body,
   .form-body {
     padding: 18px 16px 0;
+  }
+
+  /* Botão de verdade (pill 48px do .btn-ghost) — alvo de toque, não link */
+  .new-mescla {
+    margin-bottom: 16px;
+    color: var(--laca);
+    font-weight: 600;
+  }
+
+  /* Passo 2: campo de marca de destino no fluxo do formulário */
+  .field-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 14px 16px;
+    background: var(--papel);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-control);
+    color: var(--ink-500);
+    text-align: left;
+    font: inherit;
+  }
+
+  .field-text {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .field-row .origin-tag {
+    position: static;
+    opacity: 1;
+    color: var(--ink-500);
+  }
+
+  .field-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--grafite);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .field-value.placeholder {
+    color: var(--laca);
   }
 
   /* ── Pills de marca (várias receitas) ── */
