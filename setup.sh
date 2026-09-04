@@ -5,7 +5,7 @@
 set -e
 
 DB_PATH="data/paint_knowledge.db"
-MIGRATION="db/migrations/001_initial_schema.sql"
+MIGRATION="api/db/migrations/001_initial_schema.sql"
 
 echo "=== Paint Match AI — Database Setup ==="
 

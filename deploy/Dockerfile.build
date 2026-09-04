@@ -1,7 +1,7 @@
 # Imagem de build do Mescla (PWA): gera o banco de catálogo, exporta o
 # catalog.json, compila o motor de cor (WASM) e builda o app (Vite).
 # Roda uma vez (serviço `builder` do compose); o resultado vai pra um volume
-# que o nginx serve. Não compila o app desktop (Wails/GTK) — só cmd/{seed,export,wasm}.
+# que o nginx serve. Não compila o app desktop (Wails/GTK) — só api/cmd/{seed,export,wasm}.
 FROM golang:1.25-bookworm
 
 # sqlite3 (cria o banco a partir do schema) + Node 20 (Vite 6 exige 18+).
@@ -16,8 +16,8 @@ COPY . .
 
 # Pré-compila as ferramentas Go e instala as deps do front no build da imagem —
 # assim o passo em runtime (que depende do volume do banco) é rápido.
-RUN go build -o /usr/local/bin/mescla-seed ./cmd/seed \
- && go build -o /usr/local/bin/mescla-export ./cmd/export \
- && cd frontend-mobile && npm ci
+RUN go build -o /usr/local/bin/mescla-seed ./api/cmd/seed \
+ && go build -o /usr/local/bin/mescla-export ./api/cmd/export \
+ && cd front && npm ci
 
 ENTRYPOINT ["bash", "/app/deploy/build.sh"]

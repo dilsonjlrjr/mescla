@@ -9,24 +9,24 @@
 *.syso
 *.test
 
-# Frontend build artifacts
-frontend/dist/
-frontend/node_modules/
-frontend/bindings/
+# Frontend build artifacts (desktop, dentro de wails/)
+wails/frontend/dist/
+wails/frontend/node_modules/
+wails/frontend/bindings/
 
-# Mobile (PWA) — artefatos gerados pelo scripts/build-mobile.sh
-frontend-mobile/dist/
-frontend-mobile/dev-dist/
-frontend-mobile/node_modules/
-frontend-mobile/public/mescla.wasm
-frontend-mobile/public/wasm_exec.js
-frontend-mobile/public/data/catalog.json
+# Mobile (PWA) — artefatos gerados por scripts/build-mobile.sh
+front/dist/
+front/dev-dist/
+front/node_modules/
+front/public/mescla.wasm
+front/public/wasm_exec.js
+front/public/data/catalog.json
 
 # Task runner cache
 .task/
 
 # Wails build
-build/bin/
+wails/build/bin/
 
 # IDE
 .idea/
@@ -41,4 +41,4 @@ Thumbs.db
 # Claude Code local config
 .claude/
 dist/
-db/embedded/*.db
+api/db/embedded/*.db

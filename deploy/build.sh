@@ -6,11 +6,11 @@
 set -euo pipefail
 
 DB=/data/paint_knowledge.db
-PUB=/app/frontend-mobile/public
+PUB=/app/front/public
 
 if [ ! -f "$DB" ]; then
   echo "[build] gerando banco de catálogo…"
-  sqlite3 "$DB" < /app/db/migrations/001_initial_schema.sql
+  sqlite3 "$DB" < /app/api/db/migrations/001_initial_schema.sql
   ( cd /app && mescla-seed -db "$DB" -import-catalog )
   sqlite3 "$DB" "PRAGMA journal_mode=DELETE; VACUUM;"
   rm -f "$DB-wal" "$DB-shm"
@@ -23,13 +23,13 @@ mescla-export -db "$DB" -out "$PUB/data/catalog.json"
 
 echo "[build] compilando motor de cor (WASM)…"
 cd /app
-GOOS=js GOARCH=wasm go build -o "$PUB/mescla.wasm" ./cmd/wasm
+GOOS=js GOARCH=wasm go build -o "$PUB/mescla.wasm" ./api/cmd/wasm
 WEXEC="$(go env GOROOT)/lib/wasm/wasm_exec.js"
 [ -f "$WEXEC" ] || WEXEC="$(go env GOROOT)/misc/wasm/wasm_exec.js"
 cp "$WEXEC" "$PUB/wasm_exec.js"
 
 echo "[build] build do PWA…"
-cd /app/frontend-mobile
+cd /app/front
 npm run build
 
 echo "[build] publicando no volume web…"

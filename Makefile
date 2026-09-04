@@ -1,7 +1,7 @@
 # ── Mescla — interface de build ──────────────────────────────────────────────
 # Alvos no padrão do painel-chamados, adaptados ao fluxo do Mescla (Wails v3):
-# a lógica pesada vive em scripts/build-all.sh (desktop) e build-mobile.sh
-# (PWA Android) — este Makefile é só a porta de entrada.
+# a lógica pesada vive em wails/scripts/build-all.sh (desktop) e
+# scripts/build-mobile.sh (PWA Android) — este Makefile é só a porta de entrada.
 #
 # Diferenças pro Makefile original (Wails v2), de propósito:
 #   - Sem `wails build -platform`: Wails v3 builda com `go build` direto;
@@ -25,35 +25,35 @@ all: macos
 
 # ── macOS: arm64 + amd64 + universal + .app assinado + DMG ──────────────────
 macos:
-	./scripts/build-all.sh mac
+	./wails/scripts/build-all.sh mac
 
 # ── Windows amd64 (cross-compile do mac, sem toolchain extra) ───────────────
 windows:
-	./scripts/build-all.sh windows
+	./wails/scripts/build-all.sh windows
 
 # ── Linux arm64 + amd64 (via Docker; avisa e pula se não houver) ────────────
 linux:
-	./scripts/build-all.sh linux
+	./wails/scripts/build-all.sh linux
 
 # ── PWA Android (banco → catalog.json → wasm → vite build) ──────────────────
 mobile:
 	./scripts/build-mobile.sh
 
-# ── Gera build/darwin/icons.icns a partir de build/appicon.png ──────────────
+# ── Gera wails/build/darwin/icons.icns a partir de wails/build/appicon.png ──
 # Utilitário explícito (o build-all.sh já tem esse fallback embutido).
 # Requer: sips + iconutil (nativos no macOS)
 generate-icns:
-	@test -f build/appicon.png || { echo "✗ build/appicon.png não existe"; exit 1; }
-	@echo "▶ Gerando icns a partir de build/appicon.png..."
+	@test -f wails/build/appicon.png || { echo "✗ wails/build/appicon.png não existe"; exit 1; }
+	@echo "▶ Gerando icns a partir de wails/build/appicon.png..."
 	@ICONSET="$$(mktemp -d)/appicon.iconset"; \
-	mkdir -p "$$ICONSET" build/darwin; \
+	mkdir -p "$$ICONSET" wails/build/darwin; \
 	for s in 16 32 128 256 512; do \
-		sips -z $$s $$s build/appicon.png --out "$$ICONSET/icon_$${s}x$${s}.png" >/dev/null; \
-		sips -z $$((s*2)) $$((s*2)) build/appicon.png --out "$$ICONSET/icon_$${s}x$${s}@2x.png" >/dev/null; \
+		sips -z $$s $$s wails/build/appicon.png --out "$$ICONSET/icon_$${s}x$${s}.png" >/dev/null; \
+		sips -z $$((s*2)) $$((s*2)) wails/build/appicon.png --out "$$ICONSET/icon_$${s}x$${s}@2x.png" >/dev/null; \
 	done; \
-	iconutil -c icns "$$ICONSET" -o build/darwin/icons.icns; \
+	iconutil -c icns "$$ICONSET" -o wails/build/darwin/icons.icns; \
 	rm -rf "$$ICONSET"
-	@echo "✓ icns → build/darwin/icons.icns"
+	@echo "✓ icns → wails/build/darwin/icons.icns"
 
 # ── Instala em /Applications (preserva a assinatura feita no build) ──────────
 install: macos
@@ -73,8 +73,8 @@ run:
 
 # ── Limpeza (desktop + artefatos gerados do mobile) ─────────────────────────
 clean:
-	rm -rf build/bin $(OUTDIR) \
-		frontend-mobile/dist frontend-mobile/dev-dist \
-		frontend-mobile/public/mescla.wasm \
-		frontend-mobile/public/wasm_exec.js \
-		frontend-mobile/public/data/catalog.json
+	rm -rf wails/build/bin $(OUTDIR) \
+		front/dist front/dev-dist \
+		front/public/mescla.wasm \
+		front/public/wasm_exec.js \
+		front/public/data/catalog.json
