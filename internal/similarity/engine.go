@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"sort"
 
-	"paint-match-ai/pkg/color"
-	"paint-match-ai/pkg/mix"
+	"paint-match-ai/internal/color"
+	"paint-match-ai/internal/mix"
 )
 
 type SearchResult struct {

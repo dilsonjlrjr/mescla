@@ -5,7 +5,7 @@
   import PaintBottle from './PaintBottle.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
-  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock';
+  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock' | 'planner';
 
   interface NavOpts {
     paintId?: number;
@@ -36,6 +36,7 @@
 
   const navActions: { view: View; label: string }[] = [
     { view: 'mix', label: 'Equivalência' },
+    { view: 'planner', label: 'Planejador' },
     { view: 'catalog', label: 'Catálogo' },
     { view: 'color-search', label: 'Cor' },
     { view: 'stock', label: 'Meu estoque' },

@@ -2,7 +2,7 @@
   import Icon from './Icon.svelte';
   import BrandMark from './BrandMark.svelte';
 
-  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock';
+  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock' | 'planner';
 
   interface Props {
     currentView: View;
@@ -15,9 +15,10 @@
   let { currentView, collapsed, onNavigate, onToggle, onHelp }: Props = $props();
 
   // Ordenado pela jornada: a equivalência é o coração do produto.
-  const navItems: { id: View; label: string; icon: 'home' | 'grid' | 'building' | 'pipette' | 'swap' | 'flask' | 'wheel' | 'box' }[] = [
+  const navItems: { id: View; label: string; icon: 'home' | 'grid' | 'building' | 'pipette' | 'swap' | 'flask' | 'wheel' | 'box' | 'droplet' }[] = [
     { id: 'home', label: 'Início', icon: 'home' },
     { id: 'mix', label: 'Equivalência', icon: 'flask' },
+    { id: 'planner', label: 'Planejador', icon: 'droplet' },
     { id: 'wheel', label: 'Roda de cor', icon: 'wheel' },
     { id: 'catalog', label: 'Catálogo', icon: 'grid' },
     { id: 'stock', label: 'Meu estoque', icon: 'box' },

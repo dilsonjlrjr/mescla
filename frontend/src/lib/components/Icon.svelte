@@ -4,7 +4,9 @@
       | 'home' | 'grid' | 'pipette' | 'swap' | 'flask' | 'chevron-left'
       | 'search' | 'close' | 'info' | 'search-off' | 'building' | 'layers'
       | 'palette' | 'flag' | 'wheel' | 'book' | 'chevron-down'
-      | 'box' | 'plus' | 'trash' | 'edit' | 'upload' | 'download' | 'check';
+      | 'box' | 'plus' | 'trash' | 'edit' | 'upload' | 'download' | 'check' | 'droplet'
+      | 'undo' | 'redo' | 'crosshair' | 'save' | 'image' | 'maximize' | 'menu'
+      | 'sidebar' | 'pin' | 'zoom-in' | 'zoom-out';
     size?: number;
   }
 
@@ -111,5 +113,46 @@
     <path d="M7.5 11.5 12 16l4.5-4.5" />
   {:else if name === 'check'}
     <path d="M5 12.5 10 17.5 19 6.5" />
+  {:else if name === 'droplet'}
+    <path d="M12 2.5c-2.5 4-6.5 8-6.5 11.7a6.5 6.5 0 1 0 13 0C18.5 10.5 14.5 6.5 12 2.5Z" />
+  {:else if name === 'undo'}
+    <path d="M3 7v6h6" />
+    <path d="M3 13a9 9 0 0 1 15.4-6.4L21 9" />
+  {:else if name === 'redo'}
+    <path d="M21 7v6h-6" />
+    <path d="M21 13a9 9 0 0 0-15.4-6.4L3 9" />
+  {:else if name === 'crosshair'}
+    <circle cx="12" cy="12" r="7" />
+    <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+  {:else if name === 'save'}
+    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+    <path d="M17 21v-8H7v8" />
+    <path d="M7 3v5h8" />
+  {:else if name === 'image'}
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" />
+    <path d="m21 15-5-5L5 21" />
+  {:else if name === 'maximize'}
+    <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+    <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+    <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+    <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+  {:else if name === 'menu'}
+    <path d="M4 6h16M4 12h16M4 18h16" />
+  {:else if name === 'sidebar'}
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M15 3v18" />
+  {:else if name === 'pin'}
+    <path d="M12 17v5" />
+    <path d="M9 10.5 3 21h18L15 10.5" />
+    <path d="M12 3a4 4 0 0 0-4 4c0 2.5 4 3.5 4 6.5 0-3 4-4 4-6.5a4 4 0 0 0-4-4z" />
+  {:else if name === 'zoom-in'}
+    <circle cx="10.5" cy="10.5" r="6.2" />
+    <path d="M19 19l-4.3-4.3" />
+    <path d="M10.5 7.5v6M7.5 10.5h6" />
+  {:else if name === 'zoom-out'}
+    <circle cx="10.5" cy="10.5" r="6.2" />
+    <path d="M19 19l-4.3-4.3" />
+    <path d="M7.5 10.5h6" />
   {/if}
 </svg>

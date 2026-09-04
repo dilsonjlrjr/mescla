@@ -29,6 +29,7 @@
     "@smui/textfield": "^9.0.1",
     "@smui/tooltip": "^9.0.1",
     "@wailsio/runtime": "latest",
+    "lucide-svelte": "^1.0.1",
     "svelte-material-ui": "^9.0.1"
   },
   "devDependencies": {

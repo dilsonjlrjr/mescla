@@ -3,11 +3,13 @@ module paint-match-ai
 go 1.25.0
 
 require (
+	github.com/sqweek/dialog v0.0.0-20260123140253-64c163d53aac
 	github.com/wailsapp/wails/v3 v3.0.0-alpha2.110
 	modernc.org/sqlite v1.46.0
 )
 
 require (
+	github.com/TheTitanrain/w32 v0.0.0-20180517000239-4f5cfb03fabf // indirect
 	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect

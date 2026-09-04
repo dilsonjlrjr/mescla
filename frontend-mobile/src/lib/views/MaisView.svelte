@@ -9,6 +9,7 @@
   import DeltaScaleSheet from '../components/DeltaScaleSheet.svelte';
   import FullScreenSearch from '../components/FullScreenSearch.svelte';
   import StockManager from '../components/StockManager.svelte';
+  import PlannerView from './PlannerView.svelte';
   import { pushLayer, switchTab } from '../nav.svelte';
   import { allManufacturers, paintById, type Paint } from '../services/catalog';
   import { compareToAnchor, stockToCSV, type SearchResult } from '../services/engine';
@@ -20,7 +21,7 @@
   import { toast } from '../toast.svelte';
   import { deltaVerdict, deltaIsGood } from '../ui';
 
-  let subView: 'menu' | 'comparar' | 'estoque' = $state('menu');
+  let subView: 'menu' | 'comparar' | 'estoque' | 'planner' = $state('menu');
   // Estante colapsada por padrão: com 35 marcas, a lista inteira empurrava
   // as Ferramentas pra fora da dobra. Mostra só as marcas ativas + expansor.
   let shelfExpanded = $state(false);
@@ -38,7 +39,7 @@
 
   let closeSubLayer: (() => void) | null = null;
 
-  function openSub(view: 'comparar' | 'estoque') {
+  function openSub(view: 'comparar' | 'estoque' | 'planner') {
     if (subView === view) return;
     subView = view;
     closeSubLayer = pushLayer(() => {
@@ -153,6 +154,11 @@
         <span class="tool-name">Exportar estoque CSV</span>
         <span class="tool-chev"><Icon name="chevron-right" size={15} /></span>
       </button>
+      <button class="tool-row pressable" onclick={() => openSub('planner')}>
+        <span class="tool-name">Planejador de pintura</span>
+        <span class="tool-value font-mono">cores da miniatura</span>
+        <span class="tool-chev"><Icon name="chevron-right" size={15} /></span>
+      </button>
       {#if pwa.canInstall}
         <button class="tool-row pressable" onclick={promptInstall}>
           <span class="tool-name">Instalar o app</span>
@@ -250,6 +256,13 @@
     <button class="delta-link pressable font-mono" onclick={() => (deltaSheetOpen = true)}>o que significa o ΔE?</button>
   {:else if subView === 'estoque'}
     <StockManager onBack={backToMenu} />
+  {:else if subView === 'planner'}
+    <header class="sub-head">
+      <button class="sub-back pressable" onclick={backToMenu}>
+        <Icon name="chevron-left" size={16} /> Mais
+      </button>
+    </header>
+    <PlannerView />
   {/if}
 </div>
 

@@ -38,7 +38,7 @@ type catalogJSON struct {
 }
 
 func main() {
-	dbPath := flag.String("db", "paint_knowledge.db", "Caminho para o banco SQLite")
+	dbPath := flag.String("db", "data/paint_knowledge.db", "Caminho para o banco SQLite")
 	outPath := flag.String("out", "frontend-mobile/public/data/catalog.json", "Arquivo JSON de saída")
 	flag.Parse()
 

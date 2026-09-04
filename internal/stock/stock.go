@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"strings"
 
-	"paint-match-ai/pkg/color"
-	"paint-match-ai/pkg/mix"
+	"paint-match-ai/internal/color"
+	"paint-match-ai/internal/mix"
 )
 
 // Paint é uma tinta do estoque do usuário. ID é opcional (o desktop usa o

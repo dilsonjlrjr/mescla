@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"paint-match-ai/pkg/color"
+	"paint-match-ai/internal/color"
 )
 
 // DefaultCatalogDir é o diretório com os arquivos de catálogo (um .md por

@@ -9,8 +9,8 @@ package equivalence
 import (
 	"errors"
 
-	"paint-match-ai/pkg/color"
-	"paint-match-ai/pkg/mix"
+	"paint-match-ai/internal/color"
+	"paint-match-ai/internal/mix"
 )
 
 // MaxViableDeltaE é o limite de ΔE2000 acima do qual uma cor é considerada

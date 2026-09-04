@@ -18,10 +18,10 @@ import (
 	"sort"
 	"syscall/js"
 
-	"paint-match-ai/pkg/color"
-	"paint-match-ai/pkg/equivalence"
-	"paint-match-ai/pkg/mix"
-	"paint-match-ai/pkg/stock"
+	"paint-match-ai/internal/color"
+	"paint-match-ai/internal/equivalence"
+	"paint-match-ai/internal/mix"
+	"paint-match-ai/internal/stock"
 )
 
 // paintRec é uma tinta do catálogo em memória, com Lab precomputado no init

@@ -26,11 +26,14 @@ func main() {
 	}
 	defer paintService.Close()
 
+	dialogService := NewDialogService()
+
 	app := application.New(application.Options{
 		Name:        "Mescla",
 		Description: "Ferramenta profissional para pintores de miniaturas",
 		Services: []application.Service{
 			application.NewService(paintService),
+			application.NewService(dialogService),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

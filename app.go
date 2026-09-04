@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"sort"
 
-	"paint-match-ai/pkg/ai"
-	"paint-match-ai/pkg/color"
-	"paint-match-ai/pkg/equivalence"
-	"paint-match-ai/pkg/mix"
-	"paint-match-ai/pkg/similarity"
+	"paint-match-ai/internal/ai"
+	"paint-match-ai/internal/color"
+	"paint-match-ai/internal/equivalence"
+	"paint-match-ai/internal/mix"
+	"paint-match-ai/internal/similarity"
 
 	_ "modernc.org/sqlite"
 )
@@ -24,30 +24,34 @@ type PaintService struct {
 }
 
 // NewPaintService abre o banco de catálogo. Ordem de resolução:
-//  1. paint_knowledge.db no diretório atual (fluxo de desenvolvimento);
-//  2. banco já instalado no diretório de dados do usuário;
-//  3. primeiro boot: extrai o banco embutido no binário (embeddedSeed)
+//  1. data/paint_knowledge.db no diretório atual (fluxo de desenvolvimento);
+//  2. paint_knowledge.db no diretório atual (legado);
+//  3. banco já instalado no diretório de dados do usuário;
+//  4. primeiro boot: extrai o banco embutido no binário (embeddedSeed)
 //     para o diretório de dados — o app é auto-suficiente, sem instalador.
 func NewPaintService(embeddedSeed []byte) (*PaintService, error) {
-	dbPath := "paint_knowledge.db"
+	dbPath := "data/paint_knowledge.db"
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		cfgDir, err := os.UserConfigDir()
-		if err != nil {
-			home, _ := os.UserHomeDir()
-			cfgDir = home
-		}
-		dataDir := filepath.Join(cfgDir, "Mescla")
-		dbPath = filepath.Join(dataDir, "paint_knowledge.db")
-
+		dbPath = "paint_knowledge.db"
 		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-			if len(embeddedSeed) == 0 {
-				return nil, fmt.Errorf("banco de catálogo não encontrado (nem no diretório atual, nem em %s, nem embutido no binário)", dataDir)
+			cfgDir, err := os.UserConfigDir()
+			if err != nil {
+				home, _ := os.UserHomeDir()
+				cfgDir = home
 			}
-			if err := os.MkdirAll(dataDir, 0o755); err != nil {
-				return nil, fmt.Errorf("criando diretório de dados: %w", err)
-			}
-			if err := os.WriteFile(dbPath, embeddedSeed, 0o644); err != nil {
-				return nil, fmt.Errorf("instalando banco de catálogo: %w", err)
+			dataDir := filepath.Join(cfgDir, "Mescla")
+			dbPath = filepath.Join(dataDir, "paint_knowledge.db")
+
+			if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+				if len(embeddedSeed) == 0 {
+					return nil, fmt.Errorf("banco de catálogo não encontrado (nem no diretório atual, nem em %s, nem embutido no binário)", dataDir)
+				}
+				if err := os.MkdirAll(dataDir, 0o755); err != nil {
+					return nil, fmt.Errorf("criando diretório de dados: %w", err)
+				}
+				if err := os.WriteFile(dbPath, embeddedSeed, 0o644); err != nil {
+					return nil, fmt.Errorf("instalando banco de catálogo: %w", err)
+				}
 			}
 		}
 	}
@@ -72,6 +76,9 @@ func NewPaintService(embeddedSeed []byte) (*PaintService, error) {
 	// read-only e reseedado pelo dev, então não pode carregar dados do usuário.
 	if err := ensureUserSchema(db); err != nil {
 		return nil, fmt.Errorf("preparando estoque do usuário: %w", err)
+	}
+	if err := ensurePlanningSchema(db); err != nil {
+		return nil, fmt.Errorf("preparando planos de pintura: %w", err)
 	}
 
 	return &PaintService{

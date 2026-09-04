@@ -14,7 +14,7 @@ import (
 
 func main() {
 	// Flags
-	dbPath := flag.String("db", "paint_knowledge.db", "Caminho para o banco SQLite")
+	dbPath := flag.String("db", "data/paint_knowledge.db", "Caminho para o banco SQLite")
 	downloadLogos := flag.Bool("download-logos", false, "Baixar logotipos dos fabricantes")
 	downloadAssets := flag.Bool("download-assets", false, "Baixar todos os assets (logos, thumbnails, imagens)")
 	importPaints := flag.Bool("import-paints", false, "Importar tintas de demonstração (amostra curada)")

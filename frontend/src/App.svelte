@@ -10,10 +10,11 @@
   import EquivalentRecipeView from './lib/components/EquivalentRecipeView.svelte';
   import ColorWheelView from './lib/components/ColorWheelView.svelte';
   import MyStockView from './lib/components/MyStockView.svelte';
+  import PlanejadorPintura from './lib/components/PlanejadorPintura.svelte';
   import ToastRegion from './lib/components/ToastRegion.svelte';
   import GuideDialog from './lib/components/GuideDialog.svelte';
 
-  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock';
+  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock' | 'planner';
 
   interface NavOpts {
     paintId?: number;
@@ -93,6 +94,8 @@
         <MyStockView prefillPaintId={stockPrefillPaintId} />
       {:else if currentView === 'mix'}
         <EquivalentRecipeView initialSourcePaintId={recipeSourcePaintId} initialTargetManufacturerId={recipeTargetMfrId} />
+      {:else if currentView === 'planner'}
+        <PlanejadorPintura />
       {/if}
     {/key}
   </main>

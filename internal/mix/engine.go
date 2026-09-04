@@ -1,7 +1,7 @@
 package mix
 
 import (
-	"paint-match-ai/pkg/color"
+	"paint-match-ai/internal/color"
 )
 
 type PaintInput struct {

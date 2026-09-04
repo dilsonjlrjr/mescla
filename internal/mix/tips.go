@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"paint-match-ai/pkg/color"
+	"paint-match-ai/internal/color"
 )
 
 // Thresholds heurísticos, não têm base científica rígida — ponto de partida

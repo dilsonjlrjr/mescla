@@ -4,7 +4,7 @@
   // pílula de busca ⌘K em mono à direita. Home fica no logo.
   import BrandMark from './BrandMark.svelte';
 
-  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock';
+  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock' | 'planner';
 
   interface Props {
     currentView: View;
@@ -16,6 +16,7 @@
 
   const navItems: { id: View; label: string }[] = [
     { id: 'mix', label: 'Equivalência' },
+    { id: 'planner', label: 'Planejador' },
     { id: 'catalog', label: 'Catálogo' },
     { id: 'color-search', label: 'Cor' },
     { id: 'stock', label: 'Estoque' },

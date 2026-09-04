@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"paint-match-ai/pkg/equivalence"
-	"paint-match-ai/pkg/mix"
-	"paint-match-ai/pkg/stock"
+	"paint-match-ai/internal/equivalence"
+	"paint-match-ai/internal/mix"
+	"paint-match-ai/internal/stock"
 )
 
 // ensureUserSchema cria a tabela do estoque do usuário se ela ainda não existe.

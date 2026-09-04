@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"paint-match-ai/pkg/mix"
+	"paint-match-ai/internal/mix"
 )
 
 func TestSuggestExcludesSourcePaint(t *testing.T) {

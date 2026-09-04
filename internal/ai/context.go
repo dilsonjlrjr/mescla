@@ -1,6 +1,6 @@
 package ai
 
-import "paint-match-ai/pkg/color"
+import "paint-match-ai/internal/color"
 
 // QueryIntent tipos de intenção do usuário
 type QueryIntent string

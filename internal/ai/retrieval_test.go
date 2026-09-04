@@ -3,8 +3,8 @@ package ai
 import (
 	"testing"
 
-	"paint-match-ai/pkg/color"
-	"paint-match-ai/pkg/mix"
+	"paint-match-ai/internal/color"
+	"paint-match-ai/internal/mix"
 )
 
 func TestQueryIntentConstants(t *testing.T) {

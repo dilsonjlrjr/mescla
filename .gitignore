@@ -1,12 +1,13 @@
-# Database files
+# Database files (runtime)
 *.db
 *.db-shm
 *.db-wal
 
 # Go build artifacts
-/bin/
+/dist/
 *.exe
 *.syso
+*.test
 
 # Frontend build artifacts
 frontend/dist/

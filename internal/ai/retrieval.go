@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"paint-match-ai/pkg/color"
-	"paint-match-ai/pkg/mix"
-	"paint-match-ai/pkg/similarity"
+	"paint-match-ai/internal/color"
+	"paint-match-ai/internal/mix"
+	"paint-match-ai/internal/similarity"
 )
 
 // Retrieval engine principal de recuperação de conhecimento
