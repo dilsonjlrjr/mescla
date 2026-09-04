@@ -10,6 +10,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 
 	apidb "paint-match-ai/api/db"
+	"paint-match-ai/api/service"
 )
 
 //go:embed all:frontend/dist
@@ -17,7 +18,7 @@ var assets embed.FS
 
 func main() {
 	seed := apidb.EmbeddedSeed()
-	paintService, err := NewPaintService(seed)
+	paintService, err := service.NewPaintService(seed)
 	if err != nil {
 		log.Fatalf("Erro inicializando PaintService: %v", err)
 	}

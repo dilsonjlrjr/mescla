@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Roda dentro do container `builder`. Gera o banco no volume (/data), exporta o
-# catálogo, compila o WASM e builda o PWA, publicando o resultado em /out (volume
-# servido pelo nginx). O banco persiste em /data entre deploys — se já existe, é
-# reaproveitado (não regenera).
+# Roda dentro do container `builder`. Gera o banco no volume (/data) — o
+# mescla-api (serviço `api` do compose) lê o mesmo volume — e builda o PWA,
+# publicando o resultado em /out (volume servido pelo nginx). O banco persiste
+# em /data entre deploys — se já existe, é reaproveitado (não regenera).
 set -euo pipefail
 
 DB=/data/paint_knowledge.db
-PUB=/app/front/public
 
 if [ ! -f "$DB" ]; then
   echo "[build] gerando banco de catálogo…"
@@ -17,16 +16,6 @@ if [ ! -f "$DB" ]; then
 else
   echo "[build] banco existente reaproveitado do volume ($(sqlite3 "$DB" 'SELECT COUNT(*) FROM paints') tintas)"
 fi
-
-echo "[build] exportando catálogo…"
-mescla-export -db "$DB" -out "$PUB/data/catalog.json"
-
-echo "[build] compilando motor de cor (WASM)…"
-cd /app
-GOOS=js GOARCH=wasm go build -o "$PUB/mescla.wasm" ./api/cmd/wasm
-WEXEC="$(go env GOROOT)/lib/wasm/wasm_exec.js"
-[ -f "$WEXEC" ] || WEXEC="$(go env GOROOT)/misc/wasm/wasm_exec.js"
-cp "$WEXEC" "$PUB/wasm_exec.js"
 
 echo "[build] build do PWA…"
 cd /app/front

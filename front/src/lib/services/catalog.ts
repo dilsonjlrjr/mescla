@@ -1,5 +1,8 @@
-// Catálogo em memória — carrega o JSON gerado por cmd/export e responde
-// listagem/busca/filtro em TS (a matemática de cor fica no WASM; ver engine.ts).
+// Catálogo em memória — carrega de /api/manufacturers e /api/paints (banco
+// vivo do servidor, via api/httpapi) e responde listagem/busca/filtro em TS.
+// A matemática de cor e as receitas também vêm da API agora; ver engine.ts.
+
+import { apiGet } from './api';
 
 export interface Paint {
   id: number;
@@ -19,12 +22,29 @@ export interface Manufacturer {
   paintCount: number;
 }
 
+interface ManufacturerResponse {
+  id: number;
+  name: string;
+  paintCount: number;
+}
+
+interface PaintResponse {
+  id: number;
+  manufacturerId: number;
+  manufacturer: string;
+  name: string;
+  code: string;
+  productLine: string;
+  r: number;
+  g: number;
+  b: number;
+}
+
 let paints: Paint[] = [];
 let manufacturers: Manufacturer[] = [];
 let byId = new Map<number, Paint>();
 // Índice de busca pré-normalizado: "nome código marca" sem acento, minúsculo.
 let searchIndex: string[] = [];
-let rawJSON = '';
 
 let loadPromise: Promise<void> | null = null;
 
@@ -38,36 +58,27 @@ function normalize(s: string): string {
 export function loadCatalog(): Promise<void> {
   if (!loadPromise) {
     loadPromise = (async () => {
-      const res = await fetch('/data/catalog.json');
-      if (!res.ok) throw new Error(`catálogo: HTTP ${res.status}`);
-      rawJSON = await res.text();
-      const data = JSON.parse(rawJSON) as {
-        manufacturers: Manufacturer[];
-        paints: [number, number, string, string, string, number, number, number][];
-      };
-      manufacturers = data.manufacturers;
-      const mfrName = new Map(manufacturers.map(m => [m.id, m.name]));
-      paints = data.paints.map(([id, mfrId, name, code, line, r, g, b]) => ({
-        id,
-        manufacturerId: mfrId,
-        manufacturer: mfrName.get(mfrId) ?? '',
-        name,
-        code,
-        line,
-        r,
-        g,
-        b,
+      const [mfrs, paintRows] = await Promise.all([
+        apiGet<ManufacturerResponse[]>('/manufacturers'),
+        apiGet<PaintResponse[]>('/paints'),
+      ]);
+      manufacturers = mfrs;
+      paints = paintRows.map(p => ({
+        id: p.id,
+        manufacturerId: p.manufacturerId,
+        manufacturer: p.manufacturer,
+        name: p.name,
+        code: p.code,
+        line: p.productLine,
+        r: p.r,
+        g: p.g,
+        b: p.b,
       }));
       byId = new Map(paints.map(p => [p.id, p]));
       searchIndex = paints.map(p => normalize(`${p.name} ${p.code} ${p.manufacturer}`));
     })();
   }
   return loadPromise;
-}
-
-/** JSON bruto do catálogo — repassado ao init do WASM sem re-serializar. */
-export function catalogJSON(): string {
-  return rawJSON;
 }
 
 export function allPaints(): Paint[] {

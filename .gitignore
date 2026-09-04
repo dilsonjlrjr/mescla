@@ -18,9 +18,6 @@ wails/frontend/bindings/
 front/dist/
 front/dev-dist/
 front/node_modules/
-front/public/mescla.wasm
-front/public/wasm_exec.js
-front/public/data/catalog.json
 
 # Task runner cache
 .task/

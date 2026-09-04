@@ -1,9 +1,9 @@
 // Package equivalence orquestra a sugestão de receita equivalente: dada uma
 // tinta de origem e o pool de tintas de um fabricante de destino, escolhe a
 // mistura que melhor aproxima a cor. É a fonte única dessa regra de negócio,
-// compartilhada pelo desktop (app.go, dados via SQL) e pelo mobile (cmd/wasm,
-// dados via catálogo JSON em memória) — os dois alvos DEVEM produzir a mesma
-// receita para a mesma entrada.
+// compartilhada pelo desktop (wails/, bind direto) e pelo front/api (httpapi,
+// dados via SQL) — os dois alvos DEVEM produzir a mesma receita para a mesma
+// entrada.
 package equivalence
 
 import (

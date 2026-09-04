@@ -2,19 +2,19 @@ import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Decisão de 04/09/2026: front consome mescla-api (fasthttp) pela rede, sem
+// fallback offline — ver brain-mescla-ai/2026-09-04-reorg-api-wails-front.md.
+// O precache do PWA cobre só o shell do app (JS/CSS/ícones); dado e motor de
+// cor exigem API alcançável.
 export default defineConfig({
   plugins: [
     svelte(),
     VitePWA({
       registerType: 'autoUpdate',
-      // wasm + catálogo entram no precache: o app inteiro funciona offline
-      // (o cenário-alvo é dentro de loja, onde sinal ruim é comum).
-      includeAssets: ['wasm_exec.js', 'mescla.wasm', 'data/catalog.json'],
       workbox: {
         // woff2 no precache: fontes agora são self-hosted (@fontsource),
-        // então o app abre offline já com a tipografia certa desde o boot.
-        globPatterns: ['**/*.{js,css,html,svg,png,wasm,json,woff2}'],
-        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024, // mescla.wasm ~3.3MB
+        // então o shell do app abre já com a tipografia certa desde o boot.
+        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
       },
       manifest: {
         name: 'Mescla',
@@ -34,4 +34,16 @@ export default defineConfig({
       },
     }),
   ],
+  server: {
+    // Dev: encaminha /api pro mescla-api rodando local (api/cmd/apiserver,
+    // porta padrão 8080) — front chama sempre "/api/...", nunca uma URL
+    // absoluta; produção faz o mesmo via nginx (front/deploy/nginx.conf).
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
+  },
 });

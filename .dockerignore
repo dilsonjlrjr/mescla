@@ -8,7 +8,4 @@ bin
 *.db-shm
 *.db-wal
 api/db/embedded
-front/public/mescla.wasm
-front/public/wasm_exec.js
-front/public/data/catalog.json
 wails/build/bin

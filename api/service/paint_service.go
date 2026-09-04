@@ -1,4 +1,4 @@
-package main
+package service
 
 import (
 	"database/sql"
@@ -24,12 +24,17 @@ type PaintService struct {
 }
 
 // NewPaintService abre o banco de catálogo. Ordem de resolução:
+//  0. MESCLA_DB_PATH, se definida (container do apiserver — volume montado);
 //  1. data/paint_knowledge.db no diretório atual (fluxo de desenvolvimento);
 //  2. paint_knowledge.db no diretório atual (legado);
 //  3. banco já instalado no diretório de dados do usuário;
 //  4. primeiro boot: extrai o banco embutido no binário (embeddedSeed)
 //     para o diretório de dados — o app é auto-suficiente, sem instalador.
 func NewPaintService(embeddedSeed []byte) (*PaintService, error) {
+	if envPath := os.Getenv("MESCLA_DB_PATH"); envPath != "" {
+		return openPaintService(envPath)
+	}
+
 	dbPath := "data/paint_knowledge.db"
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		dbPath = "paint_knowledge.db"
@@ -56,6 +61,13 @@ func NewPaintService(embeddedSeed []byte) (*PaintService, error) {
 		}
 	}
 
+	return openPaintService(dbPath)
+}
+
+// openPaintService abre dbPath (já resolvido) e prepara o schema — extraído
+// pra ser reaproveitado tanto pela resolução local do desktop/CLI quanto pelo
+// caminho direto de MESCLA_DB_PATH (apiserver em container, path do volume).
+func openPaintService(dbPath string) (*PaintService, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("abrindo banco: %w", err)
@@ -96,22 +108,23 @@ func (s *PaintService) Close() error {
 }
 
 type PaintDTO struct {
-	ID           int64   `json:"id"`
-	Name         string  `json:"name"`
-	Code         string  `json:"code"`
-	Manufacturer string  `json:"manufacturer"`
-	ProductLine  string  `json:"productLine"`
-	R            uint8   `json:"r"`
-	G            uint8   `json:"g"`
-	B            uint8   `json:"b"`
-	SwatchPath   string  `json:"swatchPath"`
-	Thumbnail    string  `json:"thumbnail"`
-	ImageURL     string  `json:"imageUrl"`
-	FinishType   string  `json:"finishType"`
-	PaintType    string  `json:"paintType"`
-	Coverage     string  `json:"coverage"`
-	Opacity      string  `json:"opacity"`
-	Volume       string  `json:"volume"`
+	ID             int64  `json:"id"`
+	Name           string `json:"name"`
+	Code           string `json:"code"`
+	ManufacturerID int64  `json:"manufacturerId"`
+	Manufacturer   string `json:"manufacturer"`
+	ProductLine    string `json:"productLine"`
+	R              uint8  `json:"r"`
+	G              uint8  `json:"g"`
+	B              uint8  `json:"b"`
+	SwatchPath     string `json:"swatchPath"`
+	Thumbnail      string `json:"thumbnail"`
+	ImageURL       string `json:"imageUrl"`
+	FinishType     string `json:"finishType"`
+	PaintType      string `json:"paintType"`
+	Coverage       string `json:"coverage"`
+	Opacity        string `json:"opacity"`
+	Volume         string `json:"volume"`
 }
 
 type SearchResultDTO struct {
@@ -210,7 +223,7 @@ func (s *PaintService) GetManufacturers() ([]ManufacturerDTO, error) {
 
 func (s *PaintService) GetAllPaints() ([]PaintDTO, error) {
 	query := `
-		SELECT p.id, p.name, COALESCE(p.code, ''), m.name,
+		SELECT p.id, p.name, COALESCE(p.code, ''), p.manufacturer_id, m.name,
 			   COALESCE(pl.name, ''),
 			   COALESCE(pc.rgb_r, 0), COALESCE(pc.rgb_g, 0), COALESCE(pc.rgb_b, 0),
 			   COALESCE(pc.swatch_path, ''),
@@ -238,7 +251,7 @@ func (s *PaintService) GetAllPaints() ([]PaintDTO, error) {
 	for rows.Next() {
 		var p PaintDTO
 		if err := rows.Scan(
-			&p.ID, &p.Name, &p.Code, &p.Manufacturer,
+			&p.ID, &p.Name, &p.Code, &p.ManufacturerID, &p.Manufacturer,
 			&p.ProductLine,
 			&p.R, &p.G, &p.B,
 			&p.SwatchPath,
@@ -256,7 +269,7 @@ func (s *PaintService) GetAllPaints() ([]PaintDTO, error) {
 
 func (s *PaintService) SearchPaints(query string) ([]PaintDTO, error) {
 	sqlQuery := `
-		SELECT p.id, p.name, COALESCE(p.code, ''), m.name,
+		SELECT p.id, p.name, COALESCE(p.code, ''), p.manufacturer_id, m.name,
 			   COALESCE(pl.name, ''),
 			   COALESCE(pc.rgb_r, 0), COALESCE(pc.rgb_g, 0), COALESCE(pc.rgb_b, 0),
 			   COALESCE(pc.swatch_path, ''),
@@ -287,7 +300,7 @@ func (s *PaintService) SearchPaints(query string) ([]PaintDTO, error) {
 	for rows.Next() {
 		var p PaintDTO
 		if err := rows.Scan(
-			&p.ID, &p.Name, &p.Code, &p.Manufacturer,
+			&p.ID, &p.Name, &p.Code, &p.ManufacturerID, &p.Manufacturer,
 			&p.ProductLine,
 			&p.R, &p.G, &p.B,
 			&p.SwatchPath,
@@ -305,7 +318,7 @@ func (s *PaintService) SearchPaints(query string) ([]PaintDTO, error) {
 
 func (s *PaintService) GetPaintByID(id int64) (PaintDTO, error) {
 	query := `
-		SELECT p.id, p.name, COALESCE(p.code, ''), m.name,
+		SELECT p.id, p.name, COALESCE(p.code, ''), p.manufacturer_id, m.name,
 			   COALESCE(pl.name, ''),
 			   COALESCE(pc.rgb_r, 0), COALESCE(pc.rgb_g, 0), COALESCE(pc.rgb_b, 0),
 			   COALESCE(pc.swatch_path, ''),
@@ -325,7 +338,7 @@ func (s *PaintService) GetPaintByID(id int64) (PaintDTO, error) {
 	`
 	var p PaintDTO
 	err := s.db.QueryRow(query, id).Scan(
-		&p.ID, &p.Name, &p.Code, &p.Manufacturer,
+		&p.ID, &p.Name, &p.Code, &p.ManufacturerID, &p.Manufacturer,
 		&p.ProductLine,
 		&p.R, &p.G, &p.B,
 		&p.SwatchPath,

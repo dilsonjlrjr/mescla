@@ -19,7 +19,7 @@ APP    := mescla
 BUNDLE := Mescla.app
 OUTDIR := wails/dist
 
-.PHONY: all macos windows linux mobile clean generate-icns install run
+.PHONY: all macos windows linux mobile api clean generate-icns install run
 
 all: macos
 
@@ -35,9 +35,13 @@ windows:
 linux:
 	./wails/scripts/build-all.sh linux
 
-# ── PWA Android (banco → catalog.json → wasm → vite build) ──────────────────
+# ── PWA Android (vite build — dado e motor de cor vêm do mescla-api) ────────
 mobile:
 	./front/scripts/build-mobile.sh
+
+# ── mescla-api local (fasthttp), pro front falar com algo em dev ────────────
+api:
+	go run ./api/cmd/apiserver
 
 # ── Gera wails/build/darwin/icons.icns a partir de wails/build/appicon.png ──
 # Utilitário explícito (o build-all.sh já tem esse fallback embutido).
