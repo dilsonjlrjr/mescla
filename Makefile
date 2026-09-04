@@ -1,7 +1,7 @@
 # ── Mescla — interface de build ──────────────────────────────────────────────
 # Alvos no padrão do painel-chamados, adaptados ao fluxo do Mescla (Wails v3):
 # a lógica pesada vive em wails/scripts/build-all.sh (desktop) e
-# scripts/build-mobile.sh (PWA Android) — este Makefile é só a porta de entrada.
+# front/scripts/build-mobile.sh (PWA Android) — este Makefile é só a porta de entrada.
 #
 # Diferenças pro Makefile original (Wails v2), de propósito:
 #   - Sem `wails build -platform`: Wails v3 builda com `go build` direto;
@@ -17,7 +17,7 @@
 
 APP    := mescla
 BUNDLE := Mescla.app
-OUTDIR := dist
+OUTDIR := wails/dist
 
 .PHONY: all macos windows linux mobile clean generate-icns install run
 
@@ -37,7 +37,7 @@ linux:
 
 # ── PWA Android (banco → catalog.json → wasm → vite build) ──────────────────
 mobile:
-	./scripts/build-mobile.sh
+	./front/scripts/build-mobile.sh
 
 # ── Gera wails/build/darwin/icons.icns a partir de wails/build/appicon.png ──
 # Utilitário explícito (o build-all.sh já tem esse fallback embutido).

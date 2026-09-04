@@ -4,7 +4,7 @@
 *.db-wal
 
 # Go build artifacts
-/dist/
+wails/dist/
 *.exe
 *.syso
 *.test
@@ -14,7 +14,7 @@ wails/frontend/dist/
 wails/frontend/node_modules/
 wails/frontend/bindings/
 
-# Mobile (PWA) — artefatos gerados por scripts/build-mobile.sh
+# Mobile (PWA) — artefatos gerados por front/scripts/build-mobile.sh
 front/dist/
 front/dev-dist/
 front/node_modules/
@@ -40,5 +40,4 @@ Thumbs.db
 
 # Claude Code local config
 .claude/
-dist/
 api/db/embedded/*.db

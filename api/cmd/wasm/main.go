@@ -3,7 +3,7 @@
 // Command wasm é o motor de cor do app mobile (frontend-mobile), compilado
 // para WebAssembly. Expõe em window.__mescla as operações matemáticas do
 // Mescla — ΔE2000, busca por proximidade e receita equivalente — usando os
-// MESMOS pacotes do desktop (pkg/color, pkg/mix, pkg/equivalence), então os
+// MESMOS pacotes do desktop (api/domain/color, api/domain/mix, api/domain/equivalence), então os
 // dois alvos produzem resultados idênticos para a mesma entrada.
 //
 // O catálogo chega via init(catalogJSON) — o JSON gerado por cmd/export — e
@@ -184,7 +184,7 @@ func jsFindSimilar(_ js.Value, args []js.Value) any {
 }
 
 // jsSuggestEquivalentRecipe(paintId, targetMfrId) — mesma forma JSON do
-// EquivalentRecipeDTO do desktop; a regra vive em pkg/equivalence.
+// EquivalentRecipeDTO do desktop; a regra vive em api/domain/equivalence.
 func jsSuggestEquivalentRecipe(_ js.Value, args []js.Value) any {
 	if len(paints) == 0 {
 		return errJSON("catálogo não inicializado — chame init primeiro")
@@ -339,7 +339,7 @@ func jsSuggestRecipeForColor(_ js.Value, args []js.Value) any {
 // jsSuggestFromStock(sourcePaintId, stockJSON) — receita da cor de origem
 // usando SÓ o estoque do pintor (as tintas que ele cadastrou, de qualquer
 // marca). É o "priorize o que eu tenho" do mobile; a regra vive em
-// pkg/equivalence.SuggestFromStock, a mesma do desktop. O estoque chega como
+// api/domain/equivalence.SuggestFromStock, a mesma do desktop. O estoque chega como
 // JSON porque vive no localStorage do app, não no catálogo em memória.
 func jsSuggestFromStock(_ js.Value, args []js.Value) any {
 	if len(paints) == 0 {
@@ -413,7 +413,7 @@ func jsSuggestFromStock(_ js.Value, args []js.Value) any {
 }
 
 // jsParseStockCSV(csvText) — valida um CSV de importação contra os fabricantes
-// do catálogo em memória (mesma crítica do desktop, via pkg/stock). Retorna
+// do catálogo em memória (mesma crítica do desktop, via api/domain/stock). Retorna
 // {"paints":[...], "errors":[...]} — o TS insere as tintas boas no localStorage
 // e mostra os erros por linha.
 func jsParseStockCSV(_ js.Value, args []js.Value) any {

@@ -120,7 +120,7 @@ func GetSwatchGeneratorSeed() Seed {
 	return Seed{
 		Name: "005_swatch_generator",
 		Fn: func(db *sql.DB) error {
-			gen := NewSwatchGenerator(db, "assets")
+			gen := NewSwatchGenerator(db, "api/assets")
 			return gen.GenerateAll()
 		},
 	}

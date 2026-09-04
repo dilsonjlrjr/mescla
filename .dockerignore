@@ -7,8 +7,8 @@ bin
 *.db
 *.db-shm
 *.db-wal
-db/embedded
-frontend-mobile/public/mescla.wasm
-frontend-mobile/public/wasm_exec.js
-frontend-mobile/public/data/catalog.json
-build/bin
+api/db/embedded
+front/public/mescla.wasm
+front/public/wasm_exec.js
+front/public/data/catalog.json
+wails/build/bin

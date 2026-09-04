@@ -20,4 +20,4 @@ RUN go build -o /usr/local/bin/mescla-seed ./api/cmd/seed \
  && go build -o /usr/local/bin/mescla-export ./api/cmd/export \
  && cd front && npm ci
 
-ENTRYPOINT ["bash", "/app/deploy/build.sh"]
+ENTRYPOINT ["bash", "/app/front/deploy/build.sh"]

@@ -2,7 +2,7 @@
 // próprio pintor possui. É neutra de plataforma e de persistência: o desktop
 // guarda as tintas em SQLite e o mobile em localStorage, mas AMBOS usam este
 // pacote para o parsing/crítica do CSV de importação e para converter o estoque
-// no formato que o motor de mistura (pkg/mix) entende — assim a validação de um
+// no formato que o motor de mistura (api/domain/mix) entende — assim a validação de um
 // CSV e a receita "priorizando o estoque" são idênticas nos dois alvos.
 //
 // Uma tinta de estoque é livre: o pintor digita nome, código e cor, escolhendo

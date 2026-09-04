@@ -24,7 +24,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 APP="mescla"
-DIST="dist"
+DIST="wails/dist"
 VERSION="$(git describe --tags --always 2>/dev/null || echo dev)"
 LDFLAGS="-s -w"
 

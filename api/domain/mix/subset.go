@@ -81,10 +81,10 @@ func forEachCombination(items []PaintInput, k int, fn func([]PaintInput)) {
 }
 
 // selectDiverseSubset é uma cópia local e simplificada de selectDiversePaints
-// (pkg/ai/retrieval.go) — usa distância euclidiana em RGB em vez de Lab, o
+// (api/domain/ai/retrieval.go) — usa distância euclidiana em RGB em vez de Lab, o
 // suficiente pra reduzir o espaço de busca com boa cobertura de matiz/luminosidade
 // quando um fabricante tiver muitas tintas cadastradas. Não vale extrair um
-// pacote compartilhado só por essa duplicação pontual entre pkg/ai e pkg/mix.
+// pacote compartilhado só por essa duplicação pontual entre api/domain/ai e api/domain/mix.
 func selectDiverseSubset(paints []PaintInput, n int) []PaintInput {
 	if len(paints) <= n {
 		return paints

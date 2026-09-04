@@ -26,7 +26,7 @@ type AssetDownloaderConfig struct {
 // DefaultConfig retorna configuração padrão
 func DefaultConfig() AssetDownloaderConfig {
 	return AssetDownloaderConfig{
-		AssetsDir:   "assets",
+		AssetsDir:   "api/assets",
 		Timeout:     30 * time.Second,
 		MaxRetries:  3,
 		RetryDelay:  2 * time.Second,

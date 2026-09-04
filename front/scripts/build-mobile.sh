@@ -4,7 +4,9 @@
 # Saída: front/dist/ — pronto pra qualquer host estático (HTTPS).
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+# Script vive em front/scripts/ — sobe 2 níveis pra rodar da raiz do módulo Go
+# (go.mod fica em project/, e a etapa de banco/export/wasm usa api/ como sibling).
+cd "$(dirname "$0")/../.."
 
 say() { printf '\033[1;33m▸ %s\033[0m\n' "$*"; }
 ok()  { printf '\033[1;32m✓ %s\033[0m\n' "$*"; }

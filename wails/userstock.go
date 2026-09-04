@@ -174,7 +174,7 @@ func (s *PaintService) UserPaintCSVTemplate() (string, error) {
 }
 
 // ExportUserPaintsCSV serializa o estoque atual no mesmo formato do modelo —
-// backup ou base pra reimportar em outra máquina. Usa pkg/stock.ToCSV (o inverso
+// backup ou base pra reimportar em outra máquina. Usa api/domain/stock.ToCSV (o inverso
 // exato de ParseCSV), então o arquivo reentra sem erros.
 func (s *PaintService) ExportUserPaintsCSV() (string, error) {
 	rows, err := s.db.Query(`
@@ -204,7 +204,7 @@ func (s *PaintService) ExportUserPaintsCSV() (string, error) {
 }
 
 // ImportUserPaintsCSV importa um lote de tintas de um CSV. A crítica (fabricante
-// precisa existir, hex válido, nome obrigatório) vive em pkg/stock — a mesma que
+// precisa existir, hex válido, nome obrigatório) vive em api/domain/stock — a mesma que
 // o app mobile roda via WASM. Linhas válidas são inseridas mesmo se outras
 // falharem; os erros voltam para o usuário corrigir.
 func (s *PaintService) ImportUserPaintsCSV(csvText string) (CSVImportResultDTO, error) {

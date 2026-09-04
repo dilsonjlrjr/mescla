@@ -419,7 +419,7 @@ func (s *PaintService) SuggestEquivalentRecipe(sourcePaintID int64, targetManufa
 	s.db.QueryRow("SELECT name FROM manufacturers WHERE id = ?", targetManufacturerID).Scan(&targetMfrName)
 
 	// Toda a regra de negócio (exclusão da tinta-alvo, mistura forçada na mesma
-	// marca, dicas, reproduzível) vive em pkg/equivalence — compartilhada com o
+	// marca, dicas, reproduzível) vive em api/domain/equivalence — compartilhada com o
 	// módulo WASM do app mobile, que deve produzir a mesma receita.
 	sourceInput := mix.PaintInput{ID: source.ID, Name: source.Name, Code: source.Code, R: source.R, G: source.G, B: source.B}
 	res, err := equivalence.Suggest(sourceInput, source.Manufacturer, targetMfrName, candidates)
