@@ -7,5 +7,4 @@ bin
 *.db
 *.db-shm
 *.db-wal
-api/db/embedded
 wails/build/bin

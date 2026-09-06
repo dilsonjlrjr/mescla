@@ -92,6 +92,9 @@ func openPaintService(dbPath string) (*PaintService, error) {
 	if err := ensurePlanningSchema(db); err != nil {
 		return nil, fmt.Errorf("preparando planos de pintura: %w", err)
 	}
+	if err := ensureSavedRecipesSchema(db); err != nil {
+		return nil, fmt.Errorf("preparando receitas salvas: %w", err)
+	}
 
 	return &PaintService{
 		db:  db,

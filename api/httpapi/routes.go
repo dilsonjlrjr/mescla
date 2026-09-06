@@ -18,6 +18,8 @@ func NewRouter(svc *service.PaintService) *router.Router {
 
 	r.GET("/stats", handleStats(svc))
 	r.GET("/manufacturers", handleManufacturers(svc))
+	r.POST("/manufacturers", handleAddManufacturer(svc))
+	r.DELETE("/manufacturers/{id}", handleDeleteManufacturer(svc))
 	r.GET("/paints", handlePaints(svc))
 	r.GET("/paints/{id}", handlePaintByID(svc))
 	r.GET("/paints/{id}/equivalences", handleEquivalences(svc))
@@ -27,6 +29,13 @@ func NewRouter(svc *service.PaintService) *router.Router {
 	r.GET("/similar", handleFindSimilar(svc))
 	r.GET("/recipes/by-paint", handleRecipeByPaint(svc))
 	r.GET("/recipes/by-color", handleRecipeByColor(svc))
+
+	// Receitas salvas (RF-04, tela Receitas) — guardam o alvo, nunca a
+	// fórmula; resolve-se de novo em /recipes/{id}/resolve.
+	r.GET("/recipes", handleListRecipes(svc))
+	r.POST("/recipes", handleSaveRecipe(svc))
+	r.DELETE("/recipes/{id}", handleDeleteRecipe(svc))
+	r.GET("/recipes/{id}/resolve", handleResolveRecipe(svc))
 	r.GET("/color-pick", handlePickColor(svc))
 	r.GET("/compare-to-anchor", handleCompareToAnchor(svc))
 	r.GET("/best-brands", handleBestBrandsFor(svc))
