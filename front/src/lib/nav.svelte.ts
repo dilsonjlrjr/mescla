@@ -6,9 +6,13 @@
 // da aba inicial cria UMA entrada, então o back de qualquer aba volta pra
 // Mesclar, e um segundo back sai do app (convenção Android).
 
-export type Tab = 'mesclar' | 'catalogo' | 'cor' | 'roda' | 'mais';
+// rf-04: reorganização em 4 telas — pergunta (T1, raiz/home), plano (T2),
+// receitas (T3), estante (T4). Os ids antigos (mesclar/catalogo/cor/roda/mais)
+// não existem mais — CorView, MesclarView, MaisView, RodaView e o TabBar
+// foram removidos/consolidados nesta rodada (ver relatório de rf-04).
+export type Tab = 'pergunta' | 'plano' | 'receitas' | 'estante';
 
-const HOME: Tab = 'mesclar';
+const HOME: Tab = 'pergunta';
 
 export const nav = $state({ tab: HOME as Tab });
 

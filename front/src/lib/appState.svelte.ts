@@ -1,30 +1,15 @@
-// Estado compartilhado entre abas — os "corredores" do app:
-// Catálogo → Mesclar (mesclar esta cor), Mesclar/Catálogo → Cor (RGB preset),
-// Catálogo → Comparar (seleção persiste entre abas).
+// Estado compartilhado entre telas (rf-04: T1 Pergunta/T2 Plano/T3 Receitas/
+// T4 Minhas tintas) — os "corredores" do app: T4 → T1 (gerar fórmula
+// equivalente a partir de uma tinta do catálogo), T4 (Fabricantes → Tintas
+// filtradas por marca).
 
 import type { Paint } from './services/catalog';
 
 export const appState = $state({
-  /** Tinta pré-selecionada ao entrar na aba Mesclar (deep-link interno). */
-  pendingMesclarPaint: null as Paint | null,
-  /** Cor pré-carregada ao entrar na aba Cor (ex.: "ver tintas prontas próximas"). */
-  corPreset: null as { r: number; g: number; b: number } | null,
-  /** Filtro de marca pré-aplicado ao entrar no Catálogo (vindo de Marcas). */
+  /** Tinta pré-selecionada ao entrar em T1 (deep-link interno, ex.: "gerar
+   *  fórmula equivalente" a partir do detalhe de uma tinta em T4). */
+  pendingTargetPaint: null as Paint | null,
+  /** Filtro de fabricante pré-aplicado ao entrar na aba Tintas de T4 (vindo
+   *  de "Ver tintas" na aba Fabricantes). */
   pendingCatalogMfrId: null as number | null,
-  /** Tintas escolhidas pra comparação (máx 6) — badge no menu Mais. */
-  compareIds: [] as number[],
-  /** Pré-preenche o form do estoque ("Tenho outra parecida" no detalhe). */
-  pendingStockPrefill: null as { manufacturerId: number; hex: string } | null,
 });
-
-export function addToCompare(id: number): boolean {
-  if (appState.compareIds.includes(id)) return false;
-  if (appState.compareIds.length >= 6) return false;
-  appState.compareIds.push(id);
-  return true;
-}
-
-export function removeFromCompare(id: number) {
-  const i = appState.compareIds.indexOf(id);
-  if (i !== -1) appState.compareIds.splice(i, 1);
-}

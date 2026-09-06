@@ -1,68 +1,109 @@
-/* ── MESCLA MOBILE — Tema "Tintômetro" ──
-   O app como instrumento de precisão de cor: a tinta é a interface, o resto
-   é bancada. Paleta de 5 cores (bancada, papel, grafite, hairline, laca);
-   a cor de tinta (dinâmica) é a protagonista, chapada e com raio 0 nos
-   painéis grandes. Hairlines e whitespace no lugar de cards e sombras —
-   sombra só em superfícies flutuantes (dock, sheets).
-   Display: Bricolage Grotesque; corpo Archivo; TODO valor medido em
-   IBM Plex Mono. Raios: pílula = ação · 8px = amostra/input ·
-   12px = superfície flutuante · 0 = cor chapada. */
+/* ── MESCLA — design system Nocturne ──
+   Fonte de verdade: docs/oficial/_ds/nocturne-…/styles.css (tokens) e o
+   protótipo docs/oficial/Mescla AI.html (layout e métrica das 4 telas).
+   D-001 (Epic D): o tema anterior ("Tintômetro" — Bricolage/Archivo, pílulas,
+   raio 999px, coluna única) foi substituído pelo Nocturne do protótipo.
+
+   As telas T1–T4 escrevem a métrica INLINE, exatamente como o protótipo faz —
+   é o que torna a fidelidade verificável (tests/fidelidade-mockup.test.ts).
+   Cor nunca vai em hex solto no componente (NFR-10): todo valor de cor sai
+   dos tokens abaixo. */
 
 :root {
-  /* Paleta Tintômetro — 5 cores, nada mais */
-  --bancada: #f6f4ef;
-  --papel: #ffffff;
-  --grafite: #1a1712;
-  --hairline: #dcd6c9;
-  --laca: #e8542c;
+  /* ── Tokens canônicos do Nocturne ── */
+  --color-bg: #161826;
+  --color-surface: #232532;
+  --color-text: #e9e9ed;
+  --color-accent: #9184d9;
+  --color-accent-2: #a7a1db;
+  --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
 
-  /* Neutros derivados (grafite com opacidade sobre bancada — nunca cor nova) */
-  --ink-950: var(--bancada);
-  --ink-900: var(--papel);
-  --ink-850: var(--papel);
-  --ink-800: color-mix(in srgb, var(--hairline) 42%, var(--bancada));
-  --ink-700: var(--hairline);
-  --ink-600: var(--hairline);
-  --ink-500: color-mix(in srgb, var(--grafite) 55%, var(--bancada));
-  --ink-400: color-mix(in srgb, var(--grafite) 45%, var(--bancada));
-  --ink-300: color-mix(in srgb, var(--grafite) 78%, var(--bancada));
-  --ink-100: var(--grafite);
+  --color-neutral-100: #f3f5fe;
+  --color-neutral-200: #e4e7f5;
+  --color-neutral-300: #cfd3e5;
+  --color-neutral-400: #b2b6ca;
+  --color-neutral-500: #9397ab;
+  --color-neutral-600: #75798c;
+  --color-neutral-700: #595d6c;
+  --color-neutral-800: #3f424d;
+  --color-neutral-900: #292b31;
 
-  --paper: var(--grafite); /* alias legado: o CONTRASTE escuro (toasts, pílula preta) */
+  --color-accent-100: #f5f4ff;
+  --color-accent-200: #e7e5fe;
+  --color-accent-300: #d2cefd;
+  --color-accent-400: #b5abfc;
+  --color-accent-500: #968ae0;
+  --color-accent-600: #796cbf;
+  --color-accent-700: #5d5294;
+  --color-accent-800: #423a6a;
+  --color-accent-900: #2b2741;
 
-  /* Laca — acento único. deep/tint: laca escurecida pra COR DE TEXTO no claro. */
-  --lacquer: var(--laca);
-  --lacquer-deep: #b53d1f;
-  --lacquer-tint: #c2451f;
+  /* ── Superfícies e traços do protótipo (hexes que o Nocturne base não nomeia,
+     extraídos de docs/oficial/Mescla AI.html) ── */
+  --color-line: #2b2e3c;          /* divisor de cabeçalho/rodapé/seção */
+  --color-rule: #2e3140;          /* traço interno de card e separador curto */
+  --color-bar: #191b27;           /* barra de filtros e rodapé */
+  --color-panel: #1b1d29;         /* card do miolo */
+  --color-raised: #1e2029;        /* popover de sugestões, skeleton grande */
+  --color-field: #1b1d2a;         /* fundo do campo de busca */
+  --color-field-border: #454a5e;  /* borda de campo e de stepper */
+  --color-accent-panel: #1c1a2b;  /* card destacado (pote pronto, aviso) */
+  --color-modal: #1a1c27;         /* card de modal (cadastro, confirmação) */
+  --color-accent-hover: #241f38;  /* hover de ação em acento */
+  --color-bottle-stroke: #0f1017; /* contorno do pote */
 
-  /* Delta E (legado — usado só na Roda/guia; o redesign fala laca ou grafite) */
-  --delta-excellent: #2f7d49;
-  --delta-good: #96760f;
-  --delta-fair: #a85a1f;
-  --delta-poor: #a13328;
+  /* Faces do losango da marca */
+  --brand-1: #75798c;
+  --brand-2: #5f6373;
+  --brand-3: #9184d9;
+  --brand-4: #6b6f80;
+  --brand-5: #7d6fca;
+  --brand-6: #8b8fa3;
+  --brand-7: #d2cefd;
 
-  /* Canais RGB (legado, roda) */
-  --chan-r: #c0392b;
-  --chan-g: #2f7d49;
-  --chan-b: #2f5f9e;
+  --font-heading: 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-heading-weight: 500;
 
-  /* Fontes (self-hosted via @fontsource — o PWA é offline-first) */
-  --font-display: 'Bricolage Grotesque Variable', system-ui, sans-serif;
-  --font-body: 'Archivo Variable', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', monospace;
+  --space-1: 2.8px;
+  --space-2: 5.6px;
+  --space-3: 8.4px;
+  --space-4: 11.2px;
+  --space-6: 16.8px;
+  --space-8: 22.4px;
 
-  /* Raios (escala única do app) */
-  --radius-surface: 12px;
-  --radius-control: 8px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+
+  --shadow-sm: 0 0 0 1px #3f424d;
+  --shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0, 0, 0, 0.65);
+  --shadow-pop: 0 18px 48px rgba(0, 0, 0, 0.55);
+
+  /* Apelidos mantidos só para os componentes de folha ainda não portados
+     (BottomSheet, PaintDetailSheet, DeltaScaleSheet, ToastRegion). */
+  --bancada: var(--color-bg);
+  --papel: var(--color-surface);
+  --grafite: var(--color-text);
+  --hairline: var(--color-divider);
+  --laca: var(--color-accent);
+  --font-mono: var(--font-body);
+  --font-display: var(--font-heading);
+  --ink-100: var(--color-text);
+  --ink-500: var(--color-neutral-500);
+  --ink-600: var(--color-neutral-600);
+  --ink-800: var(--color-neutral-800);
+  --lacquer-deep: var(--color-accent-700);
+  --radius-surface: var(--radius-lg);
+  --radius-control: var(--radius-md);
   --radius-pill: 999px;
-
-  /* Métricas mobile */
-  --tab-bar-h: 60px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-top: env(safe-area-inset-top, 0px);
 }
 
-* {
+*,
+*::before,
+*::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -72,19 +113,20 @@
 html,
 body {
   height: 100%;
-  /* Sem pull-to-refresh nem bounce: dados são locais, o gesto só causaria
-     acidente com a mão suja de tinta. */
+  /* Sem pull-to-refresh nem bounce: a mão do pintor está suja, o gesto só
+     causaria acidente. */
   overscroll-behavior: none;
 }
 
 body {
   font-family: var(--font-body);
-  font-size: 16px; /* inputs <16px disparam zoom automático no mobile */
-  line-height: 1.5;
-  color: var(--grafite);
-  background: var(--bancada);
+  font-size: 15px;
+  line-height: 1.45;
+  font-weight: 400;
+  color: var(--color-text);
+  background: var(--color-bg);
   -webkit-font-smoothing: antialiased;
-  touch-action: manipulation; /* mata o delay de double-tap-zoom */
+  touch-action: manipulation;
   user-select: none;
 }
 
@@ -93,30 +135,8 @@ textarea {
   user-select: text;
 }
 
-/* ── Receita única de campo: papel + borda hairline, raio 8, foco em laca.
-   Baseline com :where() = especificidade zero. ── */
-:where(input[type='text'], input[type='search'], input[type='number'], textarea, select) {
-  background: var(--papel);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-control);
-  color: var(--grafite);
-}
-
-:where(input[type='text'], input[type='search'], input[type='number'], textarea, select):focus {
-  outline: none;
-  border-color: var(--laca);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--laca) 20%, transparent);
-}
-
-/* type=search sem o chrome nativo do WebKit (X escuro destoa do tema) */
-input[type='search']::-webkit-search-cancel-button,
-input[type='search']::-webkit-search-decoration {
-  -webkit-appearance: none;
-  appearance: none;
-}
-
 ::placeholder {
-  color: var(--ink-500);
+  color: var(--color-neutral-500);
   opacity: 1;
 }
 
@@ -128,182 +148,30 @@ button {
   cursor: pointer;
 }
 
-/* ── Feedback de toque (não existe hover no celular) ── */
-.pressable {
-  transition: transform 80ms ease, filter 80ms ease;
+/* NFR-08: anel de foco de 2px em todo elemento interativo. */
+:focus {
+  outline: none;
 }
 
-.pressable:active {
-  transform: scale(0.97);
-  filter: brightness(0.95);
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
-/* ── Superfícies: papel + hairline, sem sombra ── */
-.panel {
-  background: var(--papel);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-surface);
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
-.hairline {
-  height: 1px;
-  background: var(--hairline);
-  border: none;
+/* Barras de rolagem discretas — o miolo rola, o resto fica fixo (NFR-02). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-neutral-800) transparent;
 }
 
-/* ── Label de seção: mono, uppercase, tracking largo ── */
-.section-label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--ink-500);
-}
-
-/* ── Botões ── */
-/* Pílula PRETA (grafite): a ação primária do Tintômetro. */
-.btn-primary {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 56px;
-  border-radius: var(--radius-pill);
-  background: var(--grafite);
-  color: var(--papel);
-  font-size: 17px;
-  font-weight: 640;
-  font-stretch: 110%;
-  transition: transform 80ms ease, opacity 0.2s ease, filter 80ms ease;
-}
-
-.btn-primary:active {
-  transform: scale(0.98);
-  filter: brightness(1.4);
-}
-
-.btn-primary:disabled {
-  opacity: 0.35;
-  pointer-events: none;
-}
-
-/* Pílula branca com borda hairline: a ação secundária. */
-.btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 48px;
-  padding: 0 20px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-pill);
-  background: var(--papel);
-  color: var(--grafite);
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.btn-ghost:active {
-  border-color: var(--laca);
-  color: var(--lacquer-deep);
-}
-
-/* ── Tipografia ── */
-.font-display {
-  font-family: var(--font-display);
-  font-optical-sizing: auto;
-  font-weight: 680;
-  letter-spacing: -0.01em;
-}
-
-.font-mono {
-  font-family: var(--font-mono);
-}
-
-.screen-title {
-  font-family: var(--font-display);
-  font-optical-sizing: auto;
-  font-size: 30px;
-  font-weight: 750;
-  color: var(--grafite);
-  letter-spacing: -0.015em;
-  line-height: 1.1;
-}
-
-/* ── Par de cores (motivo de marca) ── */
-.color-pair {
-  display: inline-flex;
-  border-radius: var(--radius-control);
-  overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.14);
-  flex-shrink: 0;
-}
-
-.color-pair > span {
-  display: block;
-  width: 50%;
-  height: 100%;
-}
-
-/* ── Badge de ΔE humanizado (legado — Roda/guia) ── */
-.delta-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 12px;
-  border-radius: var(--radius-pill);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.delta-badge .delta-value {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  font-size: 12px;
-  opacity: 0.75;
-}
-
-.delta-badge.excellent { background: color-mix(in srgb, var(--delta-excellent) 14%, transparent); color: var(--delta-excellent); }
-.delta-badge.good      { background: color-mix(in srgb, var(--delta-good) 16%, transparent);      color: var(--delta-good); }
-.delta-badge.fair      { background: color-mix(in srgb, var(--delta-fair) 14%, transparent);      color: var(--delta-fair); }
-.delta-badge.poor      { background: color-mix(in srgb, var(--delta-poor) 12%, transparent);      color: var(--delta-poor); }
-
-.delta-badge.tappable {
-  background: var(--papel);
-  border: 1px solid var(--hairline);
-  min-height: 44px;
-  padding: 8px 8px 8px 16px;
-}
-
-.delta-badge.tappable .delta-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: 3px;
-  padding: 5px 10px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, currentColor 14%, transparent);
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-/* ── Amostra chapada (raio 8, aro hairline pra cor clara não sumir) ── */
-.swatch-flat {
-  position: relative;
-  border-radius: var(--radius-control);
-  box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.12);
-  flex-shrink: 0;
-}
-
-/* ── Toasts (acima da tab bar — superfície flutuante: pode ter sombra) ── */
+/* ── Toasts (única superfície flutuante do shell) ── */
 .toast-region {
   position: fixed;
-  bottom: calc(var(--tab-bar-h) + var(--safe-bottom) + 30px);
+  bottom: calc(var(--safe-bottom) + 130px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 100;
@@ -321,115 +189,112 @@ button {
   align-items: center;
   gap: 10px;
   padding: 12px 20px;
-  border-radius: var(--radius-pill);
-  background: var(--grafite);
-  color: var(--bancada);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-neutral-800);
+  background: var(--color-surface);
+  color: var(--color-text);
   font-size: 14px;
   font-weight: 500;
-  box-shadow: 0 6px 24px rgba(26, 23, 18, 0.22);
+  box-shadow: var(--shadow-pop);
   animation: rise-in 0.25s cubic-bezier(0.4, 0, 0.2, 1) both;
   pointer-events: auto;
 }
 
 .toast.error {
-  background: var(--lacquer-deep);
-  color: var(--papel);
+  border-color: var(--color-accent-700);
 }
 
 .toast .toast-dot {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
-  background: var(--laca);
+  border-radius: 999px;
+  background: var(--color-accent);
   flex-shrink: 0;
 }
 
-.toast.error .toast-dot {
-  background: rgba(255, 255, 255, 0.85);
-}
-
-/* ── Estados vazios ── */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 48px 24px;
-  gap: 8px;
-}
-
-.empty-state .empty-icon {
-  color: var(--hairline);
-  margin-bottom: 8px;
-}
-
-.empty-state .empty-title {
-  font-family: var(--font-display);
-  font-stretch: 116%;
-  font-size: 18px;
-  font-weight: 640;
-  color: var(--grafite);
-}
-
-.empty-state .empty-hint {
-  font-size: 14px;
-  color: var(--ink-500);
-  max-width: 280px;
-}
-
-/* ── Erro/aviso: card papel raio 12 com barra laca à esquerda (board Estados) ── */
-.notice-card {
-  background: var(--papel);
-  border: 1px solid var(--hairline);
-  border-left: 3px solid var(--laca);
-  border-radius: var(--radius-surface);
-  padding: 14px 16px;
-}
-
-.notice-card .notice-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--grafite);
-}
-
-.notice-card .notice-text {
-  font-size: 13.5px;
-  color: var(--ink-500);
-  margin-top: 3px;
-  line-height: 1.5;
-}
-
-.notice-card .notice-link {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px; /* alvo de toque */
-  margin-top: 2px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--laca);
-}
-
-/* ── Skeleton (bancada mais escura, board Estados) ── */
-.skeleton {
-  border-radius: var(--radius-control);
-  background: linear-gradient(90deg, var(--ink-800) 25%, var(--hairline) 50%, var(--ink-800) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-}
-
-/* ── Animações ── */
 @keyframes rise-in {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes shimmer {
-  from { background-position: 200% 0; }
-  to { background-position: -200% 0; }
-}
-
 .animate-rise {
   animation: rise-in 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* ── Compatibilidade: classes ainda usadas pelas folhas não portadas
+   (BottomSheet, PaintDetailSheet, DeltaScaleSheet, FormulaRibbon) e pela tela
+   de boot. O Nocturne tem uma família só, então "display"/"mono" resolvem para
+   Inter — o mono ganha só numeral tabular, que é o efeito que se queria ali. ── */
+.font-display {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  letter-spacing: -0.015em;
+}
+
+.font-mono {
+  font-family: var(--font-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.section-label {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-neutral-500);
+}
+
+.pressable {
+  transition: filter 80ms ease;
+}
+
+.pressable:active {
+  filter: brightness(1.25);
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 20px;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-accent-400);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.btn-primary:hover {
+  background: var(--color-accent-hover);
+}
+
+.btn-primary:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 20px;
+  border: 1px solid var(--color-neutral-800);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-neutral-400);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.btn-ghost:hover {
+  border-color: var(--color-accent-700);
+  color: var(--color-accent-400);
 }
 
 @media (prefers-reduced-motion: reduce) {

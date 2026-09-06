@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Logomark da Mescla: duas metades de cor que se encontram — a tinta de
-  // origem e a de destino. O motivo "par de cores" se repete no app inteiro.
+  // Logomark da Mescla: d20 de 7 facetas — fonte: docs/oficial/Mescla AI.html
+  // (viewBox 0 0 48 48). As faces saem dos tokens --brand-1..7 (NFR-10).
   interface Props {
     size?: number;
   }
@@ -11,16 +11,17 @@
 <svg
   width={size}
   height={size}
-  viewBox="0 0 32 32"
+  viewBox="0 0 48 48"
   xmlns="http://www.w3.org/2000/svg"
   role="img"
   aria-label="Mescla"
   style="display: block; flex-shrink: 0;"
 >
-  <!-- metade origem (laca) -->
-  <path d="M16 2 A14 14 0 0 0 16 30 Z" fill="var(--lacquer)" />
-  <!-- metade destino (grafite de rótulo) -->
-  <path d="M16 2 A14 14 0 0 1 16 30 Z" fill="var(--paper)" />
-  <!-- costura central: o ponto onde as cores se mesclam -->
-  <rect x="14.6" y="7" width="2.8" height="18" rx="1.4" fill="var(--ink-950)" />
+  <polygon points="24,2 43,13 43,35 24,46 5,35 5,13" fill="var(--brand-1)" />
+  <polygon points="5,13 11,15 24,36 24,46 5,35" fill="var(--brand-2)" />
+  <polygon points="43,13 37,15 24,36 24,46 43,35" fill="var(--brand-3)" />
+  <polygon points="24,2 5,13 11,15" fill="var(--brand-4)" />
+  <polygon points="24,2 43,13 37,15" fill="var(--brand-5)" />
+  <polygon points="24,2 11,15 37,15" fill="var(--brand-6)" />
+  <polygon points="11,15 37,15 24,36" fill="var(--brand-7)" />
 </svg>

@@ -6,13 +6,14 @@ export function contrastOn(r: number, g: number, b: number): string {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.58 ? '#1a1712' : '#ffffff';
 }
 
-/** Verdicto da escala ΔE00 (leitura de instrumento). */
-export function deltaVerdict(deltaE: number): string {
-  if (deltaE < 1) return 'Indistinguível a olho nu';
-  if (deltaE < 2) return 'Equivalência excelente';
-  if (deltaE < 4) return 'Boa sob luz de bancada';
-  if (deltaE < 8) return 'Perceptível lado a lado';
-  return 'Outra cor, na prática';
+/** RG-05: faixa de veredicto/consequência do ΔE00 — devolve as CHAVES i18n
+ *  (v1..v5 / c1..c5, dict), nunca texto — quem chama resolve com t(). */
+export function verdictKeys(deltaE: number): { v: 'v1' | 'v2' | 'v3' | 'v4' | 'v5'; c: 'c1' | 'c2' | 'c3' | 'c4' | 'c5' } {
+  if (deltaE < 1) return { v: 'v1', c: 'c1' };
+  if (deltaE < 2) return { v: 'v2', c: 'c2' };
+  if (deltaE < 4) return { v: 'v3', c: 'c3' };
+  if (deltaE < 8) return { v: 'v4', c: 'c4' };
+  return { v: 'v5', c: 'c5' };
 }
 
 /** ΔE bom (verdicto em laca) quando fica abaixo de 2. */

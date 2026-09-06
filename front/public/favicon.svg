@@ -1,6 +1,14 @@
 <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-  <!-- BrandMark da Mescla: duas metades de cor que se encontram -->
-  <path d="M16 2 A14 14 0 0 0 16 30 Z" fill="#e8542c" />
-  <path d="M16 2 A14 14 0 0 1 16 30 Z" fill="#1a1712" />
-  <rect x="14.6" y="7" width="2.8" height="18" rx="1.4" fill="#f6f4f0" />
+  
+  <svg x="0" y="0" width="32" height="32" viewBox="0 0 48 48">
+    
+  <polygon points="24,2 43,13 43,35 24,46 5,35 5,13" fill="#75798c"/>
+  <polygon points="5,13 11,15 24,36 24,46 5,35" fill="#5f6373"/>
+  <polygon points="43,13 37,15 24,36 24,46 43,35" fill="#9184d9"/>
+  <polygon points="24,2 5,13 11,15" fill="#6b6f80"/>
+  <polygon points="24,2 43,13 37,15" fill="#7d6fca"/>
+  <polygon points="24,2 11,15 37,15" fill="#8b8fa3"/>
+  <polygon points="11,15 37,15 24,36" fill="#d2cefd"/>
+
+  </svg>
 </svg>

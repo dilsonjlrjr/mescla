@@ -15,6 +15,9 @@ export default defineConfig({
         // woff2 no precache: fontes agora são self-hosted (@fontsource),
         // então o shell do app abre já com a tipografia certa desde o boot.
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // Phosphor publica fallbacks legados (svg/ttf/eot) de ~3 MB que
+        // navegador nenhum desta década baixa — fora do precache.
+        globIgnores: ['**/Phosphor*.svg', '**/Phosphor*.ttf', '**/Phosphor*.eot'],
       },
       manifest: {
         name: 'Mescla',
@@ -22,10 +25,12 @@ export default defineConfig({
         description: 'Cor certa, qualquer marca: equivalência de tintas para pintores de miniaturas',
         lang: 'pt-BR',
         display: 'standalone',
-        orientation: 'portrait',
+        // D-001: o protótipo é iPad em paisagem ("iPad 11 landscape"); travar
+        // em portrait contradizia o desenho aprovado.
+        orientation: 'any',
         start_url: '/',
-        background_color: '#f6f4ef',
-        theme_color: '#f6f4ef',
+        background_color: '#161826',
+        theme_color: '#161826',
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },

@@ -1,12 +1,14 @@
 <script lang="ts">
-  import TabBar from './lib/components/TabBar.svelte';
+  // rf-04: shell reorganizado em 4 telas (T1 Pergunta/T2 Plano/T3 Receitas/
+  // T4 Minhas tintas), cada uma com seu próprio cabeçalho+rodapé fixos
+  // (Header.svelte é comum; rodapé é por tela). Sem TabBar — a navegação
+  // mora no Header (nc-nav) + a marca leva de volta a T1.
   import ToastRegion from './lib/components/ToastRegion.svelte';
   import BrandMark from './lib/components/BrandMark.svelte';
-  import MesclarView from './lib/views/MesclarView.svelte';
+  import PerguntaView from './lib/views/PerguntaView.svelte';
+  import PlannerView from './lib/views/PlannerView.svelte';
+  import ReceitasView from './lib/views/ReceitasView.svelte';
   import CatalogoView from './lib/views/CatalogoView.svelte';
-  import CorView from './lib/views/CorView.svelte';
-  import RodaView from './lib/views/RodaView.svelte';
-  import MaisView from './lib/views/MaisView.svelte';
   import { nav, initNav } from './lib/nav.svelte';
   import { loadCatalog } from './lib/services/catalog';
   import { engineReady } from './lib/services/engine';
@@ -18,7 +20,7 @@
   initNav();
   initPwa();
 
-  // O catálogo trava o boot (as listas precisam dele); o motor WASM inicializa
+  // O catálogo trava o boot (as listas precisam dele); o motor inicializa
   // EM PARALELO sem travar — quem precisar dele aguarda via engineReady().
   void engineReady().catch(e => console.error('Motor de cor não inicializou:', e));
   loadCatalog()
@@ -28,8 +30,8 @@
       bootError = 'O catálogo não carregou. Verifique a conexão e recarregue.';
     });
 
-  // As views ficam montadas (display:none) pra preservar estado ao trocar de
-  // aba — busca digitada no Catálogo não some ao ir e voltar.
+  // As 4 telas ficam montadas (display:none) pra preservar estado ao trocar —
+  // troca de idioma ou de aba não perde a resposta atual (US-18, NFR-09).
 </script>
 
 {#if bootError}
@@ -41,18 +43,18 @@
 {:else if !booted}
   <div class="boot">
     <BrandMark size={52} />
-    <p class="boot-word font-display">Mescla</p>
-    <p class="boot-tag font-mono">cor certa, qualquer marca</p>
+    <p class="boot-word font-display">Mescla AI</p>
   </div>
 {:else}
+  <!-- Raiz do protótipo (docs/oficial/Mescla AI.html): container-type:
+       inline-size é o que faz as unidades `cqi` das telas responderem à
+       largura do app, não à viewport (NFR-01, 820–1366px). -->
   <main class="views">
-    <div class="view" class:hidden={nav.tab !== 'mesclar'}><MesclarView /></div>
-    <div class="view" class:hidden={nav.tab !== 'catalogo'}><CatalogoView /></div>
-    <div class="view" class:hidden={nav.tab !== 'cor'}><CorView /></div>
-    <div class="view" class:hidden={nav.tab !== 'roda'}><RodaView /></div>
-    <div class="view" class:hidden={nav.tab !== 'mais'}><MaisView /></div>
+    <div class="view" class:hidden={nav.tab !== 'pergunta'}><PerguntaView /></div>
+    <div class="view" class:hidden={nav.tab !== 'plano'}><PlannerView /></div>
+    <div class="view" class:hidden={nav.tab !== 'receitas'}><ReceitasView /></div>
+    <div class="view" class:hidden={nav.tab !== 'estante'}><CatalogoView /></div>
   </main>
-  <TabBar />
 {/if}
 
 <ToastRegion />
@@ -66,42 +68,44 @@
     align-items: center;
     justify-content: center;
     gap: 14px;
-    background: var(--ink-950);
+    background: var(--color-bg);
   }
 
   .boot-word {
-    font-size: 36px;
-    font-weight: 750;
-    color: var(--paper);
-    letter-spacing: -0.015em;
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--color-text);
+    letter-spacing: -0.01em;
     line-height: 1;
     margin-top: 2px;
   }
 
-  .boot-tag {
-    font-size: 11px;
-    letter-spacing: 0.14em;
-    color: var(--ink-500);
-  }
-
   .boot-error {
     font-size: 14px;
-    color: var(--delta-poor);
+    color: var(--color-accent-2);
     max-width: 260px;
     text-align: center;
   }
 
   .views {
+    width: 100%;
     height: 100dvh;
-    padding-top: var(--safe-top);
-    /* dock flutuante: altura da pílula + o respiro de 12px embaixo dela */
-    padding-bottom: calc(var(--tab-bar-h) + var(--safe-bottom) + 26px);
+    position: relative;
+    overflow: hidden;
+    container-type: inline-size;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.45;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
   }
 
   .view {
     height: 100%;
-    overflow-y: auto;
-    overscroll-behavior: contain;
+    min-height: 0;
   }
 
   .view.hidden {

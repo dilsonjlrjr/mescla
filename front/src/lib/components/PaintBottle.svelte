@@ -1,38 +1,45 @@
 <script lang="ts">
-  // Garrafinha do Tintômetro (SVG): silhueta de frasco conta-gotas com tampa,
-  // contorno grafite, corpo na cor da tinta e etiqueta branca quadrada com um
-  // ponto da cor no meio — o traço dos boards do Penpot. Cobre o catálogo
-  // inteiro sem depender de foto de produto por SKU.
+  // Pote de tinta — desenho do protótipo docs/oficial/Mescla AI.html
+  // (viewBox 0 0 60 100: tampa, gargalo, corpo na cor da tinta e rótulo branco
+  // com a amostra dentro). Aparece na sugestão de busca (34×57), no "você
+  // perguntou" (30×50), no pote pronto (72×120), no ingrediente da fórmula
+  // (44×74) e no rodapé "Na mesa hoje" (28×47).
   interface Props {
     r: number;
     g: number;
     b: number;
-    size?: number; // altura em px (largura = 60% disso)
-    /** aceito por compatibilidade; o traço atual usa só o ponto de cor */
+    /** largura em px; a altura sai da proporção 3:5 do protótipo se omitida */
+    width?: number;
+    height?: number;
     label?: string;
   }
 
-  let { r, g, b, size = 64 }: Props = $props();
+  let { r, g, b, width = 44, height, label }: Props = $props();
 
+  let h = $derived(height ?? Math.round((width * 100) / 60));
   let fill = $derived(`rgb(${r}, ${g}, ${b})`);
 </script>
 
 <svg
-  width={size * 0.6}
-  height={size}
   viewBox="0 0 60 100"
-  xmlns="http://www.w3.org/2000/svg"
+  width={width}
+  height={h}
   role="img"
-  aria-label="Frasco de tinta"
-  style="display: block; flex-shrink: 0;"
+  aria-label={label ?? 'Pote de tinta'}
+  style="flex-shrink: 0; display: block;"
 >
-  <!-- bico conta-gotas -->
-  <path d="M26 4 L34 4 L37 18 L23 18 Z" fill="#1a1712" />
-  <!-- anel da tampa -->
-  <rect x="20" y="17" width="20" height="8" rx="2.5" fill="#1a1712" />
-  <!-- corpo do frasco (a tinta), contorno grafite -->
-  <rect x="12" y="25" width="36" height="71" rx="9" fill={fill} stroke="#1a1712" stroke-width="3" />
-  <!-- etiqueta branca quadrada com o ponto da cor -->
-  <rect x="21" y="52" width="18" height="18" rx="2" fill="#ffffff" stroke="#1a1712" stroke-width="1.5" />
-  <rect x="26" y="57" width="8" height="8" rx="1.5" fill={fill} stroke="rgba(26,23,18,0.25)" stroke-width="0.75" />
+  <path d="M25 4 L35 4 L38 18 L22 18 Z" fill="var(--color-neutral-700)" />
+  <rect x="19" y="17" width="22" height="9" rx="3" fill="var(--color-neutral-600)" />
+  <rect
+    x="11"
+    y="26"
+    width="38"
+    height="70"
+    rx="10"
+    fill={fill}
+    stroke="var(--color-bottle-stroke)"
+    stroke-width="2"
+  />
+  <rect x="19" y="56" width="22" height="20" rx="2" fill="var(--color-text)" />
+  <rect x="24" y="61" width="12" height="10" rx="1.5" fill={fill} />
 </svg>

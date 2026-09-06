@@ -1,317 +1,640 @@
 <script lang="ts">
-  // Catálogo — lista agrupada por fabricante (labels mono como fichas de
-  // arquivo), VIRTUALIZADA (11.932 tintas: headers e linhas viram "rows" de
-  // altura fixa na mesma VirtualList). Busca-first, filtro de marca no sheet,
-  // detalhe em bottom sheet com o corredor "Gerar fórmula equivalente".
-  import Icon from '../components/Icon.svelte';
-  import BrandMark from '../components/BrandMark.svelte';
+  // T4 — Minhas tintas (rf-04). Consolida CatalogoView + StockManager numa lista
+  // única de tintas (posse alternável linha a linha) + aba Fabricantes, fiel ao
+  // protótipo Nocturne (tests/fixtures/mockup/t4-tintas.html — D-001, Epic D).
+  //
+  // PENDÊNCIA DECLARADA (spec rf-04, seção Dependências #3 / risco R1
+  // herdado de docs/mesclaai-userstory.md): esta apuração NÃO localizou rota
+  // de escrita (POST/PATCH/DELETE) para tinta/fabricante em api/httpapi. O
+  // catálogo servido (GET /manufacturers, GET /paints) é só-leitura aqui.
+  // Por isso:
+  //   - "Cadastrar/Editar/Excluir tinta" grava em services/stock.svelte.ts
+  //     (localStorage, MESMO mecanismo já usado por T1 "Só o que eu tenho" e
+  //     pela prioridade de estoque) — cadastro real no catálogo do servidor
+  //     fica bloqueado até confirmação do contrato de escrita.
+  //   - O toggle "tenho/não tenho" numa linha da lista escreve em
+  //     stock.svelte.ts (por código+fabricante — RG-17), nunca no paint do
+  //     servidor.
+  //   - "Novo/Excluir fabricante" opera sobre uma lista LOCAL de fabricantes
+  //     customizados (localStorage) somada à lista do servidor — excluir um
+  //     fabricante do SERVIDOR não é possível sem a rota; "Excluir" aqui
+  //     remove as tintas do ESTOQUE local daquele fabricante (confirmação
+  //     declara exatamente esse efeito, RG-18/CA11).
+  // Não foi inventada nenhuma rota HTTP nova.
+  //
+  // D-001 (fidelidade ao protótipo):
+  //   - O protótipo funde a antiga lista "tenho" + catálogo virtualizado numa
+  //     única lista de linhas (toggle tenho/não-tenho à esquerda, "Editar" à
+  //     direita). "Editar" numa linha que ainda não é minha abre o mesmo modal
+  //     de cadastro pré-preenchido com os dados do catálogo — capacidade nova,
+  //     sem regressão (antes essas linhas só tinham o toggle).
+  //   - O filtro "só as que eu tenho" (onlyMine) é novo nesta tela — mesmo
+  //     rótulo/mecanismo já usado em T1.
+  //   - O detalhe de tinta com atalho "gerar mistura equivalente"
+  //     (PaintDetailSheet) NÃO existe no protótipo aprovado desta tela —
+  //     removido daqui; cada linha só alterna posse ou abre o formulário.
+  //   - "Ler do pote" (câmera, US-20/E9) segue fora desta rodada (Could) —
+  //     botão presente, sem ação (nenhuma rota/captura foi inventada).
+  //   - Os modais (cadastro/edição, novo fabricante, confirmações) ficam
+  //     sempre montados no DOM e alternam via `display:none` em vez de
+  //     `{#if}` — mesma técnica do protótipo (sc-if com hint-placeholder,
+  //     nós sempre presentes, visibilidade que alterna).
+  import Header from '../components/Header.svelte';
   import PaintBottle from '../components/PaintBottle.svelte';
   import VirtualList from '../components/VirtualList.svelte';
-  import BrandSheet from '../components/BrandSheet.svelte';
-  import PaintDetailSheet from '../components/PaintDetailSheet.svelte';
-  import { switchTab } from '../nav.svelte';
-  import { allManufacturers, allPaints, searchPaints, type Manufacturer, type Paint } from '../services/catalog';
-  import { stock } from '../services/stock.svelte';
+  import { allManufacturers, allPaints, hexOf, searchPaints, type Paint } from '../services/catalog';
+  import { stock, sortedStock, addStockPaint, updateStockPaint, removeStockPaint } from '../services/stock.svelte';
+  import type { StockPaint } from '../services/engine';
   import { appState } from '../appState.svelte';
+  import { t } from '../i18n.svelte';
+  import { toast } from '../toast.svelte';
 
-  let query = $state('');
-  let selectedMfr: Manufacturer | null = $state(null);
-  let brandSheetOpen = $state(false);
-  let detailPaint: Paint | null = $state(null);
-
-  // Deep-link interno: catálogo já filtrado pela marca.
-  $effect(() => {
-    if (appState.pendingCatalogMfrId != null) {
-      selectedMfr = allManufacturers().find(m => m.id === appState.pendingCatalogMfrId) ?? null;
-      appState.pendingCatalogMfrId = null;
-      query = '';
+  // ── Fabricantes customizados (locais — ver nota no topo do arquivo) ──
+  interface CustomMfr { id: number; name: string }
+  const CUSTOM_KEY = 'mescla.customMfrs.v1';
+  function loadCustom(): CustomMfr[] {
+    try {
+      const raw = localStorage.getItem(CUSTOM_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
     }
-  });
-
-  // Debounce leve do campo (o filtro roda sobre 11k itens)
-  let debounced = $state('');
-  let timer: ReturnType<typeof setTimeout>;
-  $effect(() => {
-    const q = query;
-    clearTimeout(timer);
-    timer = setTimeout(() => (debounced = q), 120);
-  });
-
-  let filtered = $derived.by(() => {
-    if (debounced.trim()) {
-      return searchPaints(debounced, { manufacturerId: selectedMfr?.id, limit: 100000 });
-    }
-    const all = allPaints();
-    return selectedMfr ? all.filter(p => p.manufacturerId === selectedMfr!.id) : all;
-  });
-
-  // Selo "no estoque": match por fabricante + código.
-  let stockKeys = $derived(
-    new Set(stock.paints.filter(sp => sp.code !== '').map(sp => `${sp.manufacturer}|${sp.code}`))
-  );
-
-  // Agrupamento por fabricante em "rows" virtuais de altura única:
-  // header = ficha `{FABRICANTE} · {n}`, item = linha de tinta.
-  type Row = { kind: 'header'; label: string; count: number } | { kind: 'paint'; p: Paint };
-
-  let rows = $derived.by(() => {
-    const out: Row[] = [];
-    let currentMfr = '';
-    let headerIdx = -1;
-    for (const p of filtered) {
-      if (p.manufacturer !== currentMfr) {
-        currentMfr = p.manufacturer;
-        headerIdx = out.length;
-        out.push({ kind: 'header', label: p.manufacturer, count: 0 });
-      }
-      (out[headerIdx] as { kind: 'header'; label: string; count: number }).count++;
-      out.push({ kind: 'paint', p });
-    }
-    return out;
-  });
-
-  function pickChip(m: Manufacturer | null) {
-    selectedMfr = m;
+  }
+  let customMfrs: CustomMfr[] = $state(loadCustom());
+  let customSeq = $state(-1);
+  function persistCustom() {
+    try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(customMfrs)); } catch { /* indisponível */ }
   }
 
-  function mesclarFrom(paint: Paint) {
-    detailPaint = null;
-    appState.pendingMesclarPaint = paint;
-    switchTab('mesclar');
+  type Tab = 'tintas' | 'fabricantes';
+  let tab: Tab = $state('tintas');
+
+  let search = $state('');
+  let mfrFilter: number | null = $state(null);
+  let onlyMine = $state(false);
+
+  $effect(() => {
+    if (appState.pendingCatalogMfrId != null) {
+      mfrFilter = appState.pendingCatalogMfrId;
+      appState.pendingCatalogMfrId = null;
+      tab = 'tintas';
+    }
+  });
+
+  let allMfrs = $derived([...allManufacturers().map(m => ({ id: m.id, name: m.name, custom: false })), ...customMfrs.map(m => ({ id: m.id, name: m.name, custom: true }))]);
+
+  function stockCountFor(mfrName: string): number {
+    return stock.paints.filter(p => p.manufacturer === mfrName).length;
+  }
+
+  function stockKeyOf(manufacturer: string, code: string): string {
+    return `${manufacturer}|${code}`;
+  }
+  let stockKeys = $derived(new Set(stock.paints.filter(p => p.code !== '').map(p => stockKeyOf(p.manufacturer, p.code))));
+
+  // ── Aba Tintas ──
+  let filteredCatalog = $derived.by(() => {
+    const base = search.trim() ? searchPaints(search, { manufacturerId: mfrFilter ?? undefined, limit: 100000 }) : allPaints().filter(p => mfrFilter == null || p.manufacturerId === mfrFilter);
+    return base;
+  });
+
+  let filteredStock = $derived(
+    sortedStock().filter(p => {
+      if (mfrFilter != null) {
+        const mfrName = allMfrs.find(m => m.id === mfrFilter)?.name;
+        if (p.manufacturer !== mfrName) return false;
+      }
+      if (!search.trim()) return true;
+      const q = search.toLowerCase();
+      return p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q) || p.manufacturer.toLowerCase().includes(q);
+    })
+  );
+
+  function toggleHave(p: Paint) {
+    const key = stockKeyOf(p.manufacturer, p.code);
+    if (stockKeys.has(key)) {
+      const sp = stock.paints.find(s => s.manufacturer === p.manufacturer && s.code === p.code);
+      if (sp) removeStockPaint(sp.id);
+    } else {
+      addStockPaint({
+        manufacturerId: p.manufacturerId,
+        manufacturer: p.manufacturer,
+        name: p.name,
+        code: p.code,
+        r: p.r, g: p.g, b: p.b,
+        volume: '',
+        notes: '',
+      });
+    }
+  }
+
+  // ── Lista única (posse alternável + editar), fiel ao protótipo ──
+  interface Row {
+    key: string;
+    have: boolean;
+    name: string;
+    meta: string;
+    hex: string;
+    toggle: () => void;
+    edit: () => void;
+  }
+
+  let mergedRows = $derived.by(() => {
+    const rows: Row[] = filteredStock.map(p => ({
+      key: `s${p.id}`,
+      have: true,
+      name: p.name,
+      meta: `${p.code || '—'} · ${p.manufacturer}${p.volume ? ` · ${p.volume}` : ''}`,
+      hex: rgbToHex(p.r, p.g, p.b),
+      toggle: () => removeStockPaint(p.id),
+      edit: () => openEdit(p),
+    }));
+    if (!onlyMine) {
+      for (const p of filteredCatalog) {
+        if (stockKeys.has(stockKeyOf(p.manufacturer, p.code))) continue;
+        rows.push({
+          key: `c${p.id}`,
+          have: false,
+          name: p.name,
+          meta: `${p.code} · ${p.manufacturer}`,
+          hex: hexOf(p),
+          toggle: () => toggleHave(p),
+          edit: () => openEditCatalog(p),
+        });
+      }
+    }
+    return rows;
+  });
+
+  let listNote = $derived(
+    (onlyMine ? t('listNoteMine') : t('listNoteAll')) +
+      (mfrFilter != null ? t('inMaker', { brand: allMfrs.find(m => m.id === mfrFilter)?.name ?? '' }) : t('inAll', { n: allMfrs.length }))
+  );
+
+  let headerCount = $derived(t('estanteCount', { a: filteredStock.length, b: filteredCatalog.length, c: allMfrs.length }));
+
+  // ── Modal cadastro/edição (tinta) ──
+  let formOpen = $state(false);
+  let editingId: number | null = $state(null);
+  let fMfr: number | '' = $state('');
+  let fName = $state('');
+  let fCode = $state('');
+  let fHex = $state('#8a8a8a');
+  let fVolume = $state('');
+  // Toggle visual "Tenho este pote agora" (fiel ao mockup) — o estoque local
+  // não tem coluna `have` própria: estar na lista já É "tenho" (RG-17). Sem
+  // essa coluna, desmarcar aqui não muda o que saveForm() grava; é limitação
+  // declarada, não comportamento fingido.
+  let fHave = $state(true);
+  let saving = $state(false);
+
+  function hexToRgb(hex: string): { r: number; g: number; b: number } {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+    if (!m) return { r: 138, g: 138, b: 138 };
+    const n = parseInt(m[1], 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+  function rgbToHex(r: number, g: number, b: number): string {
+    const h = (n: number) => n.toString(16).padStart(2, '0');
+    return `#${h(r)}${h(g)}${h(b)}`;
+  }
+  function isValidHex(hex: string): boolean {
+    return /^#[0-9a-fA-F]{6}$/.test(hex.trim());
+  }
+
+  let fRgb = $derived(hexToRgb(fHex));
+  let fMfrName = $derived(allMfrs.find(m => m.id === fMfr)?.name ?? '');
+  let formPreviewMeta = $derived(`${fCode || '—'} · ${fMfrName}${fVolume ? ` · ${fVolume}` : ''}`);
+
+  function openAdd() {
+    editingId = null;
+    fMfr = allMfrs[0]?.id ?? '';
+    fName = '';
+    fCode = '';
+    fHex = '#8a8a8a';
+    fVolume = '';
+    fHave = true;
+    formOpen = true;
+  }
+
+  function openEdit(p: StockPaint) {
+    editingId = p.id;
+    const m = allMfrs.find(x => x.name === p.manufacturer);
+    fMfr = m?.id ?? '';
+    fName = p.name;
+    fCode = p.code;
+    fHex = rgbToHex(p.r, p.g, p.b);
+    fVolume = p.volume;
+    fHave = true;
+    formOpen = true;
+  }
+
+  function openEditCatalog(p: Paint) {
+    editingId = null;
+    fMfr = p.manufacturerId;
+    fName = p.name;
+    fCode = p.code;
+    fHex = rgbToHex(p.r, p.g, p.b);
+    fVolume = '';
+    fHave = true;
+    formOpen = true;
+  }
+
+  function saveForm() {
+    if (!fName.trim()) {
+      toast(t('errNameRequired'), 'error');
+      return;
+    }
+    if (!isValidHex(fHex)) {
+      toast(t('errHexInvalid'), 'error');
+      return;
+    }
+    if (fMfr === '') {
+      toast(t('errMakerRequired'), 'error');
+      return;
+    }
+    saving = true;
+    const { r, g, b } = hexToRgb(fHex);
+    const mfr = allMfrs.find(m => m.id === Number(fMfr));
+    const base = {
+      manufacturerId: Number(fMfr),
+      manufacturer: mfr?.name ?? '',
+      name: fName.trim(),
+      code: fCode.trim(),
+      r, g, b,
+      volume: fVolume.trim(),
+      notes: '',
+    };
+    if (editingId === null) {
+      addStockPaint(base);
+    } else {
+      updateStockPaint({ ...base, id: editingId });
+    }
+    saving = false;
+    formOpen = false;
+    toast(t('saveChanges'));
+  }
+
+  // ── Confirmação de exclusão (RG-18/CAN1) ──
+  let confirmPaintDel: StockPaint | null = $state(null);
+  let confirmMakerDel: { id: number; name: string } | null = $state(null);
+
+  function askDeletePaint() {
+    if (editingId == null) return;
+    const p = stock.paints.find(x => x.id === editingId);
+    if (p) confirmPaintDel = p;
+  }
+  function doDeletePaint() {
+    if (!confirmPaintDel) return;
+    removeStockPaint(confirmPaintDel.id);
+    confirmPaintDel = null;
+    formOpen = false;
+  }
+
+  function askDeleteMaker(id: number, name: string) {
+    confirmMakerDel = { id, name };
+  }
+  function doDeleteMaker() {
+    if (!confirmMakerDel) return;
+    const { id, name } = confirmMakerDel;
+    for (const p of [...stock.paints].filter(sp => sp.manufacturer === name)) removeStockPaint(p.id);
+    customMfrs = customMfrs.filter(m => m.id !== id);
+    persistCustom();
+    confirmMakerDel = null;
+  }
+
+  // ── Novo fabricante (local) ──
+  let makerFormOpen = $state(false);
+  let newMakerName = $state('');
+  function saveNewMaker() {
+    if (!newMakerName.trim()) return;
+    const id = customSeq--;
+    customMfrs = [...customMfrs, { id, name: newMakerName.trim() }];
+    persistCustom();
+    newMakerName = '';
+    makerFormOpen = false;
+    mfrFilter = id;
+    tab = 'tintas';
+  }
+
+  function seePaints(mfrId: number) {
+    mfrFilter = mfrId;
+    tab = 'tintas';
+  }
+
+  function swatchesFor(mfrName: string, isCustom: boolean): string[] {
+    const fromCatalog = isCustom ? [] : allPaints().filter(p => p.manufacturer === mfrName).slice(0, 5);
+    const need = 5 - fromCatalog.length;
+    const fromStock = need > 0 ? stock.paints.filter(p => p.manufacturer === mfrName).slice(0, need) : [];
+    return [...fromCatalog, ...fromStock].map(p => `rgb(${p.r}, ${p.g}, ${p.b})`);
+  }
+
+  // ── Modal único (overlay do protótipo cobre um dos 4 conteúdos) ──
+  let modalKind = $derived.by((): 'confirmPaint' | 'confirmMaker' | 'paint' | 'maker' | null => {
+    if (confirmPaintDel) return 'confirmPaint';
+    if (confirmMakerDel) return 'confirmMaker';
+    if (formOpen) return 'paint';
+    if (makerFormOpen) return 'maker';
+    return null;
+  });
+  function closeModal() {
+    if (confirmPaintDel) { confirmPaintDel = null; return; }
+    if (confirmMakerDel) { confirmMakerDel = null; return; }
+    if (formOpen) { formOpen = false; return; }
+    if (makerFormOpen) { makerFormOpen = false; return; }
   }
 </script>
 
-<div class="cat">
-  <div class="cat-top">
-    <div class="cat-head">
-      <span class="cat-brand">
-        <BrandMark size={26} />
-        <h1 class="cat-title font-display">Catálogo</h1>
-      </span>
-      <span class="cat-count font-mono">{filtered.length.toLocaleString('pt-BR')}</span>
-    </div>
-
-    <input
-      bind:value={query}
-      type="search"
-      class="cat-search"
-      placeholder="buscar por nome, código ou cor…"
-      aria-label="Buscar no catálogo"
-      autocomplete="off"
-      autocorrect="off"
-      autocapitalize="off"
-      spellcheck="false"
-      enterkeyhint="search"
-    />
-
-    <div class="cat-chips">
-      <button class="cat-chip pressable" class:active={selectedMfr === null} onclick={() => (brandSheetOpen = true)}>
-        {selectedMfr ? selectedMfr.name : 'Todas'}
-        <Icon name="chevron-down" size={14} />
+<div style="display: flex; flex-direction: column; height: 100%;">
+  <!-- No protótipo T4 as abas ficam coladas na marca (não há kicker/título
+       nesta tela) e a contagem + "Cadastrar" vão para a direita. -->
+  <Header gap={14}>
+    {#snippet lead()}
+      <div style="display: flex; border: 1px solid var(--color-neutral-800); border-radius: 8px; overflow: hidden; flex-shrink: 0;">
+        <button
+          onclick={() => (tab = 'tintas')}
+          style="height: 50px; padding: 0 20px; border: none; background: {tab === 'tintas' ? 'var(--color-accent-900)' : 'transparent'}; color: {tab === 'tintas' ? 'var(--color-accent-200)' : 'var(--color-neutral-400)'}; font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer; white-space: nowrap;"
+        >{t('tabPaints')}</button>
+        <button
+          onclick={() => (tab = 'fabricantes')}
+          style="height: 50px; padding: 0 20px; border: none; border-left: 1px solid var(--color-neutral-800); background: {tab === 'fabricantes' ? 'var(--color-accent-900)' : 'transparent'}; color: {tab === 'fabricantes' ? 'var(--color-accent-200)' : 'var(--color-neutral-400)'}; font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer; white-space: nowrap;"
+        >{t('makers')}</button>
+      </div>
+    {/snippet}
+    {#snippet actions()}
+      <span style="font-size: 14px; color: var(--color-neutral-500); white-space: nowrap;">{headerCount}</span>
+      <button
+        class="t4-hover-accent"
+        onclick={() => (tab === 'tintas' ? openAdd() : (makerFormOpen = true))}
+        style="display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 18px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
+      >
+        <i class="ph ph-plus" style="font-size: 18px;"></i>{tab === 'tintas' ? t('addPaintBtn') : t('addMakerBtn')}
       </button>
-      {#if selectedMfr}
-        <button class="cat-chip clear pressable" onclick={() => pickChip(null)}>
-          <Icon name="close" size={13} />
-          limpar filtro
-        </button>
+    {/snippet}
+  </Header>
+
+  <div style="flex: 1; min-height: 0; overflow-y: auto;">
+    <div style="max-width: 880px; margin: 0 auto; padding: 22px 24px 40px;">
+      {#if tab === 'tintas'}
+        <div>
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; height: 50px; padding: 0 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field);">
+              <i class="ph ph-magnifying-glass" style="font-size: 18px; color: var(--color-neutral-500);"></i>
+              <input
+                type="search"
+                bind:value={search}
+                placeholder={t('phFindPaint')}
+                aria-label={t('phFindPaint')}
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck="false"
+                style="flex: 1; min-width: 0; height: 46px; background: transparent; border: none; outline: none; color: var(--color-text); font-family: inherit; font-size: 15px;"
+              />
+            </div>
+            <button
+              onclick={() => (onlyMine = !onlyMine)}
+              aria-pressed={onlyMine}
+              style="display: inline-flex; align-items: center; gap: 10px; height: 50px; padding: 0 14px; border: 1px solid {onlyMine ? 'var(--color-accent-700)' : 'var(--color-neutral-800)'}; border-radius: 8px; background: {onlyMine ? 'var(--color-accent-panel)' : 'transparent'}; color: {onlyMine ? 'var(--color-accent-400)' : 'var(--color-neutral-400)'}; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
+            >
+              <i class="ph-bold ph-check" style="font-size: 15px;"></i>{t('onlyMineShort')}
+            </button>
+          </div>
+
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px;">
+            <button
+              class="t4-hover-border"
+              onclick={() => (mfrFilter = null)}
+              style="height: 44px; padding: 0 14px; border: 1px solid {mfrFilter === null ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 999px; background: {mfrFilter === null ? 'var(--color-accent)' : 'var(--color-surface)'}; color: {mfrFilter === null ? 'var(--color-accent-100)' : 'var(--color-neutral-300)'}; font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;"
+            >{t('allMakers')}</button>
+            {#each allMfrs as m (m.id)}
+              <button
+                class="t4-hover-border"
+                onclick={() => (mfrFilter = m.id)}
+                style="height: 44px; padding: 0 14px; border: 1px solid {mfrFilter === m.id ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 999px; background: {mfrFilter === m.id ? 'var(--color-accent)' : 'var(--color-surface)'}; color: {mfrFilter === m.id ? 'var(--color-accent-100)' : 'var(--color-neutral-300)'}; font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;"
+              >{m.name}</button>
+            {/each}
+          </div>
+
+          <p style="margin: 0 0 8px; font-size: 13px; color: var(--color-neutral-500);">{listNote}</p>
+
+          {#if mergedRows.length === 0}
+            <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 48px 4px;">
+              <i class="ph ph-drop-half" style="font-size: 34px; color: var(--color-neutral-700);"></i>
+              <p style="margin: 0; font-size: 20px; font-weight: 500; color: var(--color-text);">
+                {mfrFilter != null ? t('emptyTitleBrand', { brand: allMfrs.find(m => m.id === mfrFilter)?.name ?? '' }) : t('emptyTitleAll')}
+              </p>
+              <p style="margin: 0; font-size: 15px; color: var(--color-neutral-500); max-width: 420px; text-wrap: pretty;">{t('emptyPaintsNote', { label: t('addPaintBtn') })}</p>
+            </div>
+          {:else}
+            <div style="display: flex; flex-direction: column; flex: 1; min-height: 300px;">
+              <VirtualList rows={mergedRows} rowHeight={68}>
+                {#snippet row(r: Row)}
+                  <div style="display: flex; align-items: center; gap: 14px; height: 100%; padding: 10px 4px; border-bottom: 1px solid var(--color-line);">
+                    <button
+                      onclick={r.toggle}
+                      aria-pressed={r.have}
+                      style="display: inline-flex; align-items: center; gap: 10px; height: 48px; padding: 0 10px 0 4px; border: none; background: transparent; color: {r.have ? 'var(--color-accent-400)' : 'var(--color-neutral-500)'}; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; flex-shrink: 0;"
+                    >
+                      <span style="display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid {r.have ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 4px; background: {r.have ? 'var(--color-accent)' : 'transparent'};">
+                        <i class="ph-bold ph-check" style="font-size: 15px; color: {r.have ? 'var(--color-accent-100)' : 'transparent'};"></i>
+                      </span>
+                      <span style="width: 62px; text-align: left;">{r.have ? t('have') : t('dontHave')}</span>
+                    </button>
+                    <span style="width: 42px; height: 42px; border-radius: 4px; border: 1px solid var(--color-neutral-800); background: {r.hex}; flex-shrink: 0;"></span>
+                    <span style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0;">
+                      <span style="font-size: 16px; font-weight: 500; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{r.name}</span>
+                      <span style="font-size: 13px; color: var(--color-neutral-500);">{r.meta}</span>
+                    </span>
+                    <button class="t4-hover-ghost" onclick={r.edit} style="height: 48px; padding: 0 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('edit')}</button>
+                  </div>
+                {/snippet}
+              </VirtualList>
+            </div>
+          {/if}
+        </div>
+      {:else}
+        <div style="display: flex; flex-direction: column;">
+          {#each allMfrs as m (m.id)}
+            {@const catalogCount = m.custom ? 0 : (allManufacturers().find(x => x.id === m.id)?.paintCount ?? 0)}
+            {@const haveCount = stockCountFor(m.name)}
+            <div style="display: flex; align-items: center; gap: 16px; min-height: 76px; padding: 12px 4px; border-bottom: 1px solid var(--color-line);">
+              <span style="display: flex; gap: 3px; flex-shrink: 0;">
+                {#each swatchesFor(m.name, m.custom) as hex, i (i)}
+                  <span style="width: 18px; height: 40px; border-radius: 2px; background: {hex};"></span>
+                {/each}
+              </span>
+              <span style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0;">
+                <span style="font-size: 17px; font-weight: 500; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{m.name}</span>
+                <span style="font-size: 13px; color: var(--color-neutral-500);">
+                  {catalogCount === 1 ? t('makerMeta1', { m: haveCount }) : t('makerMeta', { n: catalogCount, m: haveCount })}
+                </span>
+              </span>
+              <button class="t4-hover-ghost" onclick={() => seePaints(m.id)} style="height: 48px; padding: 0 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('seePaints')}</button>
+              <button class="t4-hover-ghost" onclick={() => askDeleteMaker(m.id, m.name)} style="height: 48px; padding: 0 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('del')}</button>
+            </div>
+          {/each}
+        </div>
       {/if}
     </div>
   </div>
+</div>
 
-  <div class="cat-list">
-    {#if filtered.length === 0}
-      <div class="empty-state">
-        <span class="empty-icon"><Icon name="search-off" size={36} /></span>
-        <p class="empty-title">Nada com esse nome</p>
-        <p class="empty-hint">Tente o código do pote (ex.: 70.951) ou limpe o filtro de marca.</p>
+<!-- Overlay único: sempre montado, visibilidade alterna por `display` (como no
+     protótipo — sc-if com hint-placeholder, nós presentes, visibilidade que
+     alterna) para que cada card fique disponível assim que sua ação abrir. -->
+<div style="position: absolute; inset: 0; z-index: 70; display: {modalKind ? 'flex' : 'none'}; align-items: center; justify-content: center; padding: 40px;">
+  <div role="presentation" onclick={closeModal} style="position: absolute; inset: 0; background: rgba(9, 10, 16, 0.7);"></div>
+
+  <!-- Modal cadastro/edição de tinta -->
+  <div style="{modalKind !== 'paint' ? 'display: none; ' : ''}position: relative; width: min(560px, 100%); max-height: 100%; overflow-y: auto; padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
+    <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 20px;">
+      <span style="flex: 1; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: var(--color-text);">{editingId === null ? t('newPaint') : t('editPaint')}</span>
+      <button class="t4-hover-ghost" onclick={closeModal} aria-label={t('ariaClose')} style="display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer;">
+        <i class="ph ph-x" style="font-size: 20px;"></i>
+      </button>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px;">
+      <PaintBottle r={fRgb.r} g={fRgb.g} b={fRgb.b} width={52} height={87} label={fName || t('fName')} />
+      <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+        <span style="font-size: clamp(15px, 1.6cqi, 19px); font-weight: 500; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{fName || t('fName')}</span>
+        <span style="font-size: 13px; color: var(--color-neutral-500);">{formPreviewMeta}</span>
+      </span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+      <label style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fName')}</span>
+        <input type="text" bind:value={fName} placeholder="Mephiston Red" style="height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;" />
+      </label>
+
+      <div style="display: flex; gap: 12px;">
+        <label style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0;">
+          <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fCode')}</span>
+          <input type="text" bind:value={fCode} placeholder="70.951" style="height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;" />
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 6px; width: 130px; flex-shrink: 0;">
+          <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fLeft')}</span>
+          <input type="text" bind:value={fVolume} placeholder="17 ml" style="height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;" />
+        </label>
       </div>
-    {:else}
-      <VirtualList {rows} rowHeight={64}>
-        {#snippet row(item: Row)}
-          {#if item.kind === 'header'}
-            <div class="cat-group section-label">{item.label} · {item.count.toLocaleString('pt-BR')}</div>
-          {:else}
-            {@const p = item.p}
-            <button class="cat-row pressable" onclick={() => (detailPaint = p)}>
-              <span class="cat-row-swatch" style="background: rgb({p.r}, {p.g}, {p.b});"></span>
-              <PaintBottle r={p.r} g={p.g} b={p.b} size={42} />
-              <span class="cat-row-text">
-                <span class="cat-row-name">{p.name}</span>
-                <span class="cat-row-meta font-mono">
-                  {p.code}{#if stockKeys.has(`${p.manufacturer}|${p.code}`)}<span class="cat-row-stock">&nbsp;·&nbsp;no estoque</span>{/if}
-                </span>
-              </span>
-              <span class="cat-row-chev"><Icon name="chevron-right" size={16} /></span>
-            </button>
-          {/if}
-        {/snippet}
-      </VirtualList>
-    {/if}
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fMaker')}</span>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+          {#each allMfrs as m (m.id)}
+            <button
+              type="button"
+              class="t4-hover-border"
+              onclick={() => (fMfr = m.id)}
+              style="height: 44px; padding: 0 14px; border: 1px solid {fMfr === m.id ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 999px; background: {fMfr === m.id ? 'var(--color-accent)' : 'var(--color-surface)'}; color: {fMfr === m.id ? 'var(--color-accent-100)' : 'var(--color-neutral-300)'}; font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;"
+            >{m.name}</button>
+          {/each}
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fColor')}</span>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="width: 50px; height: 50px; border-radius: 8px; border: 1px solid var(--color-neutral-800); background: rgb({fRgb.r}, {fRgb.g}, {fRgb.b}); flex-shrink: 0;"></span>
+          <input
+            type="text"
+            bind:value={fHex}
+            maxlength="7"
+            placeholder="#9A1115"
+            aria-label={t('fColor')}
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            style="flex: 1; min-width: 0; height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;"
+          />
+          <!-- "Ler do pote" (câmera, US-20/E9) — fora desta rodada (Could): botão fiel ao
+               protótipo, sem captura/rota nova. -->
+          <button
+            type="button"
+            class="t4-hover-accent"
+            style="display: inline-flex; align-items: center; gap: 8px; height: 50px; padding: 0 14px; border: 1px solid var(--color-accent-700); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
+          >
+            <i class="ph ph-camera" style="font-size: 18px;"></i>{t('readPot')}
+          </button>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onclick={() => (fHave = !fHave)}
+        aria-pressed={fHave}
+        style="display: flex; align-items: center; gap: 12px; height: 60px; padding: 0 14px; border: 1px solid {fHave ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 8px; background: {fHave ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'transparent'}; color: var(--color-text); font-family: inherit; font-size: 15px; text-align: left; cursor: pointer;"
+      >
+        <span style="display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid {fHave ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 4px; flex-shrink: 0;">
+          <i class="ph-bold ph-check" style="font-size: 15px; color: {fHave ? 'var(--color-accent)' : 'transparent'};"></i>
+        </span>
+        <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+          <span style="font-weight: 500;">{t('haveNow')}</span>
+          <span style="font-size: 12.5px; color: var(--color-neutral-500);">{t('haveNote')}</span>
+        </span>
+      </button>
+
+      <div style="display: flex; gap: 10px; margin-top: 6px;">
+        <button class="t4-hover-accent" onclick={saveForm} disabled={saving} style="flex: 1; height: 58px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 16px; font-weight: 500; cursor: pointer;">{editingId === null ? t('addPaintBtn') : t('saveChanges')}</button>
+        {#if editingId !== null}
+          <button class="t4-hover-ghost" onclick={askDeletePaint} style="height: 58px; padding: 0 18px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('delPaintA')}</button>
+        {/if}
+      </div>
+      <p style="margin: 2px 0 0; font-size: 13px; color: var(--color-neutral-500); text-wrap: pretty;">{t('formNote')}</p>
+    </div>
+  </div>
+
+  <!-- Modal novo fabricante -->
+  <div style="{modalKind !== 'maker' ? 'display: none; ' : ''}position: relative; width: min(460px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
+    <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 18px;">
+      <span style="flex: 1; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: var(--color-text);">{t('newMakerT')}</span>
+      <button class="t4-hover-ghost" onclick={closeModal} aria-label={t('ariaClose')} style="display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer;">
+        <i class="ph ph-x" style="font-size: 20px;"></i>
+      </button>
+    </div>
+    <label style="display: flex; flex-direction: column; gap: 6px;">
+      <span style="font-size: 13px; color: var(--color-neutral-500);">{t('makerName')}</span>
+      <input type="text" bind:value={newMakerName} placeholder="Scale75" style="height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;" />
+    </label>
+    <button class="t4-hover-accent" onclick={saveNewMaker} style="width: 100%; height: 58px; margin-top: 18px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 16px; font-weight: 500; cursor: pointer;">{t('addMakerBtn')}</button>
+    <p style="margin: 12px 0 0; font-size: 13px; color: var(--color-neutral-500); text-wrap: pretty;">{t('addMakerNote')}</p>
+  </div>
+
+  <!-- Confirmação exclusão de tinta -->
+  <div style="{modalKind !== 'confirmPaint' ? 'display: none; ' : ''}position: relative; width: min(440px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
+    <p style="margin: 0; font-size: clamp(16px, 1.8cqi, 21px); font-weight: 500; letter-spacing: -0.01em; color: var(--color-text); text-wrap: pretty;">{t('delPaintT', { name: confirmPaintDel?.name ?? '' })}</p>
+    <p style="margin: 10px 0 0; font-size: 15px; color: var(--color-neutral-400); text-wrap: pretty;">{t('delPaintB')}</p>
+    <div style="display: flex; gap: 10px; margin-top: 22px;">
+      <button class="t4-hover-ghost" onclick={closeModal} style="flex: 1; height: 56px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{t('cancel')}</button>
+      <button class="t4-hover-accent" onclick={doDeletePaint} style="flex: 1; height: 56px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{t('delPaintA')}</button>
+    </div>
+  </div>
+
+  <!-- Confirmação exclusão de fabricante (RG-18/CA11): declara quantas tintas somem -->
+  <div style="{modalKind !== 'confirmMaker' ? 'display: none; ' : ''}position: relative; width: min(440px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
+    <p style="margin: 0; font-size: clamp(16px, 1.8cqi, 21px); font-weight: 500; letter-spacing: -0.01em; color: var(--color-text); text-wrap: pretty;">{t('delMakerT', { name: confirmMakerDel?.name ?? '' })}</p>
+    <p style="margin: 10px 0 0; font-size: 15px; color: var(--color-neutral-400); text-wrap: pretty;">
+      {stockCountFor(confirmMakerDel?.name ?? '') > 0 ? t('delMakerB', { n: stockCountFor(confirmMakerDel?.name ?? '') }) : t('delMakerB0')}
+    </p>
+    <div style="display: flex; gap: 10px; margin-top: 22px;">
+      <button class="t4-hover-ghost" onclick={closeModal} style="flex: 1; height: 56px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{t('cancel')}</button>
+      <button class="t4-hover-accent" onclick={doDeleteMaker} style="flex: 1; height: 56px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{t('delMakerA')}</button>
+    </div>
   </div>
 </div>
 
-<BrandSheet
-  open={brandSheetOpen}
-  onClose={() => (brandSheetOpen = false)}
-  mode="single"
-  selectedId={selectedMfr?.id ?? null}
-  onPick={pickChip}
-/>
-<PaintDetailSheet paint={detailPaint} onClose={() => (detailPaint = null)} onMesclar={mesclarFrom} />
-
 <style>
-  .cat {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    min-height: 0;
+  /* `style-hover="..."` do protótipo — reproduzido aqui por classe (rule 7). */
+  .t4-hover-border:hover {
+    border-color: var(--color-accent-700);
   }
-
-  .cat-top {
-    flex-shrink: 0;
-    padding: 8px 16px 12px;
-    background: var(--papel);
-    border-bottom: 1px solid var(--hairline);
+  .t4-hover-ghost:hover {
+    border-color: var(--color-accent-700);
+    color: var(--color-accent-400);
   }
-
-  .cat-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    min-height: 48px;
-  }
-
-  .cat-brand {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .cat-title {
-    font-size: 20px;
-    font-weight: 750;
-    color: var(--grafite);
-  }
-
-  .cat-count {
-    font-size: 13px;
-    color: var(--ink-500);
-  }
-
-  .cat-search {
-    width: 100%;
-    min-height: 50px;
-    padding: 0 14px;
-    font: inherit;
-    font-size: 16px;
-    background: var(--bancada);
-  }
-
-  .cat-chips {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    margin-top: 10px;
-    padding-bottom: 2px;
-    scrollbar-width: none;
-  }
-
-  .cat-chips::-webkit-scrollbar {
-    display: none;
-  }
-
-  .cat-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 40px;
-    padding: 0 14px;
-    border-radius: var(--radius-pill);
-    border: 1px solid var(--hairline);
-    background: var(--papel);
-    font-size: 13.5px;
-    font-weight: 600;
-    color: var(--grafite);
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-
-  .cat-chip.active {
-    background: var(--grafite);
-    border-color: var(--grafite);
-    color: var(--papel);
-  }
-
-  .cat-chip.clear {
-    color: var(--lacquer-deep);
-    border-style: dashed;
-  }
-
-  .cat-list {
-    flex: 1;
-    min-height: 0;
-  }
-
-  /* Ficha de arquivo do fabricante — alinhada na base da "row" virtual. */
-  .cat-group {
-    display: flex;
-    align-items: flex-end;
-    height: 100%;
-    padding: 0 16px 8px;
-  }
-
-  .cat-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-    height: 100%;
-    padding: 0 16px;
-    border-bottom: 1px solid var(--hairline);
-    text-align: left;
-  }
-
-  .cat-row-swatch {
-    width: 48px;
-    height: 42px;
-    border-radius: var(--radius-control);
-    box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.1);
-    flex-shrink: 0;
-  }
-
-  .cat-row-text {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .cat-row-name {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--grafite);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .cat-row-meta {
-    font-size: 12px;
-    color: var(--ink-500);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .cat-row-stock {
-    color: var(--laca);
-    font-weight: 600;
-  }
-
-  .cat-row-chev {
-    display: flex;
-    color: var(--hairline);
-    flex-shrink: 0;
+  .t4-hover-accent:hover {
+    background: var(--color-accent-hover);
   }
 </style>
