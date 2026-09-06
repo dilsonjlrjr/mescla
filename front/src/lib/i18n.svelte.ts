@@ -89,7 +89,21 @@ export const dict = {
     tabPaints: 'Tintas', errNameRequired: 'Dê um nome à tinta.',
     errHexInvalid: 'Hex inválido. Use o formato #rrggbb.', errMakerRequired: 'Escolha o fabricante.',
     confirmBtn: 'Confirmar',
-    zoomIn: 'Aproximar', zoomOut: 'Afastar', zoomFit: 'Ajustar à tela', zoomLevel: 'Zoom {n}%'
+    zoomIn: 'Aproximar', zoomOut: 'Afastar', zoomFit: 'Ajustar à tela', zoomLevel: 'Zoom {n}%',
+    planNameLabel: 'Nome do plano', planNamePh: 'Plano de {data}', savePlanBtn: 'Salvar',
+    planSaving: 'Salvando…', planSavedAt: 'salvo às {hora}',
+    planSaveError: 'Não foi possível salvar. Seu rascunho está guardado neste aparelho.',
+    planNotFound: 'Este plano não existe mais no servidor', draftRestored: 'Rascunho local restaurado',
+    discardDraftBtn: 'Descartar rascunho', discardDraftConfirm: 'Descartar o rascunho e voltar ao plano salvo?',
+    draftCorrupted: 'Rascunho local corrompido — descartado', draftNoPhoto: 'Rascunho salvo sem a foto', autosaveOff: 'Auto save desligado nesta sessão — salve manualmente',
+    errPlanNameEmpty: 'Dê um nome ao plano', errPlanNameMax: 'O nome do plano tem no máximo 200 caracteres',
+    errRegionNameMax: 'O nome da região tem no máximo 100 caracteres', errRegionsMax: 'O plano aceita no máximo 50 regiões',
+    errImageMax: 'A foto da peça passa de 2 MB — use uma imagem menor', errNoteMax: 'A anotação tem no máximo 2000 caracteres',
+    errImageType: 'Formato de imagem não aceito — use PNG ou JPEG',
+    exportReportBtn: 'Exportar relatório', exportFormatLabel: 'Formato', exportPdf: 'PDF', exportPng: 'PNG',
+    exportSaveFirst: 'Salve o plano antes de exportar', exportGenerating: 'Gerando relatório…',
+    exportFailed: 'Não foi possível gerar o relatório. Tente de novo.',
+    exportInvalid: 'Não foi possível exportar: pedido inválido'
   },
   en: {
     _name: 'English (US)', _dec: '.',
@@ -176,7 +190,21 @@ export const dict = {
     tabPaints: 'Paints', errNameRequired: 'Give the paint a name.',
     errHexInvalid: 'Invalid hex. Use the #rrggbb format.', errMakerRequired: 'Choose the manufacturer.',
     confirmBtn: 'Confirm',
-    zoomIn: 'Zoom in', zoomOut: 'Zoom out', zoomFit: 'Fit to screen', zoomLevel: 'Zoom {n}%'
+    zoomIn: 'Zoom in', zoomOut: 'Zoom out', zoomFit: 'Fit to screen', zoomLevel: 'Zoom {n}%',
+    planNameLabel: 'Plan name', planNamePh: 'Plan from {data}', savePlanBtn: 'Save',
+    planSaving: 'Saving…', planSavedAt: 'saved at {hora}',
+    planSaveError: 'Could not save. Your draft is kept on this device.',
+    planNotFound: 'This plan no longer exists on the server', draftRestored: 'Local draft restored',
+    discardDraftBtn: 'Discard draft', discardDraftConfirm: 'Discard the draft and go back to the saved plan?',
+    draftCorrupted: 'Local draft was corrupted — discarded', draftNoPhoto: 'Draft saved without the photo', autosaveOff: 'Autosave off for this session — save manually',
+    errPlanNameEmpty: 'Give the plan a name', errPlanNameMax: 'The plan name is at most 200 characters',
+    errRegionNameMax: 'The region name is at most 100 characters', errRegionsMax: 'The plan accepts at most 50 regions',
+    errImageMax: 'The model photo is over 2 MB — use a smaller image', errNoteMax: 'The note is at most 2000 characters',
+    errImageType: 'Image format not accepted — use PNG or JPEG',
+    exportReportBtn: 'Export report', exportFormatLabel: 'Format', exportPdf: 'PDF', exportPng: 'PNG',
+    exportSaveFirst: 'Save the plan before exporting', exportGenerating: 'Generating report…',
+    exportFailed: 'Could not generate the report. Try again.',
+    exportInvalid: 'Could not export: invalid request'
   },
   es: {
     _name: 'Español', _dec: ',',
@@ -263,7 +291,21 @@ export const dict = {
     tabPaints: 'Pinturas', errNameRequired: 'Ponle un nombre a la pintura.',
     errHexInvalid: 'Hex inválido. Usa el formato #rrggbb.', errMakerRequired: 'Elige el fabricante.',
     confirmBtn: 'Confirmar',
-    zoomIn: 'Acercar', zoomOut: 'Alejar', zoomFit: 'Ajustar a la pantalla', zoomLevel: 'Zoom {n}%'
+    zoomIn: 'Acercar', zoomOut: 'Alejar', zoomFit: 'Ajustar a la pantalla', zoomLevel: 'Zoom {n}%',
+    planNameLabel: 'Nombre del plan', planNamePh: 'Plan de {data}', savePlanBtn: 'Guardar',
+    planSaving: 'Guardando…', planSavedAt: 'guardado a las {hora}',
+    planSaveError: 'No se pudo guardar. Tu borrador está guardado en este dispositivo.',
+    planNotFound: 'Este plan ya no existe en el servidor', draftRestored: 'Borrador local restaurado',
+    discardDraftBtn: 'Descartar borrador', discardDraftConfirm: '¿Descartar el borrador y volver al plan guardado?',
+    draftCorrupted: 'Borrador local dañado — descartado', draftNoPhoto: 'Borrador guardado sin la foto', autosaveOff: 'Autoguardado desactivado en esta sesión — guarda manualmente',
+    errPlanNameEmpty: 'Ponle un nombre al plan', errPlanNameMax: 'El nombre del plan tiene como máximo 200 caracteres',
+    errRegionNameMax: 'El nombre de la región tiene como máximo 100 caracteres', errRegionsMax: 'El plan acepta como máximo 50 regiones',
+    errImageMax: 'La foto de la pieza supera los 2 MB — usa una imagen más pequeña', errNoteMax: 'La anotación tiene como máximo 2000 caracteres',
+    errImageType: 'Formato de imagen no admitido — usa PNG o JPEG',
+    exportReportBtn: 'Exportar informe', exportFormatLabel: 'Formato', exportPdf: 'PDF', exportPng: 'PNG',
+    exportSaveFirst: 'Guarda el plan antes de exportar', exportGenerating: 'Generando informe…',
+    exportFailed: 'No se pudo generar el informe. Inténtalo de nuevo.',
+    exportInvalid: 'No se pudo exportar: pedido inválido'
   },
   fr: {
     _name: 'Français', _dec: ',',
@@ -350,7 +392,21 @@ export const dict = {
     tabPaints: 'Peintures', errNameRequired: 'Donnez un nom à la peinture.',
     errHexInvalid: 'Hex invalide. Utilisez le format #rrggbb.', errMakerRequired: 'Choisissez le fabricant.',
     confirmBtn: 'Confirmer',
-    zoomIn: 'Zoom avant', zoomOut: 'Zoom arrière', zoomFit: 'Ajuster à l’écran', zoomLevel: 'Zoom {n}%'
+    zoomIn: 'Zoom avant', zoomOut: 'Zoom arrière', zoomFit: 'Ajuster à l’écran', zoomLevel: 'Zoom {n}%',
+    planNameLabel: 'Nom du plan', planNamePh: 'Plan du {data}', savePlanBtn: 'Enregistrer',
+    planSaving: 'Enregistrement…', planSavedAt: 'enregistré à {hora}',
+    planSaveError: 'Impossible d’enregistrer. Votre brouillon est conservé sur cet appareil.',
+    planNotFound: 'Ce plan n’existe plus sur le serveur', draftRestored: 'Brouillon local restauré',
+    discardDraftBtn: 'Abandonner le brouillon', discardDraftConfirm: 'Abandonner le brouillon et revenir au plan enregistré ?',
+    draftCorrupted: 'Brouillon local corrompu — supprimé', draftNoPhoto: 'Brouillon enregistré sans la photo', autosaveOff: 'Enregistrement automatique désactivé pour cette session — enregistrez manuellement',
+    errPlanNameEmpty: 'Donnez un nom au plan', errPlanNameMax: 'Le nom du plan compte au maximum 200 caractères',
+    errRegionNameMax: 'Le nom de la zone compte au maximum 100 caractères', errRegionsMax: 'Le plan accepte au maximum 50 zones',
+    errImageMax: 'La photo de la pièce dépasse 2 Mo — utilisez une image plus petite', errNoteMax: 'La note compte au maximum 2000 caractères',
+    errImageType: 'Format d’image non accepté — utilisez PNG ou JPEG',
+    exportReportBtn: 'Exporter le rapport', exportFormatLabel: 'Format', exportPdf: 'PDF', exportPng: 'PNG',
+    exportSaveFirst: 'Enregistrez le plan avant d’exporter', exportGenerating: 'Génération du rapport…',
+    exportFailed: 'Impossible de générer le rapport. Réessayez.',
+    exportInvalid: 'Impossible d’exporter : requête invalide'
   }
 } as const;
 

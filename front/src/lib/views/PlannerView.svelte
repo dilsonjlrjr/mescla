@@ -21,8 +21,18 @@
   import { allManufacturers } from '../services/catalog';
   import { saveRecipe } from '../services/recipes.svelte';
   import { verdictKeys } from '../ui';
-  import { t, decimal } from '../i18n.svelte';
+  import { t, decimal, type DictKey } from '../i18n.svelte';
   import { toast } from '../toast.svelte';
+  import { nav } from '../nav.svelte';
+  import {
+    lerRascunho, agendarGravacao, apagarRascunho,
+    lerPlanoAtivo, gravarPlanoAtivo, limparPlanoAtivo, estadoAutoSave,
+    type Rascunho, type RegiaoRascunho, type EstadoAutoSave,
+  } from '../planner/rascunho';
+  import {
+    validarPlano, salvarPlano, carregarPlano, baixarRelatorio, PlanoError,
+    type PlanoDTO, type RegiaoDTO,
+  } from '../services/plans';
 
   interface PlannerRegion {
     id: number;
@@ -35,6 +45,18 @@
     painted: boolean;
     result: EquivalentRecipe | null;
     computing: boolean;
+    /** Tinta que veio do plano salvo/rascunho. `result` nasce nulo ao
+     *  hidratar e só é preenchido quando o recálculo termina — sem esta
+     *  cópia, salvar antes disso gravaria tinta vazia por cima da boa. */
+    salvo: RegiaoSalva | null;
+  }
+
+  interface RegiaoSalva {
+    paintId: number | null;
+    paintBrand: string;
+    paintName: string;
+    paintCode: string;
+    deltaE: number;
   }
 
   interface ShoppingItem {
@@ -69,6 +91,68 @@
   // vive só nesta tela, como um checklist de compra da montagem atual.
   let ownedPaints: Set<number> = $state(new Set());
 
+  // ── rf-07: plano da peça (nome, salvar, auto save local) ──
+  let planId: number | null = $state(null);
+  let planName = $state('');
+  /** data URL da foto — guardada à parte de `image` (HTMLImageElement) porque
+   *  o rascunho e o PlanoDTO precisam da string crua, não do bitmap. */
+  let imageDataUrl = $state('');
+
+  type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+  let saveState: SaveState = $state('idle');
+  let savedAtLabel = $state('');
+  /** Chave i18n do erro de Salvar — nunca texto cru do servidor (RN11). */
+  let saveErrorKey: DictKey | null = $state(null);
+  /** Chave i18n do erro de validação do formulário (CA11/CA13/CA17-CA20). */
+  let validationErrorKey: DictKey | null = $state(null);
+
+  let draftBannerVisible = $state(false);
+  /** Reflete `estadoAutoSave()` (RN8) — só o módulo de rascunho decide a
+   *  escada; a tela apenas relê depois que a gravação (debounce) já rodou. */
+  let autoSaveStatus: EstadoAutoSave = $state('ligado');
+
+  /** RN5: T2 fica sempre montada — hidrata uma única vez na TRANSIÇÃO para
+   *  'plano', nunca de novo. `hidratando` impede reentrância do próprio
+   *  `$effect`; `hidratado` é o que trava `marcarAlteracao` até a hidratação
+   *  terminar (maior risco da fatia: auto save sobrescrevendo rascunho bom
+   *  com estado vazio no boot). */
+  let hidratando = false;
+  let hidratado = $state(false);
+  /** Marca que o usuário mexeu na tela enquanto o `GET` da hidratação estava
+   *  em voo. Aplicar o plano do servidor por cima apagaria esse trabalho, e
+   *  não há rascunho de resgate (`marcarAlteracao` ainda está travado). */
+  let alteradoDuranteHidratacao = false;
+  /** Sobe a cada Salvar concluído e a cada alteração de conteúdo — deixa o
+   *  código distinguir "nada mudou desde o POST" de "mudou durante o POST". */
+  let salvamentoSeq = 0;
+  let alteracaoSeq = 0;
+  /** rf-08/RN11: valor de `alteracaoSeq` no último Salvar bem-sucedido sem
+   *  edição concorrente (o ramo que apaga o rascunho). Reaproveita os
+   *  contadores do rf-07 em vez de inventar flag nova — "rascunho pendente"
+   *  é `alteracaoSeq` ter avançado depois desse ponto, ou o banner de
+   *  rascunho restaurado ainda estar visível. */
+  let alteracaoSeqSalva = $state(0);
+
+  // ── rf-08: exportar relatório (PDF/PNG) ──
+  let reportFormat: 'pdf' | 'png' = $state('pdf');
+  let reportGenerating = $state(false);
+  /** Chave i18n do estado/erro da exportação — nunca texto cru do servidor (CA18). */
+  let reportErrorKey: DictKey | null = $state(null);
+
+  let planNamePlaceholder = $derived.by(() => {
+    const d = new Date();
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    return t('planNamePh', { data: `${dd}/${mm}` });
+  });
+
+  $effect(() => {
+    if (nav.tab === 'plano' && !hidratando) {
+      hidratando = true;
+      void hidratarT2();
+    }
+  });
+
   $effect(() => {
     if (manufacturerId === null && manufacturers.length > 0) manufacturerId = manufacturers[0].id;
   });
@@ -80,6 +164,10 @@
   let plannerTitle = $derived(
     hasImage ? t('progress', { a: paintedCount, b: regions.length }) : t('t2EmptyTitle')
   );
+
+  // rf-08/RN11: plano nunca salvo ou com rascunho local pendente bloqueia a exportação.
+  let rascunhoPendente = $derived(draftBannerVisible || alteracaoSeq !== alteracaoSeqSalva);
+  let exportDisabled = $derived(planId == null || rascunhoPendente || reportGenerating);
 
   let shoppingItems = $derived.by((): ShoppingItem[] => {
     const map = new Map<number, ShoppingItem>();
@@ -231,8 +319,25 @@
       nextId = 1;
       selectedId = null;
       ownedPaints = new Set();
+      imageDataUrl = src;
+      marcarAlteracao();
     };
     img.src = src;
+  }
+
+  /** Restaura a foto de um plano/rascunho carregado — sem zerar regiões
+   *  (quem chama já as restaura à parte) e sem contar como alteração de
+   *  conteúdo (hidratação, não input do usuário). */
+  function loadImageForHydration(src: string): Promise<void> {
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        image = img;
+        resolve();
+      };
+      img.onerror = () => resolve();
+      img.src = src;
+    });
   }
 
   function onFileInput(e: Event) {
@@ -355,11 +460,13 @@
       painted: false,
       result: null,
       computing: true,
+      salvo: null,
     };
     regions = [...regions, region];
     selectedId = region.id;
     draw();
     await computeRegion(region.id);
+    marcarAlteracao();
   }
 
   /** D-002b: o cálculo é endereçado por ID, nunca por referência.
@@ -392,9 +499,14 @@
   // CA14: trocar de fabricante recalcula TODAS as regiões visíveis.
   async function onManufacturerChange(id: number) {
     manufacturerId = id;
-    for (const r of regions) {
-      void computeRegion(r.id);
-    }
+    const epoca = salvamentoSeq;
+    // marcarAlteracao só depois que o laço de recálculo termina — nunca
+    // antes, e nunca por região (um `$effect` sobre `regions` dispararia a
+    // cada escrita assíncrona de computeRegion, o que a spec proíbe).
+    await Promise.all(regions.map(r => computeRegion(r.id)));
+    // Um Salvar concluiu durante o recálculo: marcar agora ressuscitaria um
+    // rascunho para um plano que já está salvo.
+    if (salvamentoSeq === epoca) marcarAlteracao();
   }
 
   function selectRegion(id: number) {
@@ -404,6 +516,7 @@
 
   function togglePainted(r: PlannerRegion) {
     r.painted = !r.painted;
+    marcarAlteracao();
   }
 
   function removeSelected() {
@@ -411,6 +524,7 @@
     regions = regions.filter(r => r.id !== selectedId);
     selectedId = null;
     draw();
+    marcarAlteracao();
   }
 
   function saveRegionAsRecipe() {
@@ -426,6 +540,314 @@
       manufacturerId,
     });
     toast(t('recipeSavedToast'));
+  }
+
+  // ── rf-07: mapeamento tela → rascunho/DTO ──
+  // PlannerRegion não tem `regionName`/`note` — deriva-se do rótulo que a
+  // tela já usa (regionName(i)) e envia-se `note: ''` (não inventa campo).
+  function mapRegionCommon(r: PlannerRegion, i: number) {
+    const base = { x: r.x, y: r.y, r: r.r, g: r.g, b: r.b, hex: r.hex, regionName: regionName(i), note: '' };
+    if (!r.result) {
+      // Recálculo ainda não terminou (ou a API está fora): preserva a tinta
+      // que veio do plano salvo em vez de gravar vazio por cima.
+      const s = r.salvo;
+      return {
+        ...base,
+        paintId: s?.paintId ?? null,
+        paintBrand: s?.paintBrand ?? '',
+        paintName: s?.paintName ?? '',
+        paintCode: s?.paintCode ?? '',
+        deltaE: s?.deltaE ?? 0,
+      };
+    }
+    const ing = r.result.ingredients ?? [];
+    return {
+      ...base,
+      paintId: ing.length === 1 ? ing[0].paintId : null,
+      paintBrand: r.result.targetManufacturer ?? '',
+      paintName: ing.length === 1 ? ing[0].name : ing.map(x => x.name).join(' + '),
+      paintCode: ing.length === 1 ? ing[0].code : '',
+      deltaE: r.result.deltaE ?? 0,
+    };
+  }
+
+  function regiaoParaRascunho(r: PlannerRegion, i: number): RegiaoRascunho {
+    return { ...mapRegionCommon(r, i), painted: r.painted };
+  }
+
+  function regiaoParaDTO(r: PlannerRegion, i: number): RegiaoDTO {
+    return { ...mapRegionCommon(r, i), painted: r.painted ? 1 : 0 };
+  }
+
+  function buildPlanoDTO(): PlanoDTO {
+    return {
+      id: planId ?? undefined,
+      name: planName,
+      imageData: imageDataUrl,
+      selectedManufacturerId: manufacturerId,
+      regions: regions.map((r, i) => regiaoParaDTO(r, i)),
+    };
+  }
+
+  // ── rf-07: auto save local (RN3/RN4) ──
+  /** Chamada explícita nos mutadores de CONTEÚDO — nunca em zoom/pan/view
+   *  (RN4/CA7) e nunca antes da hidratação terminar (RN5). */
+  function marcarAlteracao() {
+    if (!hidratado) {
+      alteradoDuranteHidratacao = true;
+      return;
+    }
+    const payload: Rascunho = {
+      planId,
+      name: planName,
+      imageData: imageDataUrl,
+      regions: regions.map((r, i) => regiaoParaRascunho(r, i)),
+      selectedManufacturerId: manufacturerId,
+      salvoEm: new Date().toISOString(),
+    };
+    alteracaoSeq++;
+    agendarGravacao(payload);
+    // A escada de cota (RN8) só se resolve dentro do módulo depois do
+    // debounce de 1500 ms — relê um pouco depois para refletir na tela.
+    setTimeout(() => { autoSaveStatus = estadoAutoSave(); }, 1600);
+  }
+
+  // ── rf-07: hidratar / aplicar plano carregado ──
+  function resetToEmpty() {
+    planId = null;
+    planName = '';
+    imageDataUrl = '';
+    image = null;
+    hasImage = false;
+    regions = [];
+    nextId = 1;
+    selectedId = null;
+    ownedPaints = new Set();
+    manufacturerId = null;
+  }
+
+  /** Aplica um `PlanoDTO` (do servidor ou remontado do rascunho) ao estado
+   *  da tela. Nunca chama `marcarAlteracao` — é hidratação, não input. */
+  function applyLoadedPlan(plano: PlanoDTO, recalcular = true) {
+    planId = plano.id ?? null;
+    planName = plano.name;
+    imageDataUrl = plano.imageData || '';
+    manufacturerId = plano.selectedManufacturerId ?? null;
+    selectedId = null;
+    ownedPaints = new Set();
+    nextId = 1;
+    regions = plano.regions.map((rd): PlannerRegion => ({
+      id: nextId++,
+      x: rd.x, y: rd.y, r: rd.r, g: rd.g, b: rd.b, hex: rd.hex,
+      painted: rd.painted === 1,
+      result: null,
+      computing: false,
+      salvo: {
+        paintId: rd.paintId ?? null,
+        paintBrand: rd.paintBrand,
+        paintName: rd.paintName,
+        paintCode: rd.paintCode,
+        deltaE: rd.deltaE,
+      },
+    }));
+    if (imageDataUrl) {
+      hasImage = true;
+      void loadImageForHydration(imageDataUrl);
+    } else {
+      hasImage = false;
+      image = null;
+    }
+    // CA8: restaurar rascunho não consulta o servidor — a tinta já veio no
+    // próprio rascunho. Só o plano vindo do banco recalcula.
+    if (recalcular && manufacturerId != null) {
+      for (const r of regions) void computeRegion(r.id);
+    }
+  }
+
+  /** RN5 — entrada em T2: rascunho vence; senão plano ativo; senão vazia. */
+  async function hidratarT2() {
+    try {
+      const { rascunho, corrompido, truncado } = lerRascunho();
+      if (corrompido) {
+        toast(t('draftCorrupted'), 'error');
+      }
+      if (rascunho) {
+        // RN8 cortou a foto para caber na cota: a imagem continua no banco,
+        // então busca de lá em vez de reabrir o plano sem foto — e sem ela o
+        // Salvar seguinte apagaria a foto do plano no servidor.
+        let fotoDoServidor = '';
+        if (!rascunho.imageData && rascunho.planId != null) {
+          try {
+            const salvo = await carregarPlano(rascunho.planId);
+            fotoDoServidor = salvo.imageData;
+          } catch {
+            toast(t('draftNoPhoto'), 'error');
+          }
+        }
+        applyLoadedPlan({
+          id: rascunho.planId ?? undefined,
+          name: rascunho.name,
+          imageData: rascunho.imageData || fotoDoServidor,
+          selectedManufacturerId: rascunho.selectedManufacturerId,
+          regions: rascunho.regions.map((rr): RegiaoDTO => ({
+            x: rr.x, y: rr.y, r: rr.r, g: rr.g, b: rr.b, hex: rr.hex,
+            regionName: rr.regionName, note: rr.note,
+            paintId: rr.paintId, paintBrand: rr.paintBrand,
+            paintName: rr.paintName, paintCode: rr.paintCode,
+            deltaE: rr.deltaE, painted: rr.painted ? 1 : 0,
+          })),
+        }, false);
+        draftBannerVisible = true;
+        // CAN8: reaproveita a mensagem de teto de regiões — mesmo limite,
+        // mesmo aviso.
+        if (truncado) toast(t('errRegionsMax'), 'error');
+        return;
+      }
+      const idAtivo = lerPlanoAtivo();
+      if (idAtivo != null) {
+        try {
+          const plano = await carregarPlano(idAtivo);
+          // O usuário mexeu na tela enquanto o GET vinha: o trabalho dele
+          // vence o plano do servidor, e vira rascunho na próxima marcação.
+          if (!alteradoDuranteHidratacao) applyLoadedPlan(plano);
+        } catch (e) {
+          limparPlanoAtivo();
+          if (!alteradoDuranteHidratacao) resetToEmpty();
+          const key = e instanceof PlanoError && e.code === 'nao-encontrado' ? 'planNotFound' : 'planSaveError';
+          toast(t(key), 'error');
+        }
+      }
+    } finally {
+      hidratado = true;
+    }
+  }
+
+  // ── rf-07: descartar rascunho (RN6) ──
+  function onDiscardDraftClick() {
+    if (!window.confirm(t('discardDraftConfirm'))) return;
+    void discardDraftAndReload();
+  }
+
+  async function discardDraftAndReload() {
+    if (planId != null) {
+      // Nunca apaga antes de ter o plano em mãos — falhando, o rascunho
+      // permanece intacto.
+      try {
+        const plano = await carregarPlano(planId);
+        applyLoadedPlan(plano);
+        apagarRascunho();
+      } catch (e) {
+        if (e instanceof PlanoError && e.code === 'nao-encontrado') {
+          // Plano apagado no servidor: manter o rascunho deixaria o botão
+          // Descartar travado para sempre. Volta à tela vazia.
+          apagarRascunho();
+          limparPlanoAtivo();
+          resetToEmpty();
+          toast(t('planNotFound'), 'error');
+        } else {
+          saveState = 'error';
+          saveErrorKey = 'planSaveError';
+          return;
+        }
+      }
+    } else {
+      apagarRascunho();
+      resetToEmpty();
+    }
+    draftBannerVisible = false;
+    // Sem isto, `rascunhoPendente` fica verdadeiro para sempre depois de um
+    // descarte e a ação de exportar trava até o próximo Salvar.
+    alteracaoSeqSalva = alteracaoSeq;
+  }
+
+  // ── rf-07: Salvar (CA1-CA23, RN10, CAN1-3) ──
+  async function handleSave() {
+    if (saveState === 'saving') return; // RN10/CAN3: um Salvar por vez
+    const dto = buildPlanoDTO();
+    const erro = validarPlano(dto);
+    if (erro) {
+      // validarPlano devolve uma chave i18n como string solta (plans.ts não
+      // é arquivo desta fatia) — as chaves usadas são sempre as da spec.
+      validationErrorKey = erro as DictKey;
+      return;
+    }
+    validationErrorKey = null;
+    saveErrorKey = null;
+    saveState = 'saving';
+    const seqNoEnvio = alteracaoSeq;
+    try {
+      const { plano, suspeitaD003 } = await salvarPlano(dto);
+      // O id vem para o estado mesmo na suspeita de D-003: o servidor já
+      // commitou, e sem adotá-lo cada nova tentativa criaria outro plano.
+      if (plano.id != null) {
+        planId = plano.id;
+        gravarPlanoAtivo(plano.id);
+      }
+      if (suspeitaD003) {
+        // RN1/RN7/CA16: não apaga o rascunho.
+        saveState = 'error';
+        saveErrorKey = 'planSaveError';
+        return;
+      }
+      salvamentoSeq++;
+      if (alteracaoSeq === seqNoEnvio) {
+        apagarRascunho();
+        alteracaoSeqSalva = seqNoEnvio;
+      } else {
+        // O usuário editou durante o POST: apagar o rascunho perderia essa
+        // edição, que não entrou no plano enviado. Regrava com o estado atual.
+        marcarAlteracao();
+      }
+      draftBannerVisible = false;
+      const agora = new Date();
+      savedAtLabel = `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`;
+      saveState = 'saved';
+    } catch (e) {
+      saveState = 'error';
+      saveErrorKey = e instanceof PlanoError && e.code === 'nao-encontrado' ? 'planNotFound' : 'planSaveError';
+    }
+  }
+
+  // ── rf-08: exportar relatório (CA16-CA18, CAN1, CAN8) ──
+  async function handleExport() {
+    if (reportGenerating) return; // CAN8: um download por vez
+    if (planId == null || rascunhoPendente) {
+      reportErrorKey = 'exportSaveFirst';
+      return;
+    }
+    // CAN1: o id só pode vir do estado interno da tela, nunca de entrada do
+    // usuário — checagem defensiva antes de montar a URL em plans.ts.
+    if (!Number.isInteger(planId) || planId <= 0) {
+      reportErrorKey = 'exportInvalid';
+      return;
+    }
+    reportErrorKey = null;
+    reportGenerating = true;
+    try {
+      const { blob, filename } = await baixarRelatorio(planId, reportFormat);
+      // RN12: fetch + blob + âncora temporária — nunca navegação direta.
+      const url = URL.createObjectURL(blob);
+      try {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    } catch (e) {
+      if (e instanceof PlanoError && e.code === 'nao-encontrado') {
+        reportErrorKey = 'planNotFound';
+      } else if (e instanceof PlanoError && e.code === 'invalido') {
+        reportErrorKey = 'exportInvalid';
+      } else {
+        reportErrorKey = 'exportFailed';
+      }
+    } finally {
+      reportGenerating = false;
+    }
   }
 </script>
 
@@ -640,6 +1062,102 @@
         </div>
       </div>
 
+      <div style="flex-shrink: 0; padding: 16px 20px; border-top: 1px solid var(--color-line); display: flex; flex-direction: column; gap: 10px;">
+        {#if draftBannerVisible}
+          <div role="status" aria-live="polite" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--color-accent-700); border-radius: 8px; background: var(--color-accent-panel); font-size: 13.5px; color: var(--color-text);">
+            <span>{t('draftRestored')}</span>
+            <button
+              class="t2-discard-btn"
+              style="min-width: 44px; min-height: 44px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-300); font-family: inherit; font-size: 13px; cursor: pointer;"
+              onclick={onDiscardDraftClick}
+            >{t('discardDraftBtn')}</button>
+          </div>
+        {/if}
+
+        {#if autoSaveStatus === 'sem-foto'}
+          <div aria-live="polite" style="padding: 8px 12px; border-radius: 8px; background: var(--color-raised); font-size: 13px; color: var(--color-neutral-400);">
+            <i class="ph ph-warning" style="margin-right: 6px;"></i>{t('draftNoPhoto')}
+          </div>
+        {:else if autoSaveStatus === 'desligado'}
+          <div role="alert" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--color-neutral-800); background: var(--color-raised); font-size: 13px; color: var(--color-neutral-300);">
+            <i class="ph ph-warning-circle" style="margin-right: 6px;"></i>{t('autosaveOff')}
+          </div>
+        {/if}
+
+        <label for="plan-name-input" class="section-label" style="margin: 0;">{t('planNameLabel')}</label>
+        <input
+          id="plan-name-input"
+          type="text"
+          bind:value={planName}
+          oninput={marcarAlteracao}
+          placeholder={planNamePlaceholder}
+          style="height: 44px; padding: 0 12px; border: 1px solid var(--color-field-border); border-radius: 8px; background: var(--color-bg); color: var(--color-text); font-family: inherit; font-size: 14px;"
+        />
+
+        {#if validationErrorKey}
+          <div role="alert" style="font-size: 13px; color: var(--color-neutral-300);">
+            <i class="ph ph-warning-circle" style="margin-right: 6px;"></i>{t(validationErrorKey)}
+          </div>
+        {/if}
+
+        <button
+          class="t2-save-plan-btn"
+          style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 56px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 16px; font-weight: 500; cursor: pointer;"
+          disabled={saveState === 'saving'}
+          onclick={handleSave}
+        >
+          {#if saveState === 'saving'}
+            <Spinner size={18} label={t('planSaving')} />
+          {:else}
+            <i class="ph ph-floppy-disk" style="font-size: 19px;"></i>
+          {/if}
+          {t('savePlanBtn')}
+        </button>
+
+        <div aria-live="polite" style="min-height: 16px; font-size: 12.5px; color: var(--color-neutral-500);">
+          {#if saveState === 'saving'}{t('planSaving')}
+          {:else if saveState === 'saved'}{t('planSavedAt', { hora: savedAtLabel })}
+          {:else if saveState === 'error' && saveErrorKey}{t(saveErrorKey)}
+          {/if}
+        </div>
+      </div>
+
+      <div style="flex-shrink: 0; padding: 16px 20px; border-top: 1px solid var(--color-line); display: flex; flex-direction: column; gap: 10px;">
+        <p class="section-label" style="margin: 0;">{t('exportReportBtn')}</p>
+        <fieldset style="display: flex; align-items: center; gap: 18px; margin: 0; padding: 0; border: none;">
+          <legend style="position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap;">{t('exportFormatLabel')}</legend>
+          <label style="display: inline-flex; align-items: center; gap: 8px; min-width: 44px; min-height: 44px; font-size: 14px; color: var(--color-text); cursor: pointer;">
+            <input type="radio" name="report-format" value="pdf" bind:group={reportFormat} style="width: 20px; height: 20px; accent-color: var(--color-accent);" />
+            {t('exportPdf')}
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 8px; min-width: 44px; min-height: 44px; font-size: 14px; color: var(--color-text); cursor: pointer;">
+            <input type="radio" name="report-format" value="png" bind:group={reportFormat} style="width: 20px; height: 20px; accent-color: var(--color-accent);" />
+            {t('exportPng')}
+          </label>
+        </fieldset>
+
+        <button
+          class="t2-export-btn"
+          style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 44px; height: 52px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;"
+          disabled={exportDisabled}
+          onclick={handleExport}
+        >
+          {#if reportGenerating}
+            <Spinner size={18} label={t('exportGenerating')} />
+          {:else}
+            <i class="ph ph-file-arrow-down" style="font-size: 18px;"></i>
+          {/if}
+          {t('exportReportBtn')}
+        </button>
+
+        <div aria-live="polite" style="min-height: 16px; font-size: 12.5px; color: var(--color-neutral-500);">
+          {#if reportGenerating}{t('exportGenerating')}
+          {:else if reportErrorKey}{t(reportErrorKey)}
+          {:else if planId == null || rascunhoPendente}{t('exportSaveFirst')}
+          {/if}
+        </div>
+      </div>
+
       <div style="flex-shrink: 0; padding: 16px 20px; border-top: 1px solid var(--color-line);">
         <button
           class="t2-save-btn"
@@ -686,6 +1204,29 @@
   }
 
   .t2-save-btn:disabled {
+    opacity: 0.45;
+    pointer-events: none;
+  }
+
+  .t2-save-plan-btn:hover {
+    background: var(--color-accent-hover);
+  }
+
+  .t2-save-plan-btn:disabled {
+    opacity: 0.45;
+    pointer-events: none;
+  }
+
+  .t2-discard-btn:hover {
+    border-color: var(--color-accent-700);
+    color: var(--color-accent-400);
+  }
+
+  .t2-export-btn:hover {
+    background: var(--color-accent-hover);
+  }
+
+  .t2-export-btn:disabled {
     opacity: 0.45;
     pointer-events: none;
   }

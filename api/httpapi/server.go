@@ -36,6 +36,7 @@ func withCORS(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 		ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
 		ctx.Response.Header.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		ctx.Response.Header.Set("Access-Control-Allow-Headers", "Content-Type")
+		ctx.Response.Header.Set("Access-Control-Expose-Headers", "Content-Disposition")
 		if string(ctx.Method()) == fasthttp.MethodOptions {
 			ctx.SetStatusCode(fasthttp.StatusNoContent)
 			return

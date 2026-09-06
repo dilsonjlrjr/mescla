@@ -59,6 +59,7 @@ func NewRouter(svc *service.PaintService) *router.Router {
 	r.POST("/plans", handleSavePlan(svc))
 	r.GET("/plans/{id}", handleLoadPlan(svc))
 	r.DELETE("/plans/{id}", handleDeletePlan(svc))
+	r.GET("/plans/{id}/report", handleReportPlan(svc))
 
 	return r
 }

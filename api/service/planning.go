@@ -41,18 +41,70 @@ func ensurePlanningSchema(db *sql.DB) error {
 
 		CREATE INDEX IF NOT EXISTS idx_painting_regions_plan ON painting_regions(plan_id, sort_order);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+
+	if err := addColumnIfMissing(db, "painting_regions", "painted", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := addColumnIfMissing(db, "painting_plans", "selected_manufacturer_id", "INTEGER"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// addColumnIfMissing roda um ALTER TABLE ADD COLUMN de forma idempotente,
+// já que o SQLite não suporta ADD COLUMN IF NOT EXISTS. Verifica via
+// PRAGMA table_info se a coluna já existe antes de tentar adicioná-la.
+func addColumnIfMissing(db *sql.DB, table, column, definition string) error {
+	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return fmt.Errorf("PRAGMA table_info(%s): %w", table, err)
+	}
+	defer rows.Close()
+
+	var (
+		cid       int
+		name      string
+		colType   string
+		notNull   int
+		dfltValue sql.NullString
+		pk        int
+	)
+	exists := false
+	for rows.Next() {
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+			return fmt.Errorf("lendo table_info(%s): %w", table, err)
+		}
+		if name == column {
+			exists = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterando table_info(%s): %w", table, err)
+	}
+	if exists {
+		return nil
+	}
+
+	if _, err := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition)); err != nil {
+		return fmt.Errorf("adicionando coluna %s.%s: %w", table, column, err)
+	}
+	return nil
 }
 
 // PaintingPlanDTO é um plano de pintura no formato trocado com o frontend.
 type PaintingPlanDTO struct {
-	ID          int64               `json:"id"`
-	Name        string              `json:"name"`
-	ImageData   string              `json:"imageData,omitempty"`
-	Regions     []PaintingRegionDTO `json:"regions"`
-	CreatedAt   string              `json:"createdAt"`
-	UpdatedAt   string              `json:"updatedAt"`
-	RegionCount int                 `json:"regionCount,omitempty"`
+	ID                     int64               `json:"id"`
+	Name                   string              `json:"name"`
+	ImageData              string              `json:"imageData,omitempty"`
+	Regions                []PaintingRegionDTO `json:"regions"`
+	SelectedManufacturerID *int64              `json:"selectedManufacturerId,omitempty"`
+	CreatedAt              string              `json:"createdAt"`
+	UpdatedAt              string              `json:"updatedAt"`
+	RegionCount            int                 `json:"regionCount,omitempty"`
 }
 
 // PaintingRegionDTO é uma região de cor identificada.
@@ -72,14 +124,15 @@ type PaintingRegionDTO struct {
 	PaintName  string  `json:"paintName"`
 	PaintCode  string  `json:"paintCode"`
 	DeltaE     float64 `json:"deltaE"`
+	Painted    int     `json:"painted"`
 }
 
 const (
-	maxRegionsPerPlan = 50
-	maxImageDataBytes = 2 * 1024 * 1024 // 2MB
-	maxNameChars      = 200
+	maxRegionsPerPlan  = 50
+	maxImageDataBytes  = 2 * 1024 * 1024 // 2MB
+	maxNameChars       = 200
 	maxRegionNameChars = 100
-	maxNoteChars      = 2000
+	maxNoteChars       = 2000
 )
 
 // validar limites de entrada (CAN1, CAN2: servidor deriva id/created_at, ignora do cliente)
@@ -130,8 +183,8 @@ func (s *PaintService) SavePlan(plan PaintingPlanDTO) (PaintingPlanDTO, error) {
 		plan.CreatedAt = now
 		plan.UpdatedAt = now
 		res, err := tx.Exec(
-			"INSERT INTO painting_plans (name, image_data, created_at, updated_at) VALUES (?, ?, ?, ?)",
-			plan.Name, plan.ImageData, plan.CreatedAt, plan.UpdatedAt,
+			"INSERT INTO painting_plans (name, image_data, selected_manufacturer_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+			plan.Name, plan.ImageData, plan.SelectedManufacturerID, plan.CreatedAt, plan.UpdatedAt,
 		)
 		if err != nil {
 			return PaintingPlanDTO{}, fmt.Errorf("inserindo plano: %w", err)
@@ -143,54 +196,54 @@ func (s *PaintService) SavePlan(plan PaintingPlanDTO) (PaintingPlanDTO, error) {
 		err := tx.QueryRow("SELECT created_at FROM painting_plans WHERE id = ?", plan.ID).Scan(&originalCreatedAt)
 		if err != nil {
 			if err == sql.ErrNoRows {
-				// ID do cliente não existe → ignora, cria novo
+				// ID do cliente não existe → ignora, cria novo (D-003: cai no laço comum de
+				// inserção de regiões e no commit único do fim, em vez de sair aqui sem regiões).
 				plan.ID = 0
 				plan.CreatedAt = now
 				plan.UpdatedAt = now
 				res, insErr := tx.Exec(
-					"INSERT INTO painting_plans (name, image_data, created_at, updated_at) VALUES (?, ?, ?, ?)",
-					plan.Name, plan.ImageData, plan.CreatedAt, plan.UpdatedAt,
+					"INSERT INTO painting_plans (name, image_data, selected_manufacturer_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+					plan.Name, plan.ImageData, plan.SelectedManufacturerID, plan.CreatedAt, plan.UpdatedAt,
 				)
 				if insErr != nil {
 					return PaintingPlanDTO{}, fmt.Errorf("inserindo plano: %w", insErr)
 				}
 				plan.ID, _ = res.LastInsertId()
-				// Pula o resto do update (sem delete de regiões, sem update)
-				if err := tx.Commit(); err != nil {
-					return PaintingPlanDTO{}, fmt.Errorf("commit: %w", err)
-				}
-				return plan, nil
+			} else {
+				return PaintingPlanDTO{}, fmt.Errorf("buscando plano existente: %w", err)
 			}
-			return PaintingPlanDTO{}, fmt.Errorf("buscando plano existente: %w", err)
-		}
-		plan.CreatedAt = originalCreatedAt
-		plan.UpdatedAt = now
+		} else {
+			plan.CreatedAt = originalCreatedAt
+			plan.UpdatedAt = now
 
-		res, err := tx.Exec(
-			"UPDATE painting_plans SET name = ?, image_data = ?, updated_at = ? WHERE id = ?",
-			plan.Name, plan.ImageData, plan.UpdatedAt, plan.ID,
-		)
-		if err != nil {
-			return PaintingPlanDTO{}, fmt.Errorf("atualizando plano: %w", err)
-		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			return PaintingPlanDTO{}, fmt.Errorf("plano não encontrado (id %d)", plan.ID)
-		}
+			res, err := tx.Exec(
+				"UPDATE painting_plans SET name = ?, image_data = ?, selected_manufacturer_id = ?, updated_at = ? WHERE id = ?",
+				plan.Name, plan.ImageData, plan.SelectedManufacturerID, plan.UpdatedAt, plan.ID,
+			)
+			if err != nil {
+				return PaintingPlanDTO{}, fmt.Errorf("atualizando plano: %w", err)
+			}
+			if n, _ := res.RowsAffected(); n == 0 {
+				return PaintingPlanDTO{}, fmt.Errorf("plano não encontrado (id %d)", plan.ID)
+			}
 
-		// Remove regiões antigas (replace all)
-		if _, err := tx.Exec("DELETE FROM painting_regions WHERE plan_id = ?", plan.ID); err != nil {
-			return PaintingPlanDTO{}, fmt.Errorf("removendo regiões antigas: %w", err)
+			// Remove regiões antigas (replace all)
+			if _, err := tx.Exec("DELETE FROM painting_regions WHERE plan_id = ?", plan.ID); err != nil {
+				return PaintingPlanDTO{}, fmt.Errorf("removendo regiões antigas: %w", err)
+			}
 		}
 	}
 
 	// Insere novas regiões
 	for i, r := range plan.Regions {
+		painted := normalizePainted(r.Painted)
+		plan.Regions[i].Painted = painted
 		_, err := tx.Exec(
 			`INSERT INTO painting_regions
-			 (plan_id, x, y, r, g, b, hex, region_name, note, paint_id, paint_brand, paint_name, paint_code, delta_e, sort_order)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 (plan_id, x, y, r, g, b, hex, region_name, note, paint_id, paint_brand, paint_name, paint_code, delta_e, sort_order, painted)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			plan.ID, r.X, r.Y, r.R, r.G, r.B, r.Hex, r.RegionName, r.Note,
-			nullableInt64(r.PaintID), r.PaintBrand, r.PaintName, r.PaintCode, r.DeltaE, i,
+			nullableInt64(r.PaintID), r.PaintBrand, r.PaintName, r.PaintCode, r.DeltaE, i, painted,
 		)
 		if err != nil {
 			return PaintingPlanDTO{}, fmt.Errorf("inserindo região %d: %w", i+1, err)
@@ -211,10 +264,19 @@ func nullableInt64(v int64) interface{} {
 	return v
 }
 
+// normalizePainted garante que painted grave só 0 ou 1: qualquer valor
+// diferente de 0 vira 1 — nunca grava 2 ou outro valor adulterado (CAN6).
+func normalizePainted(v int) int {
+	if v == 0 {
+		return 0
+	}
+	return 1
+}
+
 // ListPlans lista todos os planos (resumo: sem image_data, sem regiões completas).
 func (s *PaintService) ListPlans() ([]PaintingPlanDTO, error) {
 	rows, err := s.db.Query(`
-		SELECT p.id, p.name, p.created_at, p.updated_at,
+		SELECT p.id, p.name, p.created_at, p.updated_at, p.selected_manufacturer_id,
 		       COALESCE((SELECT COUNT(*) FROM painting_regions WHERE plan_id = p.id), 0)
 		FROM painting_plans p
 		ORDER BY p.updated_at DESC
@@ -227,8 +289,12 @@ func (s *PaintService) ListPlans() ([]PaintingPlanDTO, error) {
 	result := make([]PaintingPlanDTO, 0)
 	for rows.Next() {
 		var p PaintingPlanDTO
-		if err := rows.Scan(&p.ID, &p.Name, &p.CreatedAt, &p.UpdatedAt, &p.RegionCount); err != nil {
+		var selectedManufacturerID sql.NullInt64
+		if err := rows.Scan(&p.ID, &p.Name, &p.CreatedAt, &p.UpdatedAt, &selectedManufacturerID, &p.RegionCount); err != nil {
 			return nil, err
+		}
+		if selectedManufacturerID.Valid {
+			p.SelectedManufacturerID = &selectedManufacturerID.Int64
 		}
 		result = append(result, p)
 	}
@@ -238,15 +304,19 @@ func (s *PaintService) ListPlans() ([]PaintingPlanDTO, error) {
 // LoadPlan carrega um plano completo (imagem + todas as regiões).
 func (s *PaintService) LoadPlan(id int64) (PaintingPlanDTO, error) {
 	var plan PaintingPlanDTO
+	var selectedManufacturerID sql.NullInt64
 	err := s.db.QueryRow(
-		"SELECT id, name, COALESCE(image_data, ''), created_at, updated_at FROM painting_plans WHERE id = ?",
+		"SELECT id, name, COALESCE(image_data, ''), created_at, updated_at, selected_manufacturer_id FROM painting_plans WHERE id = ?",
 		id,
-	).Scan(&plan.ID, &plan.Name, &plan.ImageData, &plan.CreatedAt, &plan.UpdatedAt)
+	).Scan(&plan.ID, &plan.Name, &plan.ImageData, &plan.CreatedAt, &plan.UpdatedAt, &selectedManufacturerID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return PaintingPlanDTO{}, fmt.Errorf("plano não encontrado (id %d)", id)
 		}
 		return PaintingPlanDTO{}, err
+	}
+	if selectedManufacturerID.Valid {
+		plan.SelectedManufacturerID = &selectedManufacturerID.Int64
 	}
 
 	// Carrega regiões
@@ -255,7 +325,7 @@ func (s *PaintService) LoadPlan(id int64) (PaintingPlanDTO, error) {
 		       COALESCE(region_name, ''), COALESCE(note, ''),
 		       COALESCE(paint_id, 0), COALESCE(paint_brand, ''),
 		       COALESCE(paint_name, ''), COALESCE(paint_code, ''),
-		       COALESCE(delta_e, 0)
+		       COALESCE(delta_e, 0), COALESCE(painted, 0)
 		FROM painting_regions
 		WHERE plan_id = ?
 		ORDER BY sort_order
@@ -270,6 +340,7 @@ func (s *PaintService) LoadPlan(id int64) (PaintingPlanDTO, error) {
 		var r PaintingRegionDTO
 		if err := rows.Scan(&r.ID, &r.X, &r.Y, &r.R, &r.G, &r.B, &r.Hex,
 			&r.RegionName, &r.Note, &r.PaintID, &r.PaintBrand, &r.PaintName, &r.PaintCode, &r.DeltaE,
+			&r.Painted,
 		); err != nil {
 			return PaintingPlanDTO{}, err
 		}
