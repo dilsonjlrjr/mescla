@@ -14,6 +14,9 @@
   // pelas regiões (US-15/T3 herda a receita salva no rodapé).
   import Header from '../components/Header.svelte';
   import Spinner from '../components/Spinner.svelte';
+  import {
+    fitView, toImage, toScreen, zoomAround, zoomPercent, type View,
+  } from '../planner/viewport';
   import { suggestRecipeForColor, type EquivalentRecipe } from '../services/engine';
   import { allManufacturers } from '../services/catalog';
   import { saveRecipe } from '../services/recipes.svelte';
@@ -42,6 +45,10 @@
   }
 
   let canvasEl: HTMLCanvasElement | undefined = $state();
+  /** a caixa da foto — é ELA que dá o tamanho do bitmap e o enquadramento
+   *  (D-002a: medir o próprio canvas é circular, porque o bitmap dependia da
+   *  resolução da imagem). */
+  let boxEl: HTMLDivElement | undefined = $state();
   let fileInputEl: HTMLInputElement | undefined = $state();
   let image: HTMLImageElement | null = $state(null);
   let hasImage = $state(false);
@@ -50,9 +57,7 @@
   let nextId = $state(1);
   let selectedId: number | null = $state(null);
 
-  let zoom = $state(1);
-  let panX = $state(0);
-  let panY = $state(0);
+  let view: View = $state({ zoom: 1, panX: 0, panY: 0 });
   let touchStartDist = 0;
   let touchStartZoom = 1;
 
@@ -131,24 +136,37 @@
     return v || fallback;
   }
 
+  /** Tamanho da caixa da foto em CSS px. Todo o enquadramento é calculado
+   *  aqui — nunca a partir do canvas, que é justamente o que se ajusta. */
+  function boxSize(): { w: number; h: number } {
+    return { w: boxEl?.clientWidth ?? 0, h: boxEl?.clientHeight ?? 0 };
+  }
+
   function draw() {
     const c = canvasEl;
     if (!c || !image) return;
     const ctx = c.getContext('2d');
     if (!ctx) return;
 
-    c.width = image.width;
-    c.height = image.height;
-    ctx.clearRect(0, 0, c.width, c.height);
+    const { w, h } = boxSize();
+    if (w <= 0 || h <= 0) return;
+    const dpr = window.devicePixelRatio || 1;
+
+    // O bitmap acompanha a CAIXA (em pixels do dispositivo); o desenho fala em
+    // CSS px, com a escala do dispositivo aplicada de uma vez na transformação.
+    c.width = Math.max(1, Math.round(w * dpr));
+    c.height = Math.max(1, Math.round(h * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
     ctx.save();
-    ctx.translate(panX, panY);
-    ctx.scale(zoom, zoom);
+    ctx.translate(view.panX, view.panY);
+    ctx.scale(view.zoom, view.zoom);
     ctx.drawImage(image, 0, 0);
     ctx.restore();
 
     regions.forEach((r, i) => {
-      const sx = r.x * zoom + panX;
-      const sy = r.y * zoom + panY;
+      const { x: sx, y: sy } = toScreen(view, r.x, r.y);
       const R = selectedId === r.id ? 16 : 12;
       ctx.save();
       ctx.translate(sx, sy);
@@ -177,18 +195,31 @@
     });
   }
 
+  /** Enquadra a foto inteira na caixa (também é o botão "ajustar à tela"). */
+  function fitToBox() {
+    if (!image) return;
+    const { w, h } = boxSize();
+    if (w <= 0 || h <= 0) return;
+    view = fitView(image.width, image.height, w, h);
+    draw();
+  }
+
   $effect(() => {
-    if (image && canvasEl) {
-      requestAnimationFrame(() => {
-        if (!canvasEl || !image) return;
-        const cw = canvasEl.clientWidth || 640;
-        const ch = canvasEl.clientHeight || 480;
-        zoom = Math.min(cw / image.width, ch / image.height, 1);
-        panX = (cw - image.width * zoom) / 2;
-        panY = (ch - image.height * zoom) / 2;
-        draw();
-      });
-    }
+    if (!image || !canvasEl) return;
+    // Uma volta de layout antes de medir: no primeiro quadro depois do
+    // {#if hasImage} a caixa ainda não tem tamanho.
+    requestAnimationFrame(fitToBox);
+  });
+
+  // Redimensionar a janela mantém o enquadramento válido; sem isso a foto
+  // fica deslocada depois de girar o tablet.
+  $effect(() => {
+    if (!boxEl) return;
+    const ro = new ResizeObserver(() => {
+      if (image) draw();
+    });
+    ro.observe(boxEl);
+    return () => ro.disconnect();
   });
 
   function loadImage(src: string) {
@@ -213,20 +244,19 @@
     reader.readAsDataURL(file);
   }
 
+  /** Ponto do evento em CSS px relativos à caixa — mesmo espaço do desenho. */
   function canvasPos(clientX: number, clientY: number) {
-    if (!canvasEl) return { mx: 0, my: 0 };
-    const rect = canvasEl.getBoundingClientRect();
-    const sx = canvasEl.width / rect.width;
-    const sy = canvasEl.height / rect.height;
-    return { mx: (clientX - rect.left) * sx, my: (clientY - rect.top) * sy };
+    const el = canvasEl ?? boxEl;
+    if (!el) return { mx: 0, my: 0 };
+    const rect = el.getBoundingClientRect();
+    return { mx: clientX - rect.left, my: clientY - rect.top };
   }
 
   function hitTest(cx: number, cy: number): PlannerRegion | null {
     let best: PlannerRegion | null = null;
     let bestDist = 22;
     for (const r of regions) {
-      const sx = r.x * zoom + panX;
-      const sy = r.y * zoom + panY;
+      const { x: sx, y: sy } = toScreen(view, r.x, r.y);
       const d = Math.hypot(cx - sx, cy - sy);
       if (d < bestDist) {
         bestDist = d;
@@ -234,6 +264,21 @@
       }
     }
     return best;
+  }
+
+  // ── rf-06: zoom in/out ──
+  function zoomBy(factor: number, anchor?: { x: number; y: number }) {
+    if (!image) return;
+    const { w, h } = boxSize();
+    view = zoomAround(view, factor, anchor ?? { x: w / 2, y: h / 2 });
+    draw();
+  }
+
+  function onWheel(e: WheelEvent) {
+    if (!image) return;
+    e.preventDefault();
+    const { mx, my } = canvasPos(e.clientX, e.clientY);
+    zoomBy(e.deltaY < 0 ? 1.12 : 1 / 1.12, { x: mx, y: my });
   }
 
   function getTouchDist(t: TouchList): number {
@@ -246,7 +291,7 @@
     e.preventDefault();
     if (e.touches.length === 2) {
       touchStartDist = getTouchDist(e.touches);
-      touchStartZoom = zoom;
+      touchStartZoom = view.zoom;
       return;
     }
     if (e.touches.length === 1) {
@@ -260,7 +305,13 @@
     e.preventDefault();
     if (e.touches.length === 2 && touchStartDist > 0) {
       const dist = getTouchDist(e.touches);
-      zoom = Math.max(0.25, Math.min(5, touchStartZoom * (dist / touchStartDist)));
+      const alvo = touchStartZoom * (dist / touchStartDist);
+      const meio = canvasPos(
+        (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        (e.touches[0].clientY + e.touches[1].clientY) / 2,
+      );
+      // A pinça também ancora no ponto entre os dedos.
+      view = zoomAround(view, alvo / view.zoom, { x: meio.mx, y: meio.my });
       draw();
     }
   }
@@ -278,8 +329,9 @@
       draw();
       return;
     }
-    const ix = Math.round((mx - panX) / zoom);
-    const iy = Math.round((my - panY) / zoom);
+    const p = toImage(view, mx, my);
+    const ix = Math.round(p.x);
+    const iy = Math.round(p.y);
     if (ix >= 0 && iy >= 0 && ix < image.width && iy < image.height) {
       void addRegion(ix, iy);
     }
@@ -307,22 +359,32 @@
     regions = [...regions, region];
     selectedId = region.id;
     draw();
-    await computeRegion(region);
+    await computeRegion(region.id);
   }
 
-  async function computeRegion(region: PlannerRegion) {
-    region.computing = true;
+  /** D-002b: o cálculo é endereçado por ID, nunca por referência.
+   *  `regions` é `$state`, então o que está no array é o PROXY da região —
+   *  escrever no objeto cru que `addRegion` criou não dispara reatividade
+   *  nenhuma, e a tela fica presa em "calculando" com a resposta já em mãos. */
+  async function computeRegion(id: number) {
+    const alvo = () => regions.find(r => r.id === id) ?? null;
+    const inicio = alvo();
+    if (!inicio) return;
+    inicio.computing = true;
     try {
-      if (manufacturerId != null) {
-        region.result = await suggestRecipeForColor(region.r, region.g, region.b, manufacturerId);
-      } else {
-        region.result = null;
-      }
+      const res =
+        manufacturerId != null
+          ? await suggestRecipeForColor(inicio.r, inicio.g, inicio.b, manufacturerId)
+          : null;
+      const agora = alvo();
+      if (agora) agora.result = res;
     } catch (e) {
       console.error('Erro ao calcular região:', e);
-      region.result = null;
+      const agora = alvo();
+      if (agora) agora.result = null;
     } finally {
-      region.computing = false;
+      const agora = alvo();
+      if (agora) agora.computing = false;
       draw();
     }
   }
@@ -331,7 +393,7 @@
   async function onManufacturerChange(id: number) {
     manufacturerId = id;
     for (const r of regions) {
-      void computeRegion(r);
+      void computeRegion(r.id);
     }
   }
 
@@ -386,14 +448,20 @@
 
   <div style="flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 34%);">
     <div style="position: relative; border-right: 1px solid var(--color-line); overflow: hidden;">
-      <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: repeating-conic-gradient(var(--color-panel) 0% 25%, var(--color-bg) 0% 50%) 0 0 / 40px 40px; cursor: crosshair;">
+      <div
+        bind:this={boxEl}
+        style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: repeating-conic-gradient(var(--color-panel) 0% 25%, var(--color-bg) 0% 50%) 0 0 / 40px 40px; cursor: crosshair;"
+      >
         {#if hasImage}
+          <!-- O canvas ocupa a caixa inteira; o enquadramento da foto vive na
+               transformação, não no tamanho do elemento (D-002a). -->
           <canvas
             bind:this={canvasEl}
-            style="max-width: 100%; max-height: 100%; touch-action: none; cursor: crosshair;"
+            style="width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair;"
             ontouchstart={onTouchStart}
             ontouchmove={onTouchMove}
             onclick={onCanvasClick}
+            onwheel={onWheel}
           ></canvas>
         {:else}
           <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 20px; pointer-events: none;">
@@ -403,6 +471,46 @@
           </div>
         {/if}
       </div>
+
+      {#if hasImage}
+        <!-- rf-06: zoom in/out. A pinça já existia; no desktop não havia como
+             aproximar. Roda do mouse faz o mesmo, ancorada no cursor. -->
+        <div
+          style="position: absolute; right: 20px; top: 20px; display: flex; align-items: center; gap: 6px; padding: 6px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: rgba(22,24,38,0.92); backdrop-filter: blur(8px);"
+        >
+          <button
+            class="t2-zoom-btn"
+            aria-label={t('zoomOut')}
+            title={t('zoomOut')}
+            onclick={() => zoomBy(1 / 1.25)}
+            style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-300); cursor: pointer;"
+          >
+            <i class="ph ph-minus" style="font-size: 18px;"></i>
+          </button>
+          <span
+            aria-live="polite"
+            style="min-width: 58px; text-align: center; font-size: 13px; color: var(--color-neutral-400); font-variant-numeric: tabular-nums;"
+          >{zoomPercent(view)}%</span>
+          <button
+            class="t2-zoom-btn"
+            aria-label={t('zoomIn')}
+            title={t('zoomIn')}
+            onclick={() => zoomBy(1.25)}
+            style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-300); cursor: pointer;"
+          >
+            <i class="ph ph-plus" style="font-size: 18px;"></i>
+          </button>
+          <button
+            class="t2-zoom-btn"
+            aria-label={t('zoomFit')}
+            title={t('zoomFit')}
+            onclick={fitToBox}
+            style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-300); cursor: pointer;"
+          >
+            <i class="ph ph-corners-out" style="font-size: 18px;"></i>
+          </button>
+        </div>
+      {/if}
 
       <div style="position: absolute; left: 20px; bottom: 20px; display: flex; align-items: center; gap: 14px; padding: 12px 18px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: rgba(22,24,38,0.92); backdrop-filter: blur(8px);">
         <span style="font-size: 15px; color: var(--color-neutral-400);">{t('progress', { a: paintedCount, b: regions.length })}</span>
@@ -560,6 +668,11 @@
   }
 
   .t2-done-btn:hover {
+    border-color: var(--color-accent-700);
+    color: var(--color-accent-400);
+  }
+
+  .t2-zoom-btn:hover {
     border-color: var(--color-accent-700);
     color: var(--color-accent-400);
   }

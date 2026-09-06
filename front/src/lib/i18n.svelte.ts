@@ -88,7 +88,8 @@ export const dict = {
     deleteRecipeConfirm: 'Excluir a receita “{name}”?', recipeSavedToast: 'Receita salva.',
     tabPaints: 'Tintas', errNameRequired: 'Dê um nome à tinta.',
     errHexInvalid: 'Hex inválido. Use o formato #rrggbb.', errMakerRequired: 'Escolha o fabricante.',
-    confirmBtn: 'Confirmar'
+    confirmBtn: 'Confirmar',
+    zoomIn: 'Aproximar', zoomOut: 'Afastar', zoomFit: 'Ajustar à tela', zoomLevel: 'Zoom {n}%'
   },
   en: {
     _name: 'English (US)', _dec: '.',
@@ -174,7 +175,8 @@ export const dict = {
     deleteRecipeConfirm: 'Delete the recipe "{name}"?', recipeSavedToast: 'Recipe saved.',
     tabPaints: 'Paints', errNameRequired: 'Give the paint a name.',
     errHexInvalid: 'Invalid hex. Use the #rrggbb format.', errMakerRequired: 'Choose the manufacturer.',
-    confirmBtn: 'Confirm'
+    confirmBtn: 'Confirm',
+    zoomIn: 'Zoom in', zoomOut: 'Zoom out', zoomFit: 'Fit to screen', zoomLevel: 'Zoom {n}%'
   },
   es: {
     _name: 'Español', _dec: ',',
@@ -260,7 +262,8 @@ export const dict = {
     deleteRecipeConfirm: '¿Eliminar la receta “{name}”?', recipeSavedToast: 'Receta guardada.',
     tabPaints: 'Pinturas', errNameRequired: 'Ponle un nombre a la pintura.',
     errHexInvalid: 'Hex inválido. Usa el formato #rrggbb.', errMakerRequired: 'Elige el fabricante.',
-    confirmBtn: 'Confirmar'
+    confirmBtn: 'Confirmar',
+    zoomIn: 'Acercar', zoomOut: 'Alejar', zoomFit: 'Ajustar a la pantalla', zoomLevel: 'Zoom {n}%'
   },
   fr: {
     _name: 'Français', _dec: ',',
@@ -346,7 +349,8 @@ export const dict = {
     deleteRecipeConfirm: 'Supprimer la recette « {name} » ?', recipeSavedToast: 'Recette enregistrée.',
     tabPaints: 'Peintures', errNameRequired: 'Donnez un nom à la peinture.',
     errHexInvalid: 'Hex invalide. Utilisez le format #rrggbb.', errMakerRequired: 'Choisissez le fabricant.',
-    confirmBtn: 'Confirmer'
+    confirmBtn: 'Confirmer',
+    zoomIn: 'Zoom avant', zoomOut: 'Zoom arrière', zoomFit: 'Ajuster à l’écran', zoomLevel: 'Zoom {n}%'
   }
 } as const;
 
