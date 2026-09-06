@@ -483,11 +483,11 @@
 <!-- Overlay único: sempre montado, visibilidade alterna por `display` (como no
      protótipo — sc-if com hint-placeholder, nós presentes, visibilidade que
      alterna) para que cada card fique disponível assim que sua ação abrir. -->
-<div style="position: absolute; inset: 0; z-index: 70; display: {modalKind ? 'flex' : 'none'}; align-items: center; justify-content: center; padding: 40px;">
+<div class="t4-scrim" style="position: absolute; inset: 0; z-index: 70; display: {modalKind ? 'flex' : 'none'}; align-items: center; justify-content: center; padding: 40px;">
   <div role="presentation" onclick={closeModal} style="position: absolute; inset: 0; background: rgba(9, 10, 16, 0.7);"></div>
 
   <!-- Modal cadastro/edição de tinta -->
-  <div style="{modalKind !== 'paint' ? 'display: none; ' : ''}position: relative; width: min(560px, 100%); max-height: 100%; overflow-y: auto; padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
+  <div class="t4-modal" style="{modalKind !== 'paint' ? 'display: none; ' : ''}position: relative; width: min(560px, 100%); max-height: 100%; overflow-y: auto; padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
     <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 20px;">
       <span style="flex: 1; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: var(--color-text);">{editingId === null ? t('newPaint') : t('editPaint')}</span>
       <button class="t4-hover-ghost" onclick={closeModal} aria-label={t('ariaClose')} style="display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer;">
@@ -587,7 +587,7 @@
   </div>
 
   <!-- Modal novo fabricante -->
-  <div style="{modalKind !== 'maker' ? 'display: none; ' : ''}position: relative; width: min(460px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
+  <div class="t4-modal" style="{modalKind !== 'maker' ? 'display: none; ' : ''}position: relative; width: min(460px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
     <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 18px;">
       <span style="flex: 1; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: var(--color-text);">{t('newMakerT')}</span>
       <button class="t4-hover-ghost" onclick={closeModal} aria-label={t('ariaClose')} style="display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer;">
@@ -603,7 +603,7 @@
   </div>
 
   <!-- Confirmação exclusão de tinta -->
-  <div style="{modalKind !== 'confirmPaint' ? 'display: none; ' : ''}position: relative; width: min(440px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
+  <div class="t4-modal" style="{modalKind !== 'confirmPaint' ? 'display: none; ' : ''}position: relative; width: min(440px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
     <p style="margin: 0; font-size: clamp(16px, 1.8cqi, 21px); font-weight: 500; letter-spacing: -0.01em; color: var(--color-text); text-wrap: pretty;">{t('delPaintT', { name: confirmPaintDel?.name ?? '' })}</p>
     <p style="margin: 10px 0 0; font-size: 15px; color: var(--color-neutral-400); text-wrap: pretty;">{t('delPaintB')}</p>
     <div style="display: flex; gap: 10px; margin-top: 22px;">
@@ -613,7 +613,7 @@
   </div>
 
   <!-- Confirmação exclusão de fabricante (RG-18/CA11): declara quantas tintas somem -->
-  <div style="{modalKind !== 'confirmMaker' ? 'display: none; ' : ''}position: relative; width: min(440px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
+  <div class="t4-modal" style="{modalKind !== 'confirmMaker' ? 'display: none; ' : ''}position: relative; width: min(440px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
     <p style="margin: 0; font-size: clamp(16px, 1.8cqi, 21px); font-weight: 500; letter-spacing: -0.01em; color: var(--color-text); text-wrap: pretty;">{t('delMakerT', { name: confirmMakerDel?.name ?? '' })}</p>
     <p style="margin: 10px 0 0; font-size: 15px; color: var(--color-neutral-400); text-wrap: pretty;">
       {stockCountFor(confirmMakerDel?.name ?? '') > 0 ? t('delMakerB', { n: stockCountFor(confirmMakerDel?.name ?? '') }) : t('delMakerB0')}
@@ -626,6 +626,34 @@
 </div>
 
 <style>
+  /* Modais entram junto com o escurecimento do fundo. Os cards ficam sempre
+     montados e alternam por `display`, e a animação CSS reinicia sozinha toda
+     vez que o elemento sai de `display: none` — por isso funciona sem estado
+     extra. */
+  .t4-scrim {
+    animation: scrim-in 140ms ease both;
+  }
+
+  .t4-modal {
+    animation: modal-in 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
+  @keyframes scrim-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes modal-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
   /* `style-hover="..."` do protótipo — reproduzido aqui por classe (rule 7). */
   .t4-hover-border:hover {
     border-color: var(--color-accent-700);

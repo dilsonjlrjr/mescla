@@ -10,6 +10,7 @@
   // guarda o ALVO — reabrir/trocar de fabricante resolve de novo (US-15).
   import Header from '../components/Header.svelte';
   import PaintBottle from '../components/PaintBottle.svelte';
+  import Spinner from '../components/Spinner.svelte';
   import { recipes, removeRecipe, updateRecipeManufacturer, type Recipe } from '../services/recipes.svelte';
   import { allManufacturers, paintById } from '../services/catalog';
   import { suggestEquivalentRecipe, suggestRecipeForColor, bestBrandsFor, type EquivalentRecipe, type BrandBest } from '../services/engine';
@@ -192,7 +193,9 @@
         {:else if recipeIsError}
           {t('recNone', { brand: allManufacturers().find(m => m.id === selected?.manufacturerId)?.name ?? '' })}
         {:else if selected}
-          {t('calculating')}
+          <span style="display: inline-flex; align-items: center; gap: 12px;">
+            <Spinner size={24} label={t('calculating')} />{t('calculating')}
+          </span>
         {:else}
           {t('recipesEmptyTitle')}
         {/if}

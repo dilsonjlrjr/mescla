@@ -5,6 +5,7 @@
   // mora no Header (nc-nav) + a marca leva de volta a T1.
   import ToastRegion from './lib/components/ToastRegion.svelte';
   import BrandMark from './lib/components/BrandMark.svelte';
+  import Spinner from './lib/components/Spinner.svelte';
   import PerguntaView from './lib/views/PerguntaView.svelte';
   import PlannerView from './lib/views/PlannerView.svelte';
   import ReceitasView from './lib/views/ReceitasView.svelte';
@@ -42,14 +43,14 @@
   </div>
 {:else if !booted}
   <div class="boot">
-    <BrandMark size={52} />
+    <Spinner size={52} label="Carregando o catálogo" />
     <p class="boot-word font-display">Mescla AI</p>
   </div>
 {:else}
   <!-- Raiz do protótipo (docs/oficial/Mescla AI.html): container-type:
        inline-size é o que faz as unidades `cqi` das telas responderem à
        largura do app, não à viewport (NFR-01, 820–1366px). -->
-  <main class="views">
+  <main class="views animate-rise">
     <div class="view" class:hidden={nav.tab !== 'pergunta'}><PerguntaView /></div>
     <div class="view" class:hidden={nav.tab !== 'plano'}><PlannerView /></div>
     <div class="view" class:hidden={nav.tab !== 'receitas'}><ReceitasView /></div>
@@ -103,12 +104,24 @@
     user-select: none;
   }
 
+  /* As 4 telas continuam montadas para preservar estado (US-18/NFR-09), mas a
+     que sai agora some por opacidade em vez de `display: none` — `display`
+     não é animável, e sem isso a troca de aba é um corte seco. `visibility`
+     entra no fim da saída para tirar a tela do foco e do toque. */
   .view {
-    height: 100%;
+    position: absolute;
+    inset: 0;
     min-height: 0;
+    opacity: 1;
+    transform: none;
+    transition: opacity 180ms ease, transform 180ms ease;
   }
 
   .view.hidden {
-    display: none;
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    visibility: hidden;
+    transition: opacity 140ms ease, transform 140ms ease, visibility 0s linear 140ms;
   }
 </style>

@@ -20,6 +20,7 @@
   // o ΔE00 exato ao vivo exigiria portar CIEDE2000 pro cliente, o que é ajuste
   // de motor (rf-05), fora desta spec.
   import PaintBottle from '../components/PaintBottle.svelte';
+  import Spinner from '../components/Spinner.svelte';
   import BrandMark from '../components/BrandMark.svelte';
   import LangSwitch from '../components/LangSwitch.svelte';
   import { allManufacturers, allPaints, paintById, searchPaints, hexOf, type Paint } from '../services/catalog';
@@ -524,6 +525,7 @@
 
       {#if suggestOpen && suggestions.length > 0}
         <div
+          class="t1-suggest-pop"
           role="listbox"
           aria-label={t('suggestTitle')}
           style="position: absolute; top: 62px; left: 0; right: 0; z-index: 40; padding: 16px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-raised); box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);"
@@ -686,12 +688,15 @@
           <div style="height: 44px; width: 88%; border-radius: 8px; background: var(--color-surface);"></div>
           <div style="height: 44px; width: 62%; border-radius: 8px; background: var(--color-surface);"></div>
           <div style="height: 132px; width: 100%; border-radius: 14px; background: var(--color-raised); margin-top: 10px;"></div>
-          <p style="margin: 0; font-size: 14px; color: var(--color-neutral-500);">
+          <p style="display: flex; align-items: center; gap: 10px; margin: 0; font-size: 14px; color: var(--color-neutral-500);">
+            <Spinner size={20} label={t('calculating')} />
             {t('loadingNote', { brand: computingBrandLabel })}
           </p>
         </div>
       {:else if (readyPot || formula) && vc}
-        <div style="display: flex; flex-direction: column; gap: 18px; min-height: 0;">
+        <!-- A resposta entra subindo: o pintor vê que ela chegou agora, sem
+             precisar procurar o que mudou na tela. -->
+        <div class="animate-rise" style="display: flex; flex-direction: column; gap: 18px; min-height: 0;">
           <div>
             <p class="section-label" style="margin: 0 0 10px;">{t('answerKicker')}</p>
             <h1
@@ -781,7 +786,7 @@
           {/each}
         </div>
       {:else if readyPot}
-        <div>
+        <div class="animate-rise">
           <div
             style="display: flex; align-items: center; gap: 22px; padding: 22px; border: 1px solid var(--color-accent-700); border-radius: 14px; background: var(--color-accent-panel);"
           >
@@ -801,7 +806,7 @@
           >
         </div>
       {:else if formula}
-        <div>
+        <div class="animate-rise">
           {#if !formula.reproducible}
             <div style="margin-bottom: 20px; padding: 16px 18px; border: 1px solid var(--color-accent-700); border-radius: 14px; background: var(--color-accent-panel);">
               <p style="margin: 0; font-size: 17px; font-weight: 500; color: var(--color-text);">{t('unreachT')}</p>
@@ -1069,5 +1074,23 @@
   .t1h-hist:hover {
     border-color: var(--color-neutral-800);
     background: var(--color-panel);
+  }
+
+  /* As sugestões descem do campo de busca em vez de aparecerem de uma vez —
+     deixa claro de onde a lista saiu. */
+  .t1-suggest-pop {
+    animation: suggest-drop 140ms cubic-bezier(0.4, 0, 0.2, 1) both;
+    transform-origin: top center;
+  }
+
+  @keyframes suggest-drop {
+    from {
+      opacity: 0;
+      transform: translateY(-6px) scaleY(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scaleY(1);
+    }
   }
 </style>

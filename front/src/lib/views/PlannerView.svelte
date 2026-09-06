@@ -13,6 +13,7 @@
   // e "Tintas da peça" — checklist local de compra dos ingredientes usados
   // pelas regiões (US-15/T3 herda a receita salva no rodapé).
   import Header from '../components/Header.svelte';
+  import Spinner from '../components/Spinner.svelte';
   import { suggestRecipeForColor, type EquivalentRecipe } from '../services/engine';
   import { allManufacturers } from '../services/catalog';
   import { saveRecipe } from '../services/recipes.svelte';
@@ -438,7 +439,11 @@
             </button>
 
             {#if region.computing}
-              <div style="height: 80px; border-radius: 8px; background: var(--color-raised);"></div>
+              <div
+                style="display: flex; align-items: center; justify-content: center; gap: 12px; height: 80px; border-radius: 8px; background: var(--color-raised); font-size: 14px; color: var(--color-neutral-500);"
+              >
+                <Spinner size={22} label={t('calculating')} />{t('calculating')}
+              </div>
             {:else if region.result}
               {@const res = region.result}
               {@const vc = verdictKeys(res.deltaE)}
