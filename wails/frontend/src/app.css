@@ -1,98 +1,148 @@
-/* ── MESCLA — Tema "Tintômetro" (claro) ──
-   Direção: o app como instrumento de precisão de cor. A tinta é a interface;
-   o resto é bancada. Paleta de 5 cores: bancada #F6F4EF, papel #FFFFFF,
-   grafite #1A1712, hairline #DCD6C9, laca #E8542C. A cor de tinta (dinâmica)
-   é a protagonista — chapada, raio 0 em painéis grandes.
-   Tipos: Bricolage Grotesque (display), Archivo (corpo), IBM Plex Mono (todo
-   valor medido). Hairlines e whitespace no lugar de cards e sombras.
-   Raios: pílula = ação · 8px = amostra/input · 12px = superfície flutuante ·
-   0 = cor chapada. */
+/* ── MESCLA — Design system "Nocturne" (escuro) ──
+   rf-04: troca de tema sobre o "Tintômetro" (claro). Tokens extraídos do
+   protótipo docs/Mescla AI.html — fonte de verdade dos valores abaixo.
+   As classes utilitárias e os aliases legados (--papel, --grafite, --hairline,
+   --laca...) continuam existindo para não quebrar componentes fora do fluxo
+   T1-T4 (ExportMenu, GuideDialog, WheelGuide, ColorWheelView, PrecisionLoupe,
+   CompareView, Sidebar não usado) — eles agora resolvem para os valores
+   Nocturne, então herdam o tema escuro automaticamente sem precisar de reskin. */
 
 :root {
-  /* Paleta Tintômetro — 5 cores, nada mais */
-  --bancada: #f6f4ef;
-  --papel: #ffffff;
-  --grafite: #1a1712;
-  --hairline: #dcd6c9;
-  --laca: #e8542c;
+  /* ── Tokens Nocturne (fonte: docs/Mescla AI.html) ── */
+  --color-bg: #161826;
+  --color-surface: #232532;
+  --color-text: #e9e9ed;
+  --color-accent: #9184d9;
+  --color-accent-2: #a7a1db;
+  --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
 
-  /* Derivados permitidos: grafite com opacidade (texto secundário) e
-     bancada-escura (skeleton / campos cavados) — stone derivado. */
-  --text-2: rgba(26, 23, 18, 0.58);
-  --text-3: rgba(26, 23, 18, 0.4);
-  --bancada-deep: #eae6dc;
-  --laca-deep: #c7431f; /* estado hover/texto da laca sobre claro */
+  --color-neutral-100: #f3f5fe;
+  --color-neutral-200: #e4e7f5;
+  --color-neutral-300: #cfd3e5;
+  --color-neutral-400: #b2b6ca;
+  --color-neutral-500: #9397ab;
+  --color-neutral-600: #75798c;
+  --color-neutral-700: #595d6c;
+  --color-neutral-800: #3f424d;
+  --color-neutral-900: #292b31;
 
-  /* Aliases legados (views antigas ainda referenciam ink-*) */
-  --ink-950: var(--bancada);
-  --ink-900: var(--papel);
-  --ink-850: var(--bancada-deep);
-  --ink-800: var(--bancada-deep);
-  --ink-700: var(--hairline);
-  --ink-600: var(--hairline);
-  --ink-500: var(--text-2);
-  --ink-400: var(--text-3);
-  --ink-300: rgba(26, 23, 18, 0.8);
-  --ink-100: var(--grafite);
+  --color-accent-100: #f5f4ff;
+  --color-accent-200: #e7e5fe;
+  --color-accent-300: #d2cefd;
+  --color-accent-400: #b5abfc;
+  --color-accent-500: #968ae0;
+  --color-accent-600: #796cbf;
+  --color-accent-700: #5d5294;
+  --color-accent-800: #423a6a;
+  --color-accent-900: #2b2741;
 
-  --paper: var(--grafite);
+  /* Sem token de erro/perigo no protótipo (Nocturne não previu estado de
+     exclusão) — acréscimo deliberado pra CAN1/US-13 (confirmação de exclusão)
+     terem uma cor distinta do acento roxo de ação. */
+  --color-danger: #e2626b;
+  --color-danger-deep: #c74853;
 
-  --lacquer: var(--laca);
-  --lacquer-deep: var(--laca-deep);
-  --lacquer-tint: var(--laca-deep);
+  --font-heading: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  --font-heading-weight: 500;
+  --font-body: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  --space-1: 2.8px;
+  --space-2: 5.6px;
+  --space-3: 8.4px;
+  --space-4: 11.2px;
+  --space-6: 16.8px;
+  --space-8: 22.4px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+
+  --shadow-sm: 0 0 0 1px #3f424d;
+  --shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0, 0, 0, 0.65);
+
+  /* ── Aliases legados — mantêm os componentes fora do fluxo T1-T4
+     funcionando sem reskin (regra do build: só tocar se quebrar) ── */
+  --bancada: var(--color-bg);
+  --papel: var(--color-surface);
+  --grafite: var(--color-text);
+  --hairline: var(--color-divider);
+  --laca: var(--color-accent);
+
+  --text-2: color-mix(in srgb, var(--color-text) 66%, transparent);
+  --text-3: color-mix(in srgb, var(--color-text) 42%, transparent);
+  --bancada-deep: color-mix(in srgb, var(--color-bg) 70%, var(--color-surface) 30%);
+  --laca-deep: var(--color-accent-2);
+
+  --ink-950: var(--color-bg);
+  --ink-900: var(--color-surface);
+  --ink-850: var(--color-neutral-900);
+  --ink-800: var(--color-neutral-800);
+  --ink-700: var(--color-neutral-700);
+  --ink-600: var(--color-neutral-600);
+  --ink-500: var(--color-neutral-500);
+  --ink-400: var(--color-neutral-400);
+  --ink-300: var(--color-neutral-300);
+  --ink-100: var(--color-text);
+
+  --paper: var(--color-text);
+
+  --lacquer: var(--color-accent);
+  --lacquer-deep: var(--color-accent-2);
+  --lacquer-tint: var(--color-accent-2);
 
   /* Raios (regra única) */
-  --radius-surface: 12px;
-  --radius-control: 8px;
+  --radius-surface: var(--radius-lg);
+  --radius-control: var(--radius-md);
   --radius-pill: 999px;
 
-  /* Delta E — sem cores fora da paleta: bom = laca, resto = grafite */
+  /* Delta E — leitura de instrumento sobre o fundo escuro */
   --delta-excellent: var(--laca-deep);
   --delta-good: var(--grafite);
   --delta-fair: var(--text-2);
   --delta-poor: var(--grafite);
 
-  /* Canais RGB dos sliders: grafite (leitura de instrumento, não arco-íris) */
   --chan-r: var(--grafite);
   --chan-g: var(--grafite);
   --chan-b: var(--grafite);
 
-  /* Fontes (self-hosted via @fontsource) */
-  --font-display: 'Bricolage Grotesque Variable', system-ui, sans-serif;
-  --font-body: 'Archivo Variable', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', monospace;
+  /* Fontes (compat — aliases antigos apontam pros tokens Nocturne) */
+  --font-display: var(--font-heading);
 
-  /* SMUI — controles de formulário remanescentes */
-  --mdc-theme-primary: var(--laca);
-  --mdc-theme-secondary: var(--laca);
-  --mdc-theme-surface: var(--papel);
-  --mdc-theme-background: var(--bancada);
-  --mdc-theme-error: var(--laca-deep);
+  /* SMUI — controles de formulário remanescentes (T4: Select/Textfield/Dialog) */
+  --mdc-theme-primary: var(--color-accent);
+  --mdc-theme-secondary: var(--color-accent);
+  --mdc-theme-surface: var(--color-surface);
+  --mdc-theme-background: var(--color-bg);
+  --mdc-theme-error: var(--color-danger);
   --mdc-theme-on-primary: white;
   --mdc-theme-on-secondary: white;
-  --mdc-theme-on-surface: var(--grafite);
-  --mdc-theme-on-background: var(--grafite);
+  --mdc-theme-on-surface: var(--color-text);
+  --mdc-theme-on-background: var(--color-text);
   --mdc-theme-on-error: white;
 
-  --mdc-text-field-fill-color: var(--papel);
-  --mdc-text-field-ink-color: var(--grafite);
+  --mdc-text-field-fill-color: var(--color-surface);
+  --mdc-text-field-ink-color: var(--color-text);
   --mdc-text-field-label-ink-color: var(--text-2);
-  --mdc-text-field-outlined-idle-border-color: var(--hairline);
-  --mdc-text-field-outlined-hover-border-color: var(--grafite);
-  --mdc-text-field-focused-label-color: var(--laca-deep);
+  --mdc-text-field-outlined-idle-border-color: var(--color-divider);
+  --mdc-text-field-outlined-hover-border-color: var(--color-accent);
+  --mdc-text-field-focused-label-color: var(--color-accent-2);
 
-  --mdc-select-ink-color: var(--grafite);
+  --mdc-select-ink-color: var(--color-text);
   --mdc-select-label-ink-color: var(--text-2);
   --mdc-select-dropdown-icon-color: var(--text-2);
-  --mdc-select-outlined-idle-border-color: var(--hairline);
-  --mdc-select-outlined-hover-border-color: var(--grafite);
+  --mdc-select-outlined-idle-border-color: var(--color-divider);
+  --mdc-select-outlined-hover-border-color: var(--color-accent);
 
-  --mdc-slider-handle-color: var(--grafite);
-  --mdc-slider-focus-handle-color: var(--grafite);
-  --mdc-slider-ink-color: var(--grafite);
+  --mdc-slider-handle-color: var(--color-accent);
+  --mdc-slider-focus-handle-color: var(--color-accent);
+  --mdc-slider-ink-color: var(--color-accent);
+
+  color-scheme: dark;
 }
 
-/* ── Receita única de campo: papel, borda hairline, raio 8, foco laca ── */
+/* ── Receita única de campo: superfície, borda hairline, raio md, foco acento ── */
 :where(input[type='text']:not(.mdc-text-field__input), input[type='search']:not(.mdc-text-field__input), input[type='number']:not(.mdc-text-field__input), input[type='url']:not(.mdc-text-field__input), textarea:not(.mdc-text-field__input)) {
   background: var(--papel);
   border: 1px solid var(--hairline);
@@ -103,10 +153,10 @@
 :where(input[type='text']:not(.mdc-text-field__input), input[type='search']:not(.mdc-text-field__input), input[type='number']:not(.mdc-text-field__input), input[type='url']:not(.mdc-text-field__input), textarea:not(.mdc-text-field__input)):focus {
   outline: none;
   border-color: var(--laca);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--laca) 18%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--laca) 22%, transparent);
 }
 
-/* Campos de texto já sinalizam foco pela borda laca + anel — o outline global
+/* Campos de texto já sinalizam foco pela borda acento + anel — o outline global
    de :focus-visible em cima disso vira anel duplo. */
 :where(input, textarea, select):focus-visible {
   outline: none;
@@ -177,8 +227,10 @@ body {
   background: var(--text-3);
 }
 
+/* NFR-08: :focus-visible é SEMPRE o anel de 2px do acento — nunca o anel
+   padrão do navegador. */
 :focus-visible {
-  outline: 2px solid var(--laca);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -202,6 +254,27 @@ body {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+}
+
+/* ── Casco de tela T1-T4 (NFR-02): cabeçalho/rodapé fixos, miolo rolável.
+   Cada view usa isso como raiz e preenche a altura de .app-main sem precisar
+   que .app-main role — só o ".view-scroll" interno rola. ── */
+.view-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--color-bg);
+}
+
+.view-fixed {
+  flex-shrink: 0;
+}
+
+.view-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .page-container {
@@ -260,18 +333,19 @@ body {
   border: none;
 }
 
-/* ── Pílulas de ação ── */
+/* ── Pílulas de ação: CTA de alta ênfase usa o acento Nocturne ── */
 .pill-dark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 46px;
+  min-height: 44px;
+  height: 44px;
   padding: 0 26px;
   border: none;
   border-radius: var(--radius-pill);
-  background: var(--grafite);
-  color: var(--papel);
+  background: var(--color-accent-600);
+  color: var(--color-neutral-100);
   font-family: var(--font-body);
   font-size: 14px;
   font-weight: 640;
@@ -299,7 +373,8 @@ body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 46px;
+  min-height: 44px;
+  height: 44px;
   padding: 0 22px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-pill);
@@ -314,7 +389,7 @@ body {
 }
 
 .pill-light:hover:not(:disabled) {
-  border-color: var(--grafite);
+  border-color: var(--color-accent);
 }
 
 .pill-light:disabled {
@@ -322,11 +397,12 @@ body {
   cursor: not-allowed;
 }
 
-/* Pills de filtro: ativa = grafite, inativa = papel + hairline */
+/* Pills de filtro: ativa = acento, inativa = superfície + hairline */
 .filter-pill {
   display: inline-flex;
   align-items: center;
-  height: 36px;
+  min-height: 44px;
+  height: 44px;
   padding: 0 18px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-pill);
@@ -337,17 +413,17 @@ body {
   font-weight: 520;
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .filter-pill:hover {
-  border-color: var(--grafite);
+  border-color: var(--color-accent);
 }
 
 .filter-pill.active {
-  background: var(--grafite);
-  border-color: var(--grafite);
-  color: var(--papel);
+  background: var(--color-accent-600);
+  border-color: var(--color-accent-600);
+  color: var(--color-neutral-100);
   font-weight: 600;
 }
 
@@ -361,8 +437,8 @@ body {
   height: 46px;
   border: none;
   border-radius: var(--radius-pill);
-  background: var(--grafite);
-  color: var(--papel);
+  background: var(--color-accent-600);
+  color: var(--color-neutral-100);
   font-family: var(--font-body);
   font-size: 14px;
   font-weight: 640;
@@ -401,18 +477,18 @@ body {
 }
 
 .btn-ghost:hover {
-  border-color: var(--grafite);
+  border-color: var(--color-accent);
 }
 
-/* ── Amostra de cor (swatch): raio 8, chapada ── */
+/* ── Amostra de cor (swatch): raio md, chapada, contorno claro sobre fundo escuro ── */
 .swatch-flat {
   position: relative;
   border-radius: var(--radius-control);
-  box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
   flex-shrink: 0;
 }
 
-/* ── Toggle: trilho pílula, laca quando on, knob branco ── */
+/* ── Toggle: trilho pílula, acento quando on, knob claro ── */
 .switch {
   flex-shrink: 0;
   width: 42px;
@@ -426,7 +502,7 @@ body {
 }
 
 .switch.on {
-  background: var(--laca);
+  background: var(--color-accent);
 }
 
 .switch .knob {
@@ -436,7 +512,7 @@ body {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--papel);
+  background: var(--color-neutral-100);
   transition: transform 0.18s ease;
 }
 
@@ -476,7 +552,7 @@ body {
 /* ── Preview de cor grande ── */
 .color-preview {
   border-radius: var(--radius-control);
-  box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
   position: relative;
   overflow: hidden;
 }
@@ -489,7 +565,7 @@ body {
   font-family: var(--font-mono);
   padding: 4px 10px;
   border-radius: 5px;
-  background: rgba(26, 23, 18, 0.55);
+  background: rgba(0, 0, 0, 0.55);
   color: rgba(255, 255, 255, 0.92);
 }
 
@@ -512,9 +588,9 @@ body {
   animation: slide-in 0.35s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
-/* ── Skeleton: bancada mais escura ── */
+/* ── Skeleton: um tom acima do fundo, brilho neutro-700 ── */
 .skeleton {
-  background: linear-gradient(90deg, var(--bancada-deep) 25%, #e3dfd3 50%, var(--bancada-deep) 75%);
+  background: linear-gradient(90deg, var(--bancada-deep) 25%, var(--color-neutral-700) 50%, var(--bancada-deep) 75%);
   background-size: 200% 100%;
   animation: shimmer-load 1.5s ease-in-out infinite;
   border-radius: var(--radius-control);
@@ -525,7 +601,7 @@ body {
   100% { background-position: 200% 0; }
 }
 
-/* ── Range slider: track hairline fino, thumb círculo grafite ── */
+/* ── Range slider: track hairline fino, thumb círculo claro ── */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
@@ -543,7 +619,7 @@ input[type="range"]::-webkit-slider-thumb {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--grafite);
+  background: var(--color-accent);
   border: 3px solid var(--papel);
   box-shadow: 0 0 0 1px var(--hairline);
   cursor: pointer;
@@ -595,7 +671,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .ml-auto { margin-left: auto; }
 
 /* ── Text helpers ── */
-.text-white { color: var(--grafite); } /* legado: "texto forte" no tema claro */
+.text-white { color: var(--grafite); } /* legado: "texto forte" no tema atual */
 .text-sm { font-size: 14px; }
 .text-xs { font-size: 12px; }
 .text-lg { font-size: 1.125rem; }
@@ -619,7 +695,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   display: inline-flex;
   border-radius: 7px;
   overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
   flex-shrink: 0;
 }
 
@@ -657,7 +733,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .delta-badge.fair      { color: var(--text-2); }
 .delta-badge.poor      { color: var(--text-2); }
 
-/* ── Toasts (superfície flutuante: sombra permitida) ── */
+/* ── Toasts (superfície flutuante clara — contraste alto contra o app escuro) ── */
 .toast-region {
   position: fixed;
   bottom: 20px;
@@ -677,17 +753,17 @@ input[type="range"]::-webkit-slider-thumb:hover {
   gap: 10px;
   padding: 10px 18px;
   border-radius: var(--radius-pill);
-  background: var(--grafite);
-  color: var(--papel);
+  background: var(--color-neutral-100);
+  color: var(--color-neutral-900);
   font-size: 13px;
   font-weight: 500;
-  box-shadow: 0 6px 24px rgba(26, 23, 18, 0.22);
+  box-shadow: var(--shadow-lg);
   animation: rise-in 0.25s cubic-bezier(0.4, 0, 0.2, 1) both;
   pointer-events: auto;
 }
 
 .toast.error {
-  background: var(--laca-deep);
+  background: var(--color-danger-deep);
   color: white;
 }
 
@@ -695,7 +771,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--laca);
+  background: var(--color-accent);
   flex-shrink: 0;
 }
 
@@ -771,13 +847,13 @@ input[type="range"]::-webkit-slider-thumb:hover {
   color: var(--text-2);
 }
 
-/* ── Card de erro/aviso: papel raio 12, barra laca 3px à esquerda ── */
+/* ── Card de erro/aviso: superfície raio lg, barra de acento 3px à esquerda ── */
 .notice-card {
   position: relative;
   background: var(--papel);
   border-radius: var(--radius-surface);
   border-left: 3px solid var(--laca);
-  box-shadow: 0 10px 30px rgba(26, 23, 18, 0.08);
+  box-shadow: var(--shadow-sm);
   padding: 18px 22px;
 }
 
@@ -808,4 +884,74 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 .notice-card .notice-link:hover {
   text-decoration: underline;
+}
+
+/* ── Diálogo de confirmação (T4 exclusão, RG-18/US-13/CAN1) ── */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  background: color-mix(in srgb, var(--color-bg) 70%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.confirm-dialog {
+  width: min(420px, 100%);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-6);
+}
+
+.confirm-dialog .notice-title {
+  font-size: 17px;
+  margin-bottom: 8px;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: var(--space-6);
+}
+
+/* ── Abas (T4: Tintas/Fabricantes) ── */
+.tab-bar {
+  display: flex;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.tab-btn {
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  position: relative;
+}
+
+.tab-btn:hover {
+  color: var(--grafite);
+}
+
+.tab-btn.active {
+  color: var(--grafite);
+}
+
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  left: var(--space-4);
+  right: var(--space-4);
+  bottom: -1px;
+  height: 2px;
+  background: var(--color-accent);
 }

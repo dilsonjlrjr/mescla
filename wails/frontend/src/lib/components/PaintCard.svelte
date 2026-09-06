@@ -67,7 +67,7 @@
     min-width: 0;
     aspect-ratio: 4 / 3;
     border-radius: var(--radius-control);
-    box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.06);
+    box-shadow: inset 0 0 0 1px var(--color-neutral-800);
     transition: transform 0.15s ease;
   }
 

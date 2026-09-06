@@ -220,7 +220,7 @@
     width: 44px;
     height: 44px;
     border-radius: var(--radius-control);
-    box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.06);
+    box-shadow: inset 0 0 0 1px var(--color-neutral-800);
     flex-shrink: 0;
   }
 

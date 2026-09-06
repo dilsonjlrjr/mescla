@@ -3,29 +3,45 @@
   // painel da tinta selecionada à direita. CRUD + importação/exportação CSV.
   // As tintas daqui alimentam a opção "priorizar meu estoque" na Equivalência.
   import { onMount } from 'svelte';
-  import Textfield from '@smui/textfield';
-  import Select, { Option } from '@smui/select';
-  import Dialog, { Content as DialogContent, Title as DialogTitle } from '@smui/dialog';
   import PaintBottle from './PaintBottle.svelte';
+  import Icon from './Icon.svelte';
   import { toast } from '../toast.svelte';
   import { recipesWithIngredient } from '../recipes.svelte';
   import { hexOf } from '../ui';
+  import { t } from '../i18n.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
-  import type { UserPaintDTO, CSVImportResultDTO } from '../../../bindings/paint-match-ai/models';
+  import type { UserPaintDTO, CSVImportResultDTO, ManufacturerDTO, PaintDTO } from '../../../bindings/paint-match-ai/models';
 
   interface Props {
     // vindo da busca global: "Adicionar {tinta} ao meu estoque"
     prefillPaintId?: number | null;
+    // T4: duas abas no mesmo componente (rf-04) — Tintas (estoque, CRUD real
+    // via UserPaint*) e Fabricantes (leitura; cadastro/exclusão de fabricante
+    // não têm rota de escrita exposta pelo Wails nesta apuração — ver Não faz
+    // da spec e CAN2/R1; a aba avisa a lacuna em vez de fingir persistir).
+    initialTab?: 'tintas' | 'fabricantes';
   }
 
-  let { prefillPaintId = null }: Props = $props();
+  let { prefillPaintId = null, initialTab = 'tintas' }: Props = $props();
+
+  // $state captura só o valor de montagem — de propósito: o App.svelte troca
+  // a key da view (navSeq) a cada handleNavigate, então uma navegação nova
+  // pra 'manufacturers' remonta este componente do zero com o initialTab novo.
+  // svelte-ignore state_referenced_locally
+  let activeTab: 'tintas' | 'fabricantes' = $state(initialTab);
 
   let paints: UserPaintDTO[] = $state([]);
   let manufacturers: { id: number; name: string }[] = $state([]);
+  let mfrFull: ManufacturerDTO[] = $state([]);
+  let catalogPaints: PaintDTO[] = $state([]);
+  let chipsByBrand: Map<string, PaintDTO[]> = $state(new Map());
+  let linesByBrand: Map<string, string[]> = $state(new Map());
   let loading = $state(true);
   let searchQuery = $state('');
   let selectedBrands: string[] = $state([]);
   let selectedId: number | null = $state(null);
+  let confirmDeletePaint: UserPaintDTO | null = $state(null);
+  let confirmDeleteMaker: ManufacturerDTO | null = $state(null);
 
   // Form (add/editar)
   let formOpen = $state(false);
@@ -36,6 +52,11 @@
   let fHex = $state('#8a8a8a');
   let fVolume = $state('');
   let fNotes = $state('');
+  // Toggle visual "Tenho este pote agora" (fiel ao mockup) — o backend não
+  // tem coluna `have` própria: estar em user_paints já É "tenho" (RG-17). Sem
+  // essa coluna, desmarcar aqui não muda o que save() grava (fica sempre
+  // adicionado à estante); é limitação declarada, não comportamento fingido.
+  let fHave = $state(true);
   let saving = $state(false);
 
   // Importação CSV
@@ -66,21 +87,82 @@
   async function load() {
     loading = true;
     try {
-      const [stock, mfrs] = await Promise.all([
+      const [stock, mfrs, catalog] = await Promise.all([
         PaintService.GetUserPaints(),
         PaintService.GetManufacturers(),
+        PaintService.GetAllPaints(),
       ]);
       paints = stock || [];
-      manufacturers = (mfrs || []).map(m => ({ id: m.id, name: m.name }));
+      mfrFull = mfrs || [];
+      manufacturers = mfrFull.map(m => ({ id: m.id, name: m.name }));
+      catalogPaints = catalog || [];
       if (selectedId === null || !paints.some(p => p.id === selectedId)) {
         selectedId = paints[0]?.id ?? null;
       }
+      buildBrandChips();
     } catch (e) {
       console.error('Erro carregando estoque:', e);
       toast('Não consegui carregar seu estoque.', 'error');
     } finally {
       loading = false;
     }
+  }
+
+  // Amostras/linhas por fabricante (aba Fabricantes) — derivadas do catálogo,
+  // não da posse (mesma lógica que ManufacturersView já usava).
+  function buildBrandChips() {
+    const chips = new Map<string, PaintDTO[]>();
+    const lines = new Map<string, Set<string>>();
+    for (const p of catalogPaints) {
+      const arr = chips.get(p.manufacturer) ?? [];
+      if (arr.length < 5) { arr.push(p); chips.set(p.manufacturer, arr); }
+      if (p.productLine) {
+        const ls = lines.get(p.manufacturer) ?? new Set();
+        ls.add(p.productLine);
+        lines.set(p.manufacturer, ls);
+      }
+    }
+    chipsByBrand = chips;
+    linesByBrand = new Map([...lines].map(([k, v]) => [k, [...v].slice(0, 4)]));
+  }
+
+  function ownedCountFor(mfrName: string): number {
+    return paints.filter(p => p.manufacturer === mfrName).length;
+  }
+
+  function metaOf(m: ManufacturerDTO): string {
+    const lines = linesByBrand.get(m.name) ?? [];
+    const parts = [m.country, lines.join(', ')].filter(Boolean);
+    return parts.join(' · ');
+  }
+
+  function viewMakerPaints(m: ManufacturerDTO) {
+    activeTab = 'tintas';
+    selectedBrands = [m.name];
+  }
+
+  function addMaker() {
+    // Sem rota de escrita de fabricante exposta pelo Wails (Não faz da spec,
+    // R1/CAN2 herdado) — avisa a lacuna em vez de fingir persistir.
+    toast(t('mfrWriteGapAdd'), 'error');
+  }
+
+  function askDeleteMaker(m: ManufacturerDTO) {
+    confirmDeleteMaker = m;
+  }
+
+  function confirmMakerDelete() {
+    confirmDeleteMaker = null;
+    toast(t('mfrWriteGapDel'), 'error');
+  }
+
+  function cadastrarLabel(): string {
+    return activeTab === 'tintas' ? t('addPaintBtn') : t('addMakerBtn');
+  }
+
+  function onCadastrar() {
+    if (activeTab === 'tintas') openAdd();
+    else addMaker();
   }
 
   let filtered = $derived(
@@ -119,6 +201,7 @@
     fHex = '#8a8a8a';
     fVolume = '';
     fNotes = '';
+    fHave = true;
     formOpen = true;
   }
 
@@ -130,6 +213,7 @@
     fHex = hexOf(p.r, p.g, p.b).toLowerCase();
     fVolume = p.volume;
     fNotes = p.notes;
+    fHave = true;
     formOpen = true;
   }
 
@@ -175,8 +259,14 @@
     }
   }
 
-  async function remove(p: UserPaintDTO) {
-    if (!confirm(`Remover "${p.name}" do seu estoque?`)) return;
+  function askRemove(p: UserPaintDTO) {
+    confirmDeletePaint = p;
+  }
+
+  async function confirmRemove() {
+    const p = confirmDeletePaint;
+    confirmDeletePaint = null;
+    if (!p) return;
     try {
       await PaintService.DeleteUserPaint(p.id);
       toast('Tinta removida.');
@@ -241,21 +331,28 @@
   }
 </script>
 
-<div class="page-container">
+<div class="page-container view-shell">
   <!-- Header -->
-  <div class="stock-head animate-rise">
+  <div class="stock-head animate-rise view-fixed">
     <div>
-      <h1 class="page-title">Meu estoque</h1>
+      <h1 class="page-title">{t('navTintas')}</h1>
       <p class="stock-count font-mono">
-        {paints.length.toLocaleString('pt-BR')} tintas&nbsp;&nbsp;·&nbsp;&nbsp;{ownedBrands.length} {ownedBrands.length === 1 ? 'fabricante' : 'fabricantes'}
+        {t('estanteCount', { a: paints.length, b: paints.length, c: ownedBrands.length })}
       </p>
     </div>
     <div class="stock-cta">
-      <button class="text-link" onclick={downloadTemplate}>Baixar modelo</button>
-      <button class="text-link" onclick={exportCsv} disabled={paints.length === 0}>Exportar CSV</button>
-      <button class="pill-light" onclick={pickFile}>Importar CSV</button>
-      <button class="pill-dark" onclick={openAdd}>+ Nova tinta</button>
+      {#if activeTab === 'tintas'}
+        <button class="text-link" onclick={downloadTemplate}>Baixar modelo</button>
+        <button class="text-link" onclick={exportCsv} disabled={paints.length === 0}>Exportar CSV</button>
+        <button class="pill-light" onclick={pickFile}>Importar CSV</button>
+      {/if}
+      <button class="pill-dark" onclick={onCadastrar}>{cadastrarLabel()}</button>
     </div>
+  </div>
+
+  <div class="tab-bar view-fixed">
+    <button class="tab-btn" class:active={activeTab === 'tintas'} onclick={() => (activeTab = 'tintas')}>{t('tabPaints')}</button>
+    <button class="tab-btn" class:active={activeTab === 'fabricantes'} onclick={() => (activeTab = 'fabricantes')}>{t('makers')}</button>
   </div>
 
   <input
@@ -266,7 +363,37 @@
     onchange={onFileChosen}
   />
 
-  {#if loading}
+  {#if activeTab === 'fabricantes'}
+    <div class="view-scroll">
+      <div class="mfr-list animate-rise">
+        {#each mfrFull as mfr (mfr.id)}
+          <div class="mfr-row">
+            <span class="mfr-badge font-display">
+              <span class="mfr-initial">{mfr.name.charAt(0).toUpperCase()}</span>
+            </span>
+            <div class="mfr-id">
+              <span class="mfr-name font-display">{mfr.name}</span>
+              <span class="mfr-meta font-mono">{metaOf(mfr)}</span>
+            </div>
+            <div class="mfr-chips" aria-hidden="true">
+              {#each chipsByBrand.get(mfr.name) ?? [] as chip (chip.id)}
+                <span class="mfr-chip" style="background: rgb({chip.r}, {chip.g}, {chip.b});"></span>
+              {/each}
+            </div>
+            <div class="mfr-count">
+              <span class="mfr-count-n font-mono">{mfr.paintCount.toLocaleString('pt-BR')}</span>
+              <span class="mfr-count-label">{t('tabPaints')}</span>
+              <span class="mfr-count-owned font-mono">{ownedCountFor(mfr.name)} {t('haveOnShelf')}</span>
+            </div>
+            <button class="mfr-open" onclick={() => viewMakerPaints(mfr)}>{t('seePaints')} ›</button>
+            <button class="mfr-del" onclick={() => askDeleteMaker(mfr)} aria-label={t('del')}>{t('del')}</button>
+          </div>
+        {/each}
+      </div>
+    </div>
+  {:else}
+  <div class="view-scroll">
+    {#if loading}
     <div class="stock-body">
       <div class="stock-grid">
         {#each Array(8) as _, i (i)}
@@ -277,7 +404,7 @@
         {/each}
       </div>
     </div>
-  {:else if paints.length === 0}
+    {:else if paints.length === 0}
     <!-- Estado vazio (board Estados) -->
     <div class="stock-empty animate-rise">
       <div class="empty-visual" aria-hidden="true">
@@ -287,15 +414,15 @@
       <p class="empty-big font-display">Sua estante ainda está vazia</p>
       <p class="empty-sub">Cadastre a primeira tinta ou importe um CSV com tudo de uma vez.</p>
       <div class="empty-actions">
-        <button class="pill-dark" onclick={openAdd}>+ Nova tinta</button>
+        <button class="pill-dark" onclick={onCadastrar}>{cadastrarLabel()}</button>
         <button class="pill-light" onclick={pickFile}>Importar CSV</button>
       </div>
     </div>
-  {:else}
+    {:else}
     <!-- Filtros -->
     <div class="stock-filters animate-rise" style="animation-delay: 60ms;">
       <div class="brand-pills">
-        <button class="filter-pill" class:active={selectedBrands.length === 0} onclick={() => (selectedBrands = [])}>Todas</button>
+        <button class="filter-pill" class:active={selectedBrands.length === 0} onclick={() => (selectedBrands = [])}>{t('allBrands')}</button>
         {#each ownedBrands as name (name)}
           <button
             class="filter-pill"
@@ -368,8 +495,8 @@
           {/if}
 
           <div class="detail-actions">
-            <button class="pill-light" onclick={() => openEdit(selected!)}>Editar</button>
-            <button class="pill-light" onclick={() => remove(selected!)}>Excluir</button>
+            <button class="pill-light" onclick={() => openEdit(selected!)}>{t('edit')}</button>
+            <button class="pill-light" onclick={() => askRemove(selected!)}>{t('del')}</button>
           </div>
         {:else}
           <span class="label-mono">Tinta selecionada</span>
@@ -377,78 +504,156 @@
         {/if}
       </aside>
     </div>
+    {/if}
+  </div>
   {/if}
 </div>
 
-<!-- Form add/editar -->
-<Dialog bind:open={formOpen} surface$style="background: var(--papel); border-radius: var(--radius-surface); max-width: 480px; width: 100%;">
-  <DialogTitle>{editingId === null ? 'Nova tinta' : 'Editar tinta'}</DialogTitle>
-  <DialogContent>
-    <div style="display: flex; flex-direction: column; gap: 16px; padding-top: 8px;">
-      <div style="display: flex; gap: 14px; align-items: center;">
-        <span class="swatch-flat" style="width: 56px; height: 56px; background: rgb({hexToRgb(fHex).r}, {hexToRgb(fHex).g}, {hexToRgb(fHex).b});"></span>
-        <div style="display: flex; flex-direction: column; gap: 6px;">
-          <span class="form-label label-mono">Cor</span>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <input type="color" bind:value={fHex} class="color-swatch" aria-label="Escolher cor" />
-            <input type="text" bind:value={fHex} class="hex-input font-mono" maxlength="7" aria-label="Hex" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+{#if confirmDeletePaint}
+  <div class="confirm-overlay">
+    <div class="confirm-dialog">
+      <div class="notice-title">{t('delPaintT', { name: confirmDeletePaint.name })}</div>
+      <p class="notice-text">{t('delPaintB')}</p>
+      <div class="confirm-actions">
+        <button class="pill-light" onclick={() => (confirmDeletePaint = null)}>{t('cancel')}</button>
+        <button class="pill-dark" onclick={confirmRemove}>{t('delPaintA')}</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if confirmDeleteMaker}
+  <div class="confirm-overlay">
+    <div class="confirm-dialog">
+      <div class="notice-title">{t('delMakerT', { name: confirmDeleteMaker.name })}</div>
+      <p class="notice-text">
+        {confirmDeleteMaker.paintCount > 0 ? t('delMakerB', { n: confirmDeleteMaker.paintCount }) : t('delMakerB0')}
+      </p>
+      <div class="confirm-actions">
+        <button class="pill-light" onclick={() => (confirmDeleteMaker = null)}>{t('cancel')}</button>
+        <button class="pill-dark" onclick={confirmMakerDelete}>{t('delMakerA')}</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Form add/editar — fiel a docs/Mescla AI.html: nome → código+restante lado
+     a lado → fabricante em chips → cor (swatch+hex) → toggle "tenho" → ações.
+     "Ler do pote" (câmera, US-20/E9) fica fora desta rodada, Could. -->
+{#if formOpen}
+  <div class="confirm-overlay">
+    <div class="confirm-dialog form-dialog">
+      <div class="notice-title">{editingId === null ? t('newPaint') : t('editPaint')}</div>
+
+      <div class="paint-form">
+        <label class="form-row">
+          <span class="form-field-label">{t('fName')}</span>
+          <input type="text" bind:value={fName} placeholder="Mephiston Red" class="form-input" />
+        </label>
+
+        <div class="form-row-split">
+          <label class="form-row" style="flex: 1;">
+            <span class="form-field-label">{t('fCode')}</span>
+            <input type="text" bind:value={fCode} placeholder="70.951" class="form-input" />
+          </label>
+          <label class="form-row" style="width: 130px; flex-shrink: 0;">
+            <span class="form-field-label">{t('fLeft')}</span>
+            <input type="text" bind:value={fVolume} placeholder="17 ml" class="form-input" />
+          </label>
+        </div>
+
+        <div class="form-row">
+          <span class="form-field-label">{t('fMaker')}</span>
+          <div class="form-chip-wrap">
+            {#each manufacturers as mfr (mfr.id)}
+              <button
+                type="button"
+                class="filter-pill"
+                class:active={fMfr === mfr.id}
+                onclick={() => (fMfr = mfr.id)}
+              >{mfr.name}</button>
+            {/each}
           </div>
         </div>
-      </div>
 
-      <Select variant="outlined" bind:value={fMfr} label="Fabricante" style="width: 100%;">
-        {#each manufacturers as mfr (mfr.id)}
-          <Option value={mfr.id}>{mfr.name}</Option>
-        {/each}
-      </Select>
-      <Textfield variant="outlined" bind:value={fName} label="Nome da tinta" style="width: 100%;" />
-      <div style="display: flex; gap: 12px;">
-        <Textfield variant="outlined" bind:value={fCode} label="Código (opcional)" style="flex: 1;" />
-        <Textfield variant="outlined" bind:value={fVolume} label="Volume (ex.: 17 ml)" style="flex: 1;" />
-      </div>
-      <Textfield variant="outlined" bind:value={fNotes} label="Notas (opcional)" textarea style="width: 100%;" />
-    </div>
-
-    <div style="display: flex; gap: 10px; margin-top: 22px; justify-content: flex-end;">
-      <button class="pill-light" onclick={() => (formOpen = false)}>Cancelar</button>
-      <button class="pill-dark" onclick={save} disabled={saving}>
-        {saving ? 'Salvando…' : 'Salvar'}
-      </button>
-    </div>
-  </DialogContent>
-</Dialog>
-
-<!-- Resultado da importação -->
-<Dialog bind:open={importOpen} surface$style="background: var(--papel); border-radius: var(--radius-surface); max-width: 520px; width: 100%;">
-  <DialogTitle>Importação de CSV</DialogTitle>
-  <DialogContent>
-    {#if importResult}
-      <p class="import-summary">
-        <strong>{importResult.imported}</strong>&nbsp;{importResult.imported === 1 ? 'tinta importada' : 'tintas importadas'}
-      </p>
-
-      {#if importResult.errors && importResult.errors.length > 0}
-        <p class="label-mono" style="margin: 18px 0 8px;">
-          {importResult.errors.length} {importResult.errors.length === 1 ? 'linha ignorada' : 'linhas ignoradas'}
-        </p>
-        <div class="err-list">
-          {#each importResult.errors as err}
-            <div class="err-row">
-              <span class="err-line font-mono">linha {err.line}</span>
-              <span class="err-msg">{err.message}</span>
-            </div>
-          {/each}
+        <div class="form-row">
+          <span class="form-field-label">{t('fColor')}</span>
+          <div class="form-color-row">
+            <span
+              class="swatch-flat"
+              style="width: 50px; height: 50px; background: rgb({hexToRgb(fHex).r}, {hexToRgb(fHex).g}, {hexToRgb(fHex).b});"
+            ></span>
+            <input
+              type="text"
+              bind:value={fHex}
+              class="form-input font-mono"
+              style="flex: 1;"
+              maxlength="7"
+              placeholder="#9A1115"
+              aria-label={t('fColor')}
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+            />
+          </div>
         </div>
-        <p class="err-hint">Corrija essas linhas no arquivo e importe de novo. As que já entraram não duplicam se você remover as boas do CSV.</p>
-      {:else}
-        <p class="err-hint" style="margin-top: 14px;">Tudo certo, nenhuma linha com erro.</p>
-      {/if}
-    {/if}
-    <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
-      <button class="pill-dark" onclick={() => (importOpen = false)}>Fechar</button>
+
+        <button type="button" class="have-toggle" class:checked={fHave} aria-pressed={fHave} onclick={() => (fHave = !fHave)}>
+          <span class="have-check" class:checked={fHave}>
+            {#if fHave}<Icon name="check" size={14} />{/if}
+          </span>
+          <span class="have-copy">
+            <span class="have-title">{t('haveNow')}</span>
+            <span class="have-note">{t('haveNote')}</span>
+          </span>
+        </button>
+      </div>
+
+      <div class="confirm-actions">
+        <button class="pill-light" onclick={() => (formOpen = false)}>{t('cancel')}</button>
+        <button class="pill-dark" onclick={save} disabled={saving}>
+          {saving ? t('calculating') : (editingId === null ? t('addPaintBtn') : t('saveChanges'))}
+        </button>
+      </div>
     </div>
-  </DialogContent>
-</Dialog>
+  </div>
+{/if}
+
+<!-- Resultado da importação (fora do escopo do mockup — recurso próprio do
+     app; convertido ao mesmo wrapper de diálogo pra sair do MDC) -->
+{#if importOpen}
+  <div class="confirm-overlay">
+    <div class="confirm-dialog form-dialog">
+      <div class="notice-title">Importação de CSV</div>
+      {#if importResult}
+        <p class="import-summary">
+          <strong>{importResult.imported}</strong>&nbsp;{importResult.imported === 1 ? 'tinta importada' : 'tintas importadas'}
+        </p>
+
+        {#if importResult.errors && importResult.errors.length > 0}
+          <p class="label-mono" style="margin: 18px 0 8px;">
+            {importResult.errors.length} {importResult.errors.length === 1 ? 'linha ignorada' : 'linhas ignoradas'}
+          </p>
+          <div class="err-list">
+            {#each importResult.errors as err}
+              <div class="err-row">
+                <span class="err-line font-mono">linha {err.line}</span>
+                <span class="err-msg">{err.message}</span>
+              </div>
+            {/each}
+          </div>
+          <p class="err-hint">Corrija essas linhas no arquivo e importe de novo. As que já entraram não duplicam se você remover as boas do CSV.</p>
+        {:else}
+          <p class="err-hint" style="margin-top: 14px;">Tudo certo, nenhuma linha com erro.</p>
+        {/if}
+      {/if}
+      <div class="confirm-actions">
+        <button class="pill-dark" onclick={() => (importOpen = false)}>{t('close')}</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .stock-head {
@@ -571,7 +776,7 @@
     min-width: 0;
     aspect-ratio: 4 / 3;
     border-radius: var(--radius-control);
-    box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.06);
+    box-shadow: inset 0 0 0 1px var(--color-neutral-800);
   }
 
   /* selecionada = borda laca 2px */
@@ -624,7 +829,7 @@
     width: 180px;
     height: 130px;
     border-radius: var(--radius-control);
-    box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.06);
+    box-shadow: inset 0 0 0 1px var(--color-neutral-800);
   }
 
   .detail-name {
@@ -715,32 +920,113 @@
     gap: 12px;
   }
 
-  /* Form */
-  .form-label {
-    font-size: 10px;
+  /* Form — fiel a docs/Mescla AI.html (seção "Cadastrar tinta") */
+  .form-dialog {
+    width: min(480px, 100%);
   }
 
-  .color-swatch {
-    width: 44px;
-    height: 34px;
-    padding: 0;
-    border: 1px solid var(--hairline);
-    border-radius: var(--radius-control);
+  .paint-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 8px;
+  }
+
+  .form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .form-row-split {
+    display: flex;
+    gap: 12px;
+  }
+
+  .form-field-label {
+    font-size: 13px;
+    color: var(--color-neutral-500);
+  }
+
+  .form-input {
+    height: 50px;
+    padding: 0 12px;
+    border: 1px solid var(--color-neutral-800);
+    border-radius: var(--radius-md);
+    background: #1b1d2a;
+    color: var(--color-text);
+    font-family: inherit;
+    font-size: 15px;
+    outline: none;
+  }
+
+  .form-input:focus-visible {
+    border-color: var(--color-accent);
+  }
+
+  .form-chip-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .form-color-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .have-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 60px;
+    padding: 0 14px;
+    border: 1px solid var(--color-neutral-800);
+    border-radius: var(--radius-md);
     background: transparent;
+    color: var(--color-text);
+    font-family: inherit;
+    font-size: 15px;
+    text-align: left;
     cursor: pointer;
   }
 
-  .color-swatch:focus-visible {
-    outline: none;
-    border-color: var(--laca);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--laca) 18%, transparent);
+  .have-toggle.checked {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
   }
 
-  .hex-input {
-    width: 96px;
-    padding: 8px 10px;
-    font-size: 13px;
-    text-transform: uppercase;
+  .have-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--color-neutral-800);
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+    color: var(--color-accent);
+  }
+
+  .have-check.checked {
+    border-color: var(--color-accent);
+  }
+
+  .have-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .have-title {
+    font-weight: 500;
+  }
+
+  .have-note {
+    font-size: 12.5px;
+    color: var(--color-neutral-500);
   }
 
   .import-summary {
@@ -780,4 +1066,120 @@
     font-size: 12.5px;
     color: var(--text-2);
   }
+
+  /* ── Aba Fabricantes ── */
+  .mfr-list {
+    border-top: 1px solid var(--color-divider);
+    padding: 0 var(--space-6);
+  }
+
+  .mfr-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    padding: var(--space-4) 0;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .mfr-badge {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--color-accent-800);
+    flex-shrink: 0;
+  }
+
+  .mfr-initial {
+    color: var(--color-neutral-100);
+    font-size: 17px;
+    font-weight: 700;
+  }
+
+  .mfr-id {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    width: 220px;
+    flex-shrink: 0;
+  }
+
+  .mfr-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mfr-meta {
+    font-size: 11px;
+    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mfr-chips {
+    display: flex;
+    gap: var(--space-2);
+    flex: 1;
+    min-width: 0;
+  }
+
+  .mfr-chip {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
+  }
+
+  .mfr-count {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    flex-shrink: 0;
+    min-width: 96px;
+  }
+
+  .mfr-count-n {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--color-text);
+    letter-spacing: -0.02em;
+  }
+
+  .mfr-count-label {
+    font-size: 11px;
+    color: var(--text-2);
+  }
+
+  .mfr-count-owned {
+    font-size: 10.5px;
+    color: var(--color-accent-2);
+  }
+
+  .mfr-open, .mfr-del {
+    flex-shrink: 0;
+    min-height: 44px;
+    border: none;
+    background: none;
+    padding: 0 var(--space-2);
+    font-size: 13px;
+    font-weight: 560;
+    color: var(--color-text);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .mfr-open:hover { color: var(--color-accent-2); }
+  .mfr-del { color: var(--color-danger); }
+  .mfr-del:hover { text-decoration: underline; }
 </style>

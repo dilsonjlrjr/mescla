@@ -4,8 +4,9 @@
   // Query em hex (#8A1518) busca por cor e mostra o ΔE de cada resultado.
   import PaintBottle from './PaintBottle.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
+  import { t } from '../i18n.svelte';
 
-  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock' | 'planner';
+  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock' | 'planner' | 'receitas';
 
   interface NavOpts {
     paintId?: number;
@@ -34,17 +35,20 @@
 
   let { open, onClose, onNavigate }: Props = $props();
 
-  const navActions: { view: View; label: string }[] = [
+  // $derived (não const): RG-23 — troca de idioma não pode deixar rótulo
+  // parado no antigo enquanto o componente (montado uma vez em App.svelte)
+  // continua vivo.
+  let navActions = $derived<{ view: View; label: string }[]>([
+    { view: 'home', label: t('navPergunta') },
+    { view: 'planner', label: t('navPlano') },
+    { view: 'catalog', label: t('navCatalogo') },
+    { view: 'receitas', label: t('navReceitas') },
+    { view: 'stock', label: t('navTintas') },
+    { view: 'manufacturers', label: t('makers') },
     { view: 'mix', label: 'Equivalência' },
-    { view: 'planner', label: 'Planejador' },
-    { view: 'catalog', label: 'Catálogo' },
-    { view: 'color-search', label: 'Cor' },
-    { view: 'stock', label: 'Meu estoque' },
     { view: 'compare', label: 'Comparar' },
-    { view: 'manufacturers', label: 'Fabricantes' },
     { view: 'wheel', label: 'Roda de cor' },
-    { view: 'home', label: 'Início' },
-  ];
+  ]);
 
   let query = $state('');
   let paints: Row[] = $state([]);
@@ -278,7 +282,7 @@
     width: min(760px, calc(100vw - 48px));
     background: var(--papel);
     border-radius: var(--radius-surface);
-    box-shadow: 0 24px 64px rgba(26, 23, 18, 0.18);
+    box-shadow: var(--shadow-lg);
     overflow: hidden;
     animation: palette-in 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
@@ -350,7 +354,7 @@
     height: 34px;
     border-radius: var(--radius-control);
     flex-shrink: 0;
-    box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.1);
+    box-shadow: inset 0 0 0 1px var(--color-neutral-800);
   }
 
   .row-main {

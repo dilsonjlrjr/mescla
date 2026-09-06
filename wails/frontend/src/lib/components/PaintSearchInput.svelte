@@ -111,7 +111,7 @@
     background: var(--papel);
     border: 1px solid var(--hairline);
     border-radius: var(--radius-surface);
-    box-shadow: 0 16px 40px rgba(26, 23, 18, 0.12);
+    box-shadow: var(--shadow-md);
   }
 
   .search-result {

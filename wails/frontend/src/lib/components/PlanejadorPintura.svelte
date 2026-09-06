@@ -8,10 +8,23 @@
   import RegionCard from './RegionCard.svelte';
   import PlanListGrid from './PlanListGrid.svelte';
   import { toast } from '../toast.svelte';
+  import { saveRecipe } from '../recipes.svelte';
+  import { hexOfRgb } from '../color';
+  import { t } from '../i18n.svelte';
 
   // ── Fabricantes ──
   let manufacturers: ManufacturerDTO[] = $state([]);
   PaintService.GetManufacturers().then(m => { manufacturers = m ?? []; });
+
+  // T2 — rf-04: "Pintar com o que eu tenho" recalcula TODAS as regiões
+  // visíveis no fabricante escolhido (US-17/CA14), reaproveitando
+  // changeRegionMfr por região (mesma chamada PickColor(r,g,b,mfrId) já usada
+  // pelo seletor por região — sem duplicar lógica de motor).
+  let globalMfrId = $state(0);
+  async function setGlobalMfr(mfrId: number) {
+    globalMfrId = mfrId;
+    await Promise.all(regions.map(r => changeRegionMfr(r, mfrId)));
+  }
 
   // ── Estado da imagem ──
   let canvasEl: HTMLCanvasElement | undefined = $state();
@@ -159,7 +172,7 @@
       ctx.fill();
 
       // Border
-      ctx.strokeStyle = selectedRegionId === r.id ? '#e8542c' : '#fff';
+      ctx.strokeStyle = selectedRegionId === r.id ? '#9184d9' : '#fff';
       ctx.lineWidth = selectedRegionId === r.id ? 3 : 2;
       ctx.stroke();
 
@@ -181,7 +194,7 @@
       if (r.picking) {
         ctx.beginPath();
         ctx.arc(0, 0, R + 4, 0, Math.PI * 2);
-        ctx.strokeStyle = '#e8542c';
+        ctx.strokeStyle = '#9184d9';
         ctx.lineWidth = 2;
         ctx.setLineDash([4, 4]);
         ctx.stroke();
@@ -657,6 +670,27 @@
   function selectRegion(id: number) {
     selectedRegionId = id;
     draw();
+  }
+
+  // Salvar região como receita (rf-04, RG-16 pendente: grava a fórmula tal
+  // como recipes.svelte.ts já funciona hoje, não o alvo — ver Não faz da spec).
+  function saveRegionAsRecipe(region: PaintingRegion) {
+    const ings = (region.recipe?.ingredients ?? []).filter((i: any) => i.percentage > 0.5);
+    if (!region.targetMfrId || ings.length === 0) {
+      toast('Escolha um fabricante para esta região antes de salvar.', 'error');
+      return;
+    }
+    const mfr = manufacturers.find(m => m.id === region.targetMfrId);
+    saveRecipe({
+      sourcePaintId: -region.id,
+      sourceName: region.regionName || `#${region.id}`,
+      sourceHex: region.hex,
+      targetManufacturerId: region.targetMfrId,
+      targetManufacturer: mfr?.name ?? '',
+      ingredients: ings.map((i: any) => ({ name: i.name, code: i.code || '', hex: hexOfRgb(i.r, i.g, i.b), percentage: i.percentage })),
+      deltaE: region.match?.deltaE ?? 0,
+    });
+    toast(t('recipeSaved'));
   }
 
   async function changeRegionMfr(region: PaintingRegion, mfrId: number) {
@@ -1805,6 +1839,23 @@
           </div>
         </div>
 
+        {#if regions.length > 0}
+          <div class="global-mfr-row">
+            <label class="global-mfr-label" for="global-mfr-select">{t('globalMfrLabel')}</label>
+            <select
+              id="global-mfr-select"
+              class="field-sm"
+              value={globalMfrId}
+              onchange={(e) => setGlobalMfr(Number((e.target as HTMLSelectElement).value))}
+            >
+              <option value={0}>{t('globalMfrAll')}</option>
+              {#each manufacturers as m (m.id)}
+                <option value={m.id}>{m.name}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
+
         {#if regions.length === 0}
           <div class="empty-state">
             <Icon name="droplet" size={32} />
@@ -1827,6 +1878,21 @@
               />
             {/each}
           </div>
+        {/if}
+
+        {#if selectedRegionId !== null}
+          {@const selReg = regions.find(r => r.id === selectedRegionId)}
+          {#if selReg}
+            <div class="save-region-foot view-fixed">
+              <button
+                class="pill-dark"
+                disabled={!selReg.targetMfrId || !(selReg.recipe?.ingredients?.length)}
+                onclick={() => saveRegionAsRecipe(selReg)}
+              >
+                {t('saveRegionBtn')}
+              </button>
+            </div>
+          {/if}
         {/if}
       {:else}
         <button class="sidebar-expand" onclick={() => { sidebarCollapsed = false; }} title="Expandir sidebar">
@@ -2116,5 +2182,30 @@
     font-family: 'IBM Plex Mono', monospace;
     font-size: 13px;
     color: var(--grafite);
+  }
+
+  /* ── rf-04: seletor global de fabricante + rodapé salvar receita ── */
+  .global-mfr-row {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--hairline);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .global-mfr-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--grafite);
+  }
+
+  .save-region-foot {
+    padding: 10px 12px;
+    border-top: 1px solid var(--hairline);
+    flex-shrink: 0;
+  }
+
+  .save-region-foot .pill-dark {
+    width: 100%;
   }
 </style>

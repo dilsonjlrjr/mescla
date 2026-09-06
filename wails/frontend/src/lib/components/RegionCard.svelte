@@ -136,9 +136,27 @@
 
   .region-top .icon-btn { margin-left: auto; }
 
+  /* NFR-03: alvo de toque >= 44x44px */
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-control);
+    background: var(--papel);
+    color: var(--grafite);
+    cursor: pointer;
+  }
+
+  .icon-btn:hover { background: var(--bancada); }
+  .icon-btn.danger { color: var(--color-danger, #e2626b); }
+  .icon-btn.danger:hover { border-color: var(--color-danger, #e2626b); }
+
   .swatch-btn {
-    width: 28px;
-    height: 28px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     border: 2px solid var(--hairline);
     cursor: pointer;

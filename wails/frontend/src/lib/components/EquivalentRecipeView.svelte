@@ -38,7 +38,7 @@
   let allPaints: Paint[] = $state([]);
   let manufacturers: Manufacturer[] = $state([]);
   let userPaints: UserPaintDTO[] = $state([]);
-  let sourcePaint: Paint | null = $state(null);
+  let sourcePaint = $state<Paint | null>(null);
   let targetManufacturerId: number | '' = $state('');
   let result: any = $state(null);
   let loading = $state(false);
@@ -656,7 +656,7 @@
     width: 96px;
     height: 64px;
     border-radius: var(--radius-control);
-    box-shadow: inset 0 0 0 1px rgba(26, 23, 18, 0.08);
+    box-shadow: inset 0 0 0 1px var(--color-neutral-800);
     display: block;
   }
 
