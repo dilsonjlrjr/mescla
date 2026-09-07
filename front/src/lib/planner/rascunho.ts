@@ -26,6 +26,8 @@ export interface RegiaoRascunho {
   paintCode: string;
   deltaE: number;
   painted: boolean;
+  /** rf-11 RN7: veio de fora do universo pedido. */
+  foraDoUniverso: boolean;
 }
 
 export interface AbaRascunho {
@@ -82,6 +84,7 @@ function normalizarRegiao(r: unknown): RegiaoRascunho | null {
     paintCode: typeof o.paintCode === 'string' ? o.paintCode : '',
     deltaE: Number(o.deltaE) || 0,
     painted: normalizarBooleano(o.painted),
+    foraDoUniverso: normalizarBooleano(o.foraDoUniverso),
   };
 }
 

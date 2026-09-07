@@ -40,7 +40,10 @@ type reportRow struct {
 	PaintLabel string // "Citadel Khorne Red (22-14)" ou "sem equivalente"
 	DeltaE     float64
 	Painted    bool
-	Note       string
+	// ForaDoUniverso (rf-11 RN7): a tinta veio de fora do fabricante base ou
+	// do estoque que o usuário havia pedido — aparece marcada na coluna Estado.
+	ForaDoUniverso bool
+	Note           string
 }
 
 // reportPaintTab é a ocorrência de uma tinta dentro de uma aba específica:
@@ -194,17 +197,18 @@ func buildReportRows(tabName string, regions []PaintingRegionDTO) []reportRow {
 		// amarrar em paintId apagaria a tinta real do relatório.
 		label := formatPaintLabel(r.PaintBrand, r.PaintName, r.PaintCode)
 		rows = append(rows, reportRow{
-			N:          i + 1,
-			TabName:    tabName,
-			RegionName: sanitizeText(r.RegionName),
-			Hex:        r.Hex,
-			R:          int(r.R),
-			G:          int(r.G),
-			B:          int(r.B),
-			PaintLabel: label,
-			DeltaE:     r.DeltaE,
-			Painted:    r.Painted != 0,
-			Note:       sanitizeText(r.Note),
+			N:              i + 1,
+			TabName:        tabName,
+			RegionName:     sanitizeText(r.RegionName),
+			Hex:            r.Hex,
+			R:              int(r.R),
+			G:              int(r.G),
+			B:              int(r.B),
+			PaintLabel:     label,
+			DeltaE:         r.DeltaE,
+			Painted:        r.Painted != 0,
+			ForaDoUniverso: r.ForaDoUniverso != 0,
+			Note:           sanitizeText(r.Note),
 		})
 	}
 	return rows
@@ -491,6 +495,11 @@ func renderPDF(ctx context.Context, d reportData) ([]byte, error) {
 			estado := "a pintar"
 			if row.Painted {
 				estado = "pintada"
+			}
+			if row.ForaDoUniverso {
+				// RN7 do rf-11: a lista de compras não pode esconder que essa
+				// tinta veio de fora do que o usuário pediu.
+				estado += " (fora do pedido)"
 			}
 			pdf.CellFormat(widths[0], 7, strconv.Itoa(row.N), "1", 0, "C", false, 0, "")
 			pdf.CellFormat(widths[1], 7, cortar(pdf, tr(row.TabName), widths[1]), "1", 0, "L", false, 0, "")

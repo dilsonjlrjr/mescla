@@ -13,7 +13,7 @@
   import Spinner from '../components/Spinner.svelte';
   import { recipes, removeRecipe, updateRecipeManufacturer, type Recipe } from '../services/recipes.svelte';
   import { allManufacturers, paintById } from '../services/catalog';
-  import { suggestEquivalentRecipe, suggestRecipeForColor, bestBrandsFor, type EquivalentRecipe, type BrandBest } from '../services/engine';
+  import { suggestEquivalentRecipe, recipeForColorInBrand, bestBrandsFor, type EquivalentRecipe, type BrandBest } from '../services/engine';
   import { verdictKeys, deltaIsGood } from '../ui';
   import { switchTab } from '../nav.svelte';
   import { t, decimal } from '../i18n.svelte';
@@ -41,7 +41,7 @@
     try {
       const res = r.targetPaintId != null
         ? await suggestEquivalentRecipe(r.targetPaintId, r.manufacturerId)
-        : await suggestRecipeForColor(r.targetR, r.targetG, r.targetB, r.manufacturerId);
+        : await recipeForColorInBrand(r.targetR, r.targetG, r.targetB, r.manufacturerId);
       resolved = { ...resolved, [r.id]: res };
     } catch {
       resolved = { ...resolved, [r.id]: 'error' };

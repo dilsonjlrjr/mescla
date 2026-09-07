@@ -27,6 +27,8 @@ export interface RegiaoDTO {
   paintCode: string;
   deltaE: number;
   painted: 0 | 1;
+  /** rf-11 RN7: veio de fora do universo pedido (com autorização do usuário). */
+  foraDoUniverso?: 0 | 1;
 }
 
 export interface AbaDTO {

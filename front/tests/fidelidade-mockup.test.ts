@@ -63,6 +63,8 @@ vi.mock('../src/lib/services/engine', () => ({
   findSimilar: () => Promise.resolve([]),
   suggestEquivalentRecipe: () => Promise.resolve(RECIPE),
   suggestRecipeForColor: () => Promise.resolve(RECIPE),
+  ehUniversoVazio: (v: unknown) => (v as { universoVazio?: boolean })?.universoVazio === true,
+  melhorDeltaE: () => Promise.resolve(null),
   suggestFromStock: () => Promise.resolve(RECIPE),
   bestBrandsFor: () => Promise.resolve([]),
   compareToAnchor: () => Promise.resolve([]),

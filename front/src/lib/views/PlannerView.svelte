@@ -17,7 +17,10 @@
   import {
     fitView, toImage, toScreen, zoomAround, zoomPercent, type View,
   } from '../planner/viewport';
-  import { suggestRecipeForColor, type EquivalentRecipe } from '../services/engine';
+  import {
+    suggestRecipeForColor, melhorDeltaE, ehUniversoVazio,
+    type EquivalentRecipe, type UniversoBusca,
+  } from '../services/engine';
   import { allManufacturers } from '../services/catalog';
   import { saveRecipe } from '../services/recipes.svelte';
   import { verdictKeys } from '../ui';
@@ -57,6 +60,7 @@
     paintName: string;
     paintCode: string;
     deltaE: number;
+    foraDoUniverso: boolean;
   }
 
   /** rf-09/RN7: chave de dedup é marca+código+nome — `paintId` colapsaria
@@ -88,6 +92,9 @@
     selectedId: number | null;
     view: View;
     manufacturerId: number | null;
+    /** rf-11 RN4: resposta do diálogo de fallback, lembrada por aba.
+     *  null = ainda não perguntou nesta aba. */
+    saidaAutorizada: 'marca' | 'todos' | null;
   }
 
   let canvasEl: HTMLCanvasElement | undefined = $state();
@@ -109,6 +116,16 @@
 
   let manufacturers = $derived(allManufacturers());
   let manufacturerId: number | null = $state(null);
+  let useStockOnly = $state(false);
+  let saidaAutorizada: 'marca' | 'todos' | null = $state(null);
+  /** rf-11: região que estourou o limiar e está esperando a resposta do
+   *  diálogo. null = diálogo fechado. */
+  let regiaoNoDialogo: number | null = $state(null);
+  let dialogoMelhorMarca: number | null = $state(null);
+  let dialogoMelhorTodos: number | null = $state(null);
+  let universoVazioMotivo: string | null = $state(null);
+  let dialogoElemento: HTMLDivElement | undefined = $state();
+  let dialogoDisparador: HTMLElement | null = null;
 
   // Checklist local de "tenho"/"comprar" das tintas do PLANO INTEIRO — não há
   // conceito de posse por tinta no app hoje (só por marca, na estante); este
@@ -136,6 +153,7 @@
       selectedId: null,
       view: { zoom: 1, panX: 0, panY: 0 },
       manufacturerId: null,
+      saidaAutorizada: null,
     };
   }
   let tabs: AbaState[] = $state([emptyAba()]);
@@ -179,6 +197,7 @@
     tabs[activeTabIndex] = {
       ...atual,
       imageDataUrl, hasImage, image, regions, nextId, selectedId, view, manufacturerId,
+      useStockOnly, saidaAutorizada,
     };
   }
 
@@ -194,6 +213,11 @@
     selectedId = aba.selectedId;
     view = aba.view;
     manufacturerId = aba.manufacturerId;
+    useStockOnly = aba.useStockOnly;
+    saidaAutorizada = aba.saidaAutorizada;
+    // CAN5: o diálogo é da região da aba anterior — fecha ao trocar.
+    regiaoNoDialogo = null;
+    universoVazioMotivo = null;
   }
 
   function switchTab(i: number): void {
@@ -358,6 +382,11 @@
     if (manufacturerId === null && manufacturers.length > 0) manufacturerId = manufacturers[0].id;
   });
 
+  // CA19: foco vai para o diálogo assim que ele aparece.
+  $effect(() => {
+    if (regiaoNoDialogo !== null) dialogoElemento?.focus();
+  });
+
   let selectedRegion = $derived(regions.find(r => r.id === selectedId) ?? null);
   // CA13/RN9: o progresso do cabeçalho soma as regiões pintadas de TODAS as
   // abas — cada aba mostra o seu próprio na tira (tabProgressLabel).
@@ -418,6 +447,16 @@
     if (r.computing) return t('calculating');
     if (!r.result) return t('noSimilarPaint');
     return `ΔE ${decimal(r.result.deltaE, 1)} · ${r.result.ingredients.map(ing => ing.name).join(' + ')}`;
+  }
+
+  /** rf-11 RN3: selo da faixa de qualidade. Nunca só por cor — o texto e o
+   *  ΔE00 andam juntos. */
+  function seloDaFaixa(r: PlannerRegion): { texto: string; cor: string } | null {
+    const faixa = r.result?.faixa;
+    if (!faixa) return null;
+    if (faixa === 'otimo') return { texto: t('faixaOtima'), cor: 'var(--color-success, #3FA34D)' };
+    if (faixa === 'aproximada') return { texto: t('faixaAproximada'), cor: 'var(--color-warning, #E4A11B)' };
+    return { texto: t('faixaNaoEncontrei'), cor: 'var(--color-danger, #D1495B)' };
   }
 
   function equivHeadline(res: EquivalentRecipe): string {
@@ -714,18 +753,95 @@
    *  `salvamentoSeq`) fixa a aba de origem no instante da chamada — troca de
    *  aba durante o cálculo nunca escreve na aba errada nem deixa a região de
    *  origem presa em "calculando" (achado 1 do guardrail rf-09). */
+  /** rf-11 RN1/RN10: o universo vai para o servidor como dois parâmetros; a
+   *  interseção é montada lá, nunca aqui. */
+  function universoAtual(): UniversoBusca {
+    return {
+      targetManufacturerId: saidaAutorizada === 'todos' ? undefined : manufacturerId ?? undefined,
+      useStockOnly: saidaAutorizada === null && useStockOnly,
+      foraDoUniverso: saidaAutorizada !== null,
+    };
+  }
+
+  /** rf-11 RN4/RN5/RN6: o diálogo de fallback. Abre UMA vez por aba, na
+   *  primeira região que estoura o limiar, e mostra o melhor ΔE00 alcançável
+   *  em cada saída antes de o usuário escolher. */
+  async function abrirDialogoDeFallback(regiaoId: number, r: number, g: number, b: number): Promise<void> {
+    if (regiaoNoDialogo !== null) return; // já tem um aberto
+    dialogoDisparador = document.activeElement as HTMLElement | null;
+    regiaoNoDialogo = regiaoId;
+    dialogoMelhorMarca = null;
+    dialogoMelhorTodos = null;
+
+    // As duas saídas, na ordem da RN5: primeiro todo o catálogo do fabricante
+    // base (comprar uma tinta que falta), depois os outros fabricantes.
+    if (manufacturerId != null) {
+      dialogoMelhorMarca = await melhorDeltaE(r, g, b, { targetManufacturerId: manufacturerId });
+    }
+    dialogoMelhorTodos = await melhorDeltaE(r, g, b, {});
+  }
+
+  /** A escolha vale para as demais regiões da aba (RN4) e dispara o recálculo. */
+  async function escolherSaida(saida: 'marca' | 'todos'): Promise<void> {
+    saidaAutorizada = saida;
+    tabs[activeTabIndex].saidaAutorizada = saida;
+    regiaoNoDialogo = null;
+    devolverFoco();
+    marcarAlteracao();
+    await Promise.all(regions.map(r => computeRegion(r.id)));
+  }
+
+  function devolverFoco(): void {
+    dialogoDisparador?.focus();
+    dialogoDisparador = null;
+  }
+
+  function onDialogoKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      fecharDialogo();
+    }
+  }
+
+  function fecharDialogo(): void {
+    // CA19: fechar sem escolher não decide nada.
+    regiaoNoDialogo = null;
+    devolverFoco();
+  }
+
+  /** RN8: trocar qualquer interruptor limpa a resposta lembrada e recalcula. */
+  async function onUseStockOnlyChange(valor: boolean): Promise<void> {
+    useStockOnly = valor;
+    saidaAutorizada = null;
+    tabs[activeTabIndex].useStockOnly = valor;
+    tabs[activeTabIndex].saidaAutorizada = null;
+    universoVazioMotivo = null;
+    marcarAlteracao();
+    await Promise.all(regions.map(r => computeRegion(r.id)));
+  }
+
   async function computeRegion(id: number, tabUidChamada: number = tabs[activeTabIndex].uid) {
     const alvo = () => regiaoDaAba(tabUidChamada, id);
     const inicio = alvo();
     if (!inicio) return;
     inicio.computing = true;
     try {
-      const res =
-        manufacturerId != null
-          ? await suggestRecipeForColor(inicio.r, inicio.g, inicio.b, manufacturerId)
-          : null;
+      const resp = await suggestRecipeForColor(inicio.r, inicio.g, inicio.b, universoAtual());
+      if (ehUniversoVazio(resp)) {
+        // RN9: universo sem tinta não é erro — a tela diz o motivo e o
+        // usuário decide se abre o universo.
+        universoVazioMotivo = resp.motivo;
+        const vazio = alvo();
+        if (vazio) vazio.result = null;
+        return;
+      }
+      universoVazioMotivo = null;
       const agora = alvo();
-      if (agora) agora.result = res;
+      if (agora) agora.result = resp;
+      // RN3/RN4: estourou o limiar e a aba ainda não respondeu o diálogo.
+      if (resp.faixa === 'nao-encontrei' && saidaAutorizada === null) {
+        void abrirDialogoDeFallback(id, inicio.r, inicio.g, inicio.b);
+      }
     } catch (e) {
       console.error('Erro ao calcular região:', e);
       const agora = alvo();
@@ -740,6 +856,11 @@
   // CA14: trocar de fabricante recalcula TODAS as regiões visíveis.
   async function onManufacturerChange(id: number) {
     manufacturerId = id;
+    // RN8: trocar de fabricante base limpa a resposta lembrada — a mesma
+    // disciplina do estoque em onUseStockOnlyChange.
+    saidaAutorizada = null;
+    tabs[activeTabIndex].saidaAutorizada = null;
+    universoVazioMotivo = null;
     const epoca = salvamentoSeq;
     // marcarAlteracao só depois que o laço de recálculo termina — nunca
     // antes, e nunca por região (um `$effect` sobre `regions` dispararia a
@@ -799,6 +920,7 @@
         paintName: s?.paintName ?? '',
         paintCode: s?.paintCode ?? '',
         deltaE: s?.deltaE ?? 0,
+        foraDoUniverso: s?.foraDoUniverso ?? false,
       };
     }
     const ing = r.result.ingredients ?? [];
@@ -809,6 +931,9 @@
       paintName: ing.length === 1 ? ing[0].name : ing.map(x => x.name).join(' + '),
       paintCode: ing.length === 1 ? ing[0].code : '',
       deltaE: r.result.deltaE ?? 0,
+      // rf-11 RN7: sem foraDoUniverso na resposta (T1/T3 não o enviam), a
+      // marcação é falsa — só true quando o rf-11 explicitamente autorizou.
+      foraDoUniverso: r.result.foraDoUniverso ?? false,
     };
   }
 
@@ -817,7 +942,8 @@
   }
 
   function regiaoParaDTO(r: PlannerRegion, i: number): RegiaoDTO {
-    return { ...mapRegionCommon(r, i), painted: r.painted ? 1 : 0 };
+    const comum = mapRegionCommon(r, i);
+    return { ...comum, painted: r.painted ? 1 : 0, foraDoUniverso: comum.foraDoUniverso ? 1 : 0 };
   }
 
   function buildAbaDTO(aba: AbaState): AbaDTO {
@@ -893,12 +1019,13 @@
     if (!inicio) return;
     inicio.computing = true;
     try {
-      const res =
-        aba.manufacturerId != null
-          ? await suggestRecipeForColor(inicio.r, inicio.g, inicio.b, aba.manufacturerId)
-          : null;
+      const resp = await suggestRecipeForColor(inicio.r, inicio.g, inicio.b, {
+        targetManufacturerId: aba.saidaAutorizada === 'todos' ? undefined : aba.manufacturerId ?? undefined,
+        useStockOnly: aba.saidaAutorizada === null && aba.useStockOnly,
+        foraDoUniverso: aba.saidaAutorizada !== null,
+      });
       const agora = alvo();
-      if (agora) agora.result = res;
+      if (agora) agora.result = ehUniversoVazio(resp) ? null : resp;
     } catch (e) {
       console.error('Erro ao calcular região:', e);
       const agora = alvo();
@@ -943,6 +1070,7 @@
           paintName: rd.paintName,
           paintCode: rd.paintCode,
           deltaE: rd.deltaE,
+          foraDoUniverso: rd.foraDoUniverso === 1,
         },
       }));
       const image = abaDTO.imageData ? await loadImageBitmap(abaDTO.imageData) : null;
@@ -951,6 +1079,7 @@
         serverId: abaDTO.id,
         name: abaDTO.name,
         useStockOnly: abaDTO.useStockOnly === 1,
+        saidaAutorizada: null,
         imageDataUrl: abaDTO.imageData || '',
         hasImage: !!abaDTO.imageData,
         image,
@@ -1369,6 +1498,71 @@
           {/each}
         </div>
 
+        <!-- rf-11: os dois interruptores são independentes. Ligados juntos,
+             o universo é a interseção: só o que eu tenho daquela marca. -->
+        <label
+          style="display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 12px; font-size: 13.5px; color: var(--color-neutral-300); cursor: pointer;"
+        >
+          <input
+            type="checkbox"
+            role="switch"
+            checked={useStockOnly}
+            onchange={(e) => void onUseStockOnlyChange(e.currentTarget.checked)}
+            style="width: 20px; height: 20px; accent-color: var(--color-accent);"
+          />
+          {t('onlyMyStock')}
+        </label>
+
+        {#if universoVazioMotivo}
+          <p role="alert" style="margin: 8px 0 0; font-size: 12.5px; color: var(--color-warning, #E4A11B);">
+            {universoVazioMotivo}
+          </p>
+        {/if}
+
+        {#if regiaoNoDialogo !== null}
+          <!-- rf-11 RN4/RN5: uma vez por aba, com as duas saídas na ordem e o
+               melhor ΔE00 alcançável em cada uma. -->
+          <div
+            bind:this={dialogoElemento}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="t2-fallback-titulo"
+            tabindex="-1"
+            onkeydown={onDialogoKeydown}
+            style="margin: 14px 0; padding: 16px; border: 1px solid var(--color-accent-700); border-radius: 14px; background: var(--color-accent-panel); outline: none;"
+          >
+            <p id="t2-fallback-titulo" style="margin: 0 0 6px; font-size: 14px; font-weight: 600; color: var(--color-neutral-100);">
+              {t('fallbackTitulo')}
+            </p>
+            <p style="margin: 0 0 12px; font-size: 12.5px; color: var(--color-neutral-400);">
+              {t('fallbackExplicacao')}
+            </p>
+
+            {#if manufacturerId != null}
+              <button
+                style="display: block; width: 100%; min-height: 44px; margin-bottom: 8px; padding: 0 14px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 13.5px; cursor: pointer;"
+                onclick={() => void escolherSaida('marca')}
+              >
+                {t('fallbackAbrirMarca')}
+                {#if dialogoMelhorMarca !== null}· ΔE {decimal(dialogoMelhorMarca, 1)}{/if}
+              </button>
+            {/if}
+
+            <button
+              style="display: block; width: 100%; min-height: 44px; margin-bottom: 8px; padding: 0 14px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 13.5px; cursor: pointer;"
+              onclick={() => void escolherSaida('todos')}
+            >
+              {t('fallbackAbrirTodos')}
+              {#if dialogoMelhorTodos !== null}· ΔE {decimal(dialogoMelhorTodos, 1)}{/if}
+            </button>
+
+            <button
+              style="display: block; width: 100%; min-height: 44px; border: none; background: transparent; color: var(--color-neutral-500); font-family: inherit; font-size: 13px; cursor: pointer;"
+              onclick={fecharDialogo}
+            >{t('fallbackManter')}</button>
+          </div>
+        {/if}
+
         {#if selectedRegion}
           {@const region = selectedRegion}
           {@const idx = regions.findIndex(x => x.id === region.id)}
@@ -1438,6 +1632,13 @@
                 <span style="display: flex; flex-direction: column; flex: 1; min-width: 0;">
                   <span style="font-size: 16px; font-weight: 500; color: var(--color-text);">{regionName(i)}</span>
                   <span class="font-mono" style="font-size: 12.5px; color: var(--color-neutral-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{regionMatchText(r)}</span>
+                  {#if seloDaFaixa(r)}
+                    {@const selo = seloDaFaixa(r)}
+                    <span style="font-size: 11.5px; font-weight: 600; color: {selo?.cor};">{selo?.texto}</span>
+                  {/if}
+                  {#if r.result?.foraDoUniverso}
+                    <span style="font-size: 11.5px; color: var(--color-warning, #E4A11B);">{t('foraDoUniversoLabel')}</span>
+                  {/if}
                 </span>
                 <button
                   class="t2-done-btn"

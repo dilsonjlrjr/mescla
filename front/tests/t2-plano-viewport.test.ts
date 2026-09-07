@@ -41,6 +41,8 @@ const RECIPE = {
 vi.mock('../src/lib/services/engine', () => ({
   engineReady: () => Promise.resolve(),
   suggestRecipeForColor: () => Promise.resolve(RECIPE),
+  ehUniversoVazio: (v: unknown) => (v as { universoVazio?: boolean })?.universoVazio === true,
+  melhorDeltaE: () => Promise.resolve(null),
 }));
 
 // ── (a) matemática do viewport ───────────────────────────────────────────────

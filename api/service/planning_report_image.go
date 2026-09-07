@@ -430,6 +430,10 @@ func renderPNG(ctx context.Context, d reportData) ([]byte, error) {
 			if row.Painted {
 				state = "pintada"
 			}
+			if row.ForaDoUniverso {
+				state += "*" // RN7 do rf-11: fora do universo pedido (ver legenda)
+			}
+			state = truncarNaLargura(bodyFace, state, colX[8]-colX[7]-colGapPx)
 			drawLeftText(img, bodyFace, state, pagePadding+colX[7], rowY, color.Black)
 			nota := truncarNaLargura(bodyFace, sanitizeReportText(row.Note), innerWidth-colX[8])
 			drawLeftText(img, bodyFace, nota, pagePadding+colX[8], rowY, color.Black)

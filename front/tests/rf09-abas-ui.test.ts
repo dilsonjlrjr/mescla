@@ -36,6 +36,8 @@ vi.mock('../src/lib/services/catalog', () => ({
 vi.mock('../src/lib/services/engine', () => ({
   engineReady: () => Promise.resolve(),
   suggestRecipeForColor: () => Promise.resolve(engineQueue.length ? engineQueue.shift() : null),
+  ehUniversoVazio: (v: unknown) => (v as { universoVazio?: boolean })?.universoVazio === true,
+  melhorDeltaE: () => Promise.resolve(null),
 }));
 
 function recipe(over: Record<string, unknown> = {}) {

@@ -29,6 +29,7 @@ func NewRouter(svc *service.PaintService) *router.Router {
 	r.GET("/similar", handleFindSimilar(svc))
 	r.GET("/recipes/by-paint", handleRecipeByPaint(svc))
 	r.GET("/recipes/by-color", handleRecipeByColor(svc))
+	r.GET("/recipes/best-delta-e", handleBestDeltaE(svc))
 
 	// Receitas salvas (RF-04, tela Receitas) — guardam o alvo, nunca a
 	// fórmula; resolve-se de novo em /recipes/{id}/resolve.

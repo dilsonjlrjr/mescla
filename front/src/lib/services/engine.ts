@@ -44,6 +44,12 @@ export interface EquivalentRecipe {
   deltaE: number;
   method: string;
   reproducible: boolean;
+  /** rf-11: faixa de qualidade do acerto — decide o selo e se o diálogo de
+   *  fallback abre. */
+  faixa?: 'otimo' | 'aproximada' | 'nao-encontrei';
+  /** rf-11: a região foi resolvida fora do universo pedido, com autorização
+   *  do usuário no diálogo. */
+  foraDoUniverso?: boolean;
   tips: string[];
 }
 
@@ -125,19 +131,74 @@ export async function suggestEquivalentRecipe(
   return apiGet<EquivalentRecipe>(`/recipes/by-paint?${params}`);
 }
 
+/** rf-11: o universo de busca. Os dois interruptores são independentes e
+ *  combináveis; ligados juntos significam "só o que eu tenho daquela marca". */
+export interface UniversoBusca {
+  /** 0 ou ausente = sem fabricante base. */
+  targetManufacturerId?: number;
+  useStockOnly?: boolean;
+  /** Só depois de o usuário autorizar a saída no diálogo de fallback. */
+  foraDoUniverso?: boolean;
+}
+
+/** Resposta possível quando o universo escolhido não tem tinta nenhuma. Não é
+ *  erro: a tela mostra o motivo e oferece as saídas (rf-11 RN9). */
+export interface UniversoVazio {
+  universoVazio: true;
+  motivo: string;
+}
+
+export function ehUniversoVazio(v: EquivalentRecipe | UniversoVazio): v is UniversoVazio {
+  return (v as UniversoVazio).universoVazio === true;
+}
+
+function paramsDoUniverso(r: number, g: number, b: number, u: UniversoBusca): URLSearchParams {
+  const params = new URLSearchParams({ r: String(r), g: String(g), b: String(b) });
+  if (u.targetManufacturerId && u.targetManufacturerId > 0) {
+    params.set('targetManufacturerId', String(u.targetManufacturerId));
+  }
+  if (u.useStockOnly) params.set('useStockOnly', '1');
+  if (u.foraDoUniverso) params.set('foraDoUniverso', '1');
+  return params;
+}
+
 export async function suggestRecipeForColor(
+  r: number,
+  g: number,
+  b: number,
+  universo: UniversoBusca,
+): Promise<EquivalentRecipe | UniversoVazio> {
+  return apiGet<EquivalentRecipe | UniversoVazio>(`/recipes/by-color?${paramsDoUniverso(r, g, b, universo)}`);
+}
+
+/** Atalho para quem só quer o fabricante: T1/T3 usam o universo simples de uma
+ *  marca, sem os interruptores do plano de peça. Nunca devolve universo vazio —
+ *  uma marca do catálogo sempre tem tintas com cor. */
+export async function recipeForColorInBrand(
   r: number,
   g: number,
   b: number,
   targetManufacturerId: number,
 ): Promise<EquivalentRecipe> {
-  const params = new URLSearchParams({
-    r: String(r),
-    g: String(g),
-    b: String(b),
-    targetManufacturerId: String(targetManufacturerId),
-  });
-  return apiGet<EquivalentRecipe>(`/recipes/by-color?${params}`);
+  const resp = await suggestRecipeForColor(r, g, b, { targetManufacturerId });
+  if (ehUniversoVazio(resp)) {
+    throw new Error(resp.motivo);
+  }
+  return resp;
+}
+
+/** rf-11 RN6: o melhor ΔE00 alcançável numa combinação, sem montar a receita —
+ *  é o número que o diálogo de fallback mostra em cada saída. */
+export async function melhorDeltaE(
+  r: number,
+  g: number,
+  b: number,
+  universo: UniversoBusca,
+): Promise<number | null> {
+  const resp = await apiGet<{ deltaE?: number; universoVazio?: boolean }>(
+    `/recipes/best-delta-e?${paramsDoUniverso(r, g, b, universo)}`,
+  );
+  return typeof resp.deltaE === 'number' ? resp.deltaE : null;
 }
 
 /** Receita da cor de origem usando SÓ o estoque do pintor (localStorage,

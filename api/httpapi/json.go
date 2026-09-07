@@ -108,3 +108,11 @@ func queryInt64List(ctx *fasthttp.RequestCtx, name string) []int64 {
 	}
 	return out
 }
+
+// queryBool lê um parâmetro de chave/valor como booleano. Qualquer valor fora
+// de "1"/"true" conta como DESLIGADO — inclusive lixo (rf-11 CAN1): um
+// parâmetro que o cliente errou nunca pode ligar um modo sozinho.
+func queryBool(ctx *fasthttp.RequestCtx, name string) bool {
+	v := strings.ToLower(strings.TrimSpace(string(ctx.QueryArgs().Peek(name))))
+	return v == "1" || v == "true"
+}

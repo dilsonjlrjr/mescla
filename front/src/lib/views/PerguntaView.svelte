@@ -25,7 +25,7 @@
   import LangSwitch from '../components/LangSwitch.svelte';
   import { allManufacturers, allPaints, paintById, searchPaints, hexOf, type Paint } from '../services/catalog';
   import {
-    findSimilar, suggestEquivalentRecipe, suggestRecipeForColor, suggestFromStock, bestBrandsFor,
+    findSimilar, suggestEquivalentRecipe, recipeForColorInBrand, suggestFromStock, bestBrandsFor,
     type EquivalentRecipe, type BrandBest, type SearchResult,
   } from '../services/engine';
   import { shelf, inShelf, toggleShelf } from '../services/shelf.svelte';
@@ -230,7 +230,7 @@
       if (typeof brandFilter === 'number') {
         result = sourcePaint
           ? await suggestEquivalentRecipe(sourcePaint.id, brandFilter)
-          : await suggestRecipeForColor(tg.r, tg.g, tg.b, brandFilter);
+          : await recipeForColorInBrand(tg.r, tg.g, tg.b, brandFilter);
         usedManufacturerId = brandFilter;
       } else if (onlyHave) {
         if (shelf.manufacturerIds.length === 0 && stock.paints.length === 0) {
@@ -249,7 +249,7 @@
           const found = await bestOverManufacturers(shelf.manufacturerIds, id =>
             sourcePaint
               ? suggestEquivalentRecipe(sourcePaint.id, id)
-              : suggestRecipeForColor(tg.r, tg.g, tg.b, id),
+              : recipeForColorInBrand(tg.r, tg.g, tg.b, id),
           );
           result = found;
           if (found) usedManufacturerId = allManufacturers().find(m => m.name === found.targetManufacturer)?.id ?? null;
@@ -269,7 +269,7 @@
           }
         } else {
           const ids = allManufacturers().map(m => m.id);
-          const found = await bestOverManufacturers(ids, id => suggestRecipeForColor(tg.r, tg.g, tg.b, id));
+          const found = await bestOverManufacturers(ids, id => recipeForColorInBrand(tg.r, tg.g, tg.b, id));
           result = found;
           if (found) usedManufacturerId = allManufacturers().find(m => m.name === found.targetManufacturer)?.id ?? null;
         }

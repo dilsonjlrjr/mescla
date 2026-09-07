@@ -70,6 +70,11 @@ func ensurePlanningSchema(db *sql.DB) error {
 	if err := addColumnIfMissing(db, "painting_plans", "selected_manufacturer_id", "INTEGER"); err != nil {
 		return err
 	}
+	// rf-11 RN7: marca a região resolvida fora do universo que o usuário
+	// pediu, para o relatório poder avisar (planning_report.go).
+	if err := addColumnIfMissing(db, "painting_regions", "fora_do_universo", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
 
 	if err := migratePlanningTabsIfNeeded(db); err != nil {
 		return err
@@ -167,6 +172,7 @@ func migratePlanningTabsIfNeeded(db *sql.DB) error {
 			delta_e REAL DEFAULT 0,
 			sort_order INTEGER NOT NULL DEFAULT 0,
 			painted INTEGER NOT NULL DEFAULT 0,
+			fora_do_universo INTEGER NOT NULL DEFAULT 0,
 			FOREIGN KEY (tab_id) REFERENCES painting_tabs(id) ON DELETE CASCADE
 		)
 	`); err != nil {
@@ -175,9 +181,9 @@ func migratePlanningTabsIfNeeded(db *sql.DB) error {
 
 	if _, err := tx.Exec(`
 		INSERT INTO painting_regions_new
-			(id, tab_id, x, y, r, g, b, hex, region_name, note, paint_id, paint_brand, paint_name, paint_code, delta_e, sort_order, painted)
+			(id, tab_id, x, y, r, g, b, hex, region_name, note, paint_id, paint_brand, paint_name, paint_code, delta_e, sort_order, painted, fora_do_universo)
 		SELECT pr.id, t.id, pr.x, pr.y, pr.r, pr.g, pr.b, pr.hex, pr.region_name, pr.note,
-		       pr.paint_id, pr.paint_brand, pr.paint_name, pr.paint_code, pr.delta_e, pr.sort_order, pr.painted
+		       pr.paint_id, pr.paint_brand, pr.paint_name, pr.paint_code, pr.delta_e, pr.sort_order, pr.painted, pr.fora_do_universo
 		FROM painting_regions pr
 		JOIN painting_tabs t ON t.id = (
 			SELECT id FROM painting_tabs WHERE plan_id = pr.plan_id
@@ -302,6 +308,10 @@ type PaintingRegionDTO struct {
 	PaintCode  string  `json:"paintCode"`
 	DeltaE     float64 `json:"deltaE"`
 	Painted    int     `json:"painted"`
+	// ForaDoUniverso (rf-11 RN7): a tinta veio de fora do universo (fabricante
+	// base / estoque) que o usuário tinha pedido — só true com autorização
+	// explícita no diálogo de fallback (rf-11.escolherSaida).
+	ForaDoUniverso int `json:"foraDoUniverso"`
 }
 
 const (
@@ -468,12 +478,14 @@ func (s *PaintService) SavePlan(plan PaintingPlanDTO) (PaintingPlanDTO, error) {
 		for ri, r := range t.Regions {
 			painted := normalizePainted(r.Painted)
 			r.Painted = painted
+			foraDoUniverso := normalizePainted(r.ForaDoUniverso)
+			r.ForaDoUniverso = foraDoUniverso
 			_, err := tx.Exec(
 				`INSERT INTO painting_regions
-				 (tab_id, x, y, r, g, b, hex, region_name, note, paint_id, paint_brand, paint_name, paint_code, delta_e, sort_order, painted)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				 (tab_id, x, y, r, g, b, hex, region_name, note, paint_id, paint_brand, paint_name, paint_code, delta_e, sort_order, painted, fora_do_universo)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				tabID, r.X, r.Y, r.R, r.G, r.B, r.Hex, r.RegionName, r.Note,
-				nullableInt64(r.PaintID), r.PaintBrand, r.PaintName, r.PaintCode, r.DeltaE, ri, painted,
+				nullableInt64(r.PaintID), r.PaintBrand, r.PaintName, r.PaintCode, r.DeltaE, ri, painted, foraDoUniverso,
 			)
 			if err != nil {
 				return PaintingPlanDTO{}, fmt.Errorf("inserindo região %d da aba %q: %w", ri+1, t.Name, err)
@@ -601,7 +613,7 @@ func (s *PaintService) loadTabRegions(tabID int64) ([]PaintingRegionDTO, error) 
 		       COALESCE(region_name, ''), COALESCE(note, ''),
 		       COALESCE(paint_id, 0), COALESCE(paint_brand, ''),
 		       COALESCE(paint_name, ''), COALESCE(paint_code, ''),
-		       COALESCE(delta_e, 0), COALESCE(painted, 0)
+		       COALESCE(delta_e, 0), COALESCE(painted, 0), COALESCE(fora_do_universo, 0)
 		FROM painting_regions
 		WHERE tab_id = ?
 		ORDER BY sort_order
@@ -616,7 +628,7 @@ func (s *PaintService) loadTabRegions(tabID int64) ([]PaintingRegionDTO, error) 
 		var r PaintingRegionDTO
 		if err := rows.Scan(&r.ID, &r.X, &r.Y, &r.R, &r.G, &r.B, &r.Hex,
 			&r.RegionName, &r.Note, &r.PaintID, &r.PaintBrand, &r.PaintName, &r.PaintCode, &r.DeltaE,
-			&r.Painted,
+			&r.Painted, &r.ForaDoUniverso,
 		); err != nil {
 			return nil, err
 		}

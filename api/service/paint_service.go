@@ -178,6 +178,13 @@ type EquivalentRecipeDTO struct {
 	// melhor aproximação possível — não uma receita utilizável.
 	Reproducible bool     `json:"reproducible"`
 	Tips         []string `json:"tips"`
+	// Faixa classifica o acerto (rf-11 RN3): otimo, aproximada ou
+	// nao-encontrei. É o que a tela usa para o selo e para decidir se abre o
+	// diálogo de fallback.
+	Faixa FaixaQualidade `json:"faixa,omitempty"`
+	// ForaDoUniverso marca a receita resolvida fora do universo que o usuário
+	// pediu — só acontece quando ele autorizou a saída no diálogo (rf-11 RN7).
+	ForaDoUniverso bool `json:"foraDoUniverso,omitempty"`
 }
 
 type ManufacturerDTO struct {
