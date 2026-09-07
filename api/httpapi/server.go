@@ -6,6 +6,11 @@ import (
 	"paint-match-ai/api/service"
 )
 
+// maxRequestBodySize é o teto do corpo de requisição (rf-09, RN2): um plano
+// com várias abas de foto (até 2 MB cada) precisa caber; acima disso o
+// próprio fasthttp recusa antes de chegar no handler.
+const maxRequestBodySize = 32 * 1024 * 1024 // 32MB
+
 // Server é o servidor HTTP fasthttp completo, pronto pra ListenAndServe.
 type Server struct {
 	fast *fasthttp.Server
@@ -20,8 +25,9 @@ func NewServer(svc *service.PaintService) *Server {
 	r := NewRouter(svc)
 	return &Server{
 		fast: &fasthttp.Server{
-			Handler: withCORS(r.Handler),
-			Name:    "mescla-api",
+			Handler:            withCORS(r.Handler),
+			Name:               "mescla-api",
+			MaxRequestBodySize: maxRequestBodySize,
 		},
 	}
 }

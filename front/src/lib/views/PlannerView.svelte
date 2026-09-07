@@ -27,11 +27,11 @@
   import {
     lerRascunho, agendarGravacao, apagarRascunho,
     lerPlanoAtivo, gravarPlanoAtivo, limparPlanoAtivo, estadoAutoSave,
-    type Rascunho, type RegiaoRascunho, type EstadoAutoSave,
+    type Rascunho, type RegiaoRascunho, type AbaRascunho, type EstadoAutoSave,
   } from '../planner/rascunho';
   import {
     validarPlano, salvarPlano, carregarPlano, baixarRelatorio, PlanoError,
-    type PlanoDTO, type RegiaoDTO,
+    type PlanoDTO, type RegiaoDTO, type AbaDTO, type ErroValidacaoPlano,
   } from '../services/plans';
 
   interface PlannerRegion {
@@ -59,11 +59,35 @@
     deltaE: number;
   }
 
+  /** rf-09/RN7: chave de dedup é marca+código+nome — `paintId` colapsaria
+   *  misturas diferentes (CA11). `tabs` cita os nomes das abas onde a tinta
+   *  aparece (CA10). */
   interface ShoppingItem {
-    paintId: number;
+    key: string;
     name: string;
     code: string;
     manufacturer: string;
+    tabs: string[];
+  }
+
+  /** rf-09 — estado de uma aba (figura). `regions`, `image`, `hasImage`,
+   *  `imageDataUrl`, `nextId`, `selectedId`, `view` e `manufacturerId` só
+   *  pertencem à aba ATIVA nas variáveis de topo (abaixo); o resto do tempo
+   *  moram aqui. `uid` é a chave estável do `{#each}` — nunca o índice, que
+   *  muda ao reordenar/excluir. */
+  interface AbaState {
+    uid: number;
+    serverId?: number;
+    name: string;
+    useStockOnly: boolean;
+    imageDataUrl: string;
+    hasImage: boolean;
+    image: HTMLImageElement | null;
+    regions: PlannerRegion[];
+    nextId: number;
+    selectedId: number | null;
+    view: View;
+    manufacturerId: number | null;
   }
 
   let canvasEl: HTMLCanvasElement | undefined = $state();
@@ -86,10 +110,180 @@
   let manufacturers = $derived(allManufacturers());
   let manufacturerId: number | null = $state(null);
 
-  // Checklist local de "tenho"/"comprar" das tintas da peça — não há conceito
-  // de posse por tinta no app hoje (só por marca, na estante); este estado
-  // vive só nesta tela, como um checklist de compra da montagem atual.
-  let ownedPaints: Set<number> = $state(new Set());
+  // Checklist local de "tenho"/"comprar" das tintas do PLANO INTEIRO — não há
+  // conceito de posse por tinta no app hoje (só por marca, na estante); este
+  // estado vive só nesta tela. Chave = marca+código+nome (RN7), sobrevive à
+  // troca de aba e de foto (RN8/CA14) — só zera ao (re)carregar outro plano.
+  let ownedPaints: Set<string> = $state(new Set());
+
+  // ── rf-09: abas de figura ──
+  // `tabs[activeTabIndex]` é a aba "estacionada" — as variáveis acima (regions,
+  // image, hasImage, imageDataUrl, nextId, selectedId, view, manufacturerId)
+  // são o espelho de trabalho da aba ATIVA; troca de aba grava o espelho na
+  // aba de origem e relê da aba de destino (RN4: nunca marca alteração).
+  let abaUidSeq = 1;
+  function emptyAba(): AbaState {
+    return {
+      uid: abaUidSeq++,
+      serverId: undefined,
+      name: '',
+      useStockOnly: false,
+      imageDataUrl: '',
+      hasImage: false,
+      image: null,
+      regions: [],
+      nextId: 1,
+      selectedId: null,
+      view: { zoom: 1, panX: 0, panY: 0 },
+      manufacturerId: null,
+    };
+  }
+  let tabs: AbaState[] = $state([emptyAba()]);
+  let activeTabIndex = $state(0);
+  let renamingTabIndex: number | null = $state(null);
+  const MAX_ABAS_UI = 10;
+
+  /** Nome efetivo pra exibir — mesma convenção de `plans.ts`
+   *  (`nomeEfetivoDaAba`), de propósito não traduzida (RN3: "Figura N" é
+   *  convenção fixa, igual na mensagem de erro do servidor). */
+  function displayTabName(aba: AbaState, i: number): string {
+    const nome = aba.name.trim();
+    return nome.length > 0 ? nome : `Figura ${i + 1}`;
+  }
+
+  /** Regiões "ao vivo" de uma aba: a ativa lê do espelho de trabalho — que
+   *  pode estar mais fresco que `tabs[i].regions` entre uma mutação e o
+   *  próximo `snapshotActiveIntoTabs()`. */
+  function tabRegions(i: number): PlannerRegion[] {
+    return i === activeTabIndex ? regions : tabs[i].regions;
+  }
+
+  /** `hasImage` "ao vivo" de uma aba — mesma convenção de `tabRegions`. Usada
+   *  pelo cabeçalho (achado 3 do guardrail rf-09): o progresso é do plano
+   *  inteiro, não pode sumir só porque a aba ATIVA está sem foto. */
+  function tabHasImage(i: number): boolean {
+    return i === activeTabIndex ? hasImage : tabs[i].hasImage;
+  }
+
+  function tabProgressLabel(i: number): string {
+    const rs = tabRegions(i);
+    return t('tabProgressShort', { a: rs.filter(r => r.painted).length, b: rs.length });
+  }
+
+  /** Grava o espelho de trabalho de volta na aba ativa — chamado antes de
+   *  trocar de aba, montar o DTO/rascunho, ou qualquer leitura que precise do
+   *  estado mais recente de todas as abas. */
+  function snapshotActiveIntoTabs(): void {
+    const atual = tabs[activeTabIndex];
+    if (!atual) return;
+    tabs[activeTabIndex] = {
+      ...atual,
+      imageDataUrl, hasImage, image, regions, nextId, selectedId, view, manufacturerId,
+    };
+  }
+
+  /** Relê o espelho de trabalho a partir da aba `i` — nunca marca alteração
+   *  (RN4/CA21: trocar de aba não é alteração de conteúdo). */
+  function loadTabIntoWorkingState(i: number): void {
+    const aba = tabs[i];
+    imageDataUrl = aba.imageDataUrl;
+    hasImage = aba.hasImage;
+    image = aba.image;
+    regions = aba.regions;
+    nextId = aba.nextId;
+    selectedId = aba.selectedId;
+    view = aba.view;
+    manufacturerId = aba.manufacturerId;
+  }
+
+  function switchTab(i: number): void {
+    if (i === activeTabIndex || i < 0 || i >= tabs.length) return;
+    snapshotActiveIntoTabs();
+    activeTabIndex = i;
+    loadTabIntoWorkingState(i);
+  }
+
+  // RN1/CA8: 11ª aba é negada na hora, com a mesma mensagem do servidor.
+  function addTab(): void {
+    if (tabs.length >= MAX_ABAS_UI) {
+      toast(t('errTabsMax'), 'error');
+      return;
+    }
+    snapshotActiveIntoTabs();
+    tabs = [...tabs, emptyAba()];
+    activeTabIndex = tabs.length - 1;
+    loadTabIntoWorkingState(activeTabIndex);
+    marcarAlteracao();
+  }
+
+  function moveTab(i: number, dir: -1 | 1): void {
+    const j = i + dir;
+    if (j < 0 || j >= tabs.length) return;
+    snapshotActiveIntoTabs();
+    const arr = [...tabs];
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+    tabs = arr;
+    if (activeTabIndex === i) activeTabIndex = j;
+    else if (activeTabIndex === j) activeTabIndex = i;
+    marcarAlteracao();
+  }
+
+  // RN6/CA6/CA7: excluir a única aba é negado; as demais pedem confirmação.
+  function onDeleteTabClick(i: number): void {
+    if (tabs.length <= 1) {
+      toast(t('errTabDeleteLast'), 'error');
+      return;
+    }
+    if (!window.confirm(t('deleteTabConfirm', { name: displayTabName(tabs[i], i) }))) return;
+    deleteTab(i);
+  }
+
+  function deleteTab(i: number): void {
+    const arr = tabs.filter((_, idx) => idx !== i);
+    tabs = arr;
+    if (activeTabIndex === i) {
+      activeTabIndex = Math.min(i, arr.length - 1);
+      loadTabIntoWorkingState(activeTabIndex);
+    } else if (activeTabIndex > i) {
+      activeTabIndex -= 1;
+    }
+    marcarAlteracao();
+  }
+
+  function startRename(i: number): void {
+    renamingTabIndex = i;
+  }
+
+  function commitRename(): void {
+    if (renamingTabIndex === null) return;
+    renamingTabIndex = null;
+    marcarAlteracao();
+  }
+
+  function onRenameKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+    else if (e.key === 'Escape') { e.preventDefault(); renamingTabIndex = null; }
+  }
+
+  /** CA29: seta esquerda/direita move o foco (e a seleção) entre as abas. */
+  function focusTabButton(i: number): void {
+    const el = document.getElementById(`t2-tab-btn-${i}`);
+    el?.focus();
+  }
+
+  function onTabKeydown(e: KeyboardEvent, i: number): void {
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      const n = (i + 1) % tabs.length;
+      switchTab(n);
+      focusTabButton(n);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const n = (i - 1 + tabs.length) % tabs.length;
+      switchTab(n);
+      focusTabButton(n);
+    }
+  }
 
   // ── rf-07: plano da peça (nome, salvar, auto save local) ──
   let planId: number | null = $state(null);
@@ -103,8 +297,15 @@
   let savedAtLabel = $state('');
   /** Chave i18n do erro de Salvar — nunca texto cru do servidor (RN11). */
   let saveErrorKey: DictKey | null = $state(null);
-  /** Chave i18n do erro de validação do formulário (CA11/CA13/CA17-CA20). */
-  let validationErrorKey: DictKey | null = $state(null);
+  /** Erro de validação do formulário (CA11/CA13/CA17-CA20) — `abaNome`
+   *  (RN15) compõe a mensagem final quando o erro é de uma aba específica. */
+  let validationError: ErroValidacaoPlano | null = $state(null);
+  let validationErrorText = $derived.by((): string | null => {
+    const erro = validationError;
+    if (!erro) return null;
+    const msg = t(erro.chave as DictKey);
+    return erro.abaNome ? `${erro.abaNome}: ${msg}` : msg;
+  });
 
   let draftBannerVisible = $state(false);
   /** Reflete `estadoAutoSave()` (RN8) — só o módulo de rascunho decide a
@@ -158,32 +359,54 @@
   });
 
   let selectedRegion = $derived(regions.find(r => r.id === selectedId) ?? null);
-  let paintedCount = $derived(regions.filter(r => r.painted).length);
-  let progressPct = $derived(regions.length ? Math.round((paintedCount / regions.length) * 100) : 0);
+  // CA13/RN9: o progresso do cabeçalho soma as regiões pintadas de TODAS as
+  // abas — cada aba mostra o seu próprio na tira (tabProgressLabel).
+  let totalRegionsCount = $derived(tabs.reduce((acc, _a, i) => acc + tabRegions(i).length, 0));
+  let paintedCount = $derived(
+    tabs.reduce((acc, _a, i) => acc + tabRegions(i).filter(r => r.painted).length, 0)
+  );
+  let progressPct = $derived(totalRegionsCount ? Math.round((paintedCount / totalRegionsCount) * 100) : 0);
 
+  // CA13/achado 3: o cabeçalho mostra o progresso do PLANO INTEIRO sempre
+  // que alguma aba tem foto — mesmo que a aba ativa não tenha.
+  let planHasImage = $derived(tabs.some((_a, i) => tabHasImage(i)));
   let plannerTitle = $derived(
-    hasImage ? t('progress', { a: paintedCount, b: regions.length }) : t('t2EmptyTitle')
+    planHasImage ? t('progress', { a: paintedCount, b: totalRegionsCount }) : t('t2EmptyTitle')
   );
 
   // rf-08/RN11: plano nunca salvo ou com rascunho local pendente bloqueia a exportação.
   let rascunhoPendente = $derived(draftBannerVisible || alteracaoSeq !== alteracaoSeqSalva);
   let exportDisabled = $derived(planId == null || rascunhoPendente || reportGenerating);
 
+  function paintKey(brand: string, code: string, name: string): string {
+    return `${brand} ${code} ${name}`;
+  }
+
+  // RN7/CA10-CA12: dedup por marca+código+nome (o mesmo descritor gravado por
+  // região — mapRegionCommon), atravessando TODAS as abas do plano; região
+  // sem tinta (descritor vazio) não entra; cada item cita as abas onde aparece.
   let shoppingItems = $derived.by((): ShoppingItem[] => {
-    const map = new Map<number, ShoppingItem>();
-    for (const r of regions) {
-      if (!r.result) continue;
-      for (const ing of r.result.ingredients) {
-        if (!map.has(ing.paintId)) {
-          map.set(ing.paintId, {
-            paintId: ing.paintId,
-            name: ing.name,
-            code: ing.code,
-            manufacturer: r.result.targetManufacturer,
+    const map = new Map<string, ShoppingItem>();
+    tabs.forEach((aba, i) => {
+      const abaNome = displayTabName(aba, i);
+      tabRegions(i).forEach((r, idx) => {
+        const desc = mapRegionCommon(r, idx);
+        if (!desc.paintBrand && !desc.paintCode && !desc.paintName) return;
+        const key = paintKey(desc.paintBrand, desc.paintCode, desc.paintName);
+        const existente = map.get(key);
+        if (existente) {
+          if (!existente.tabs.includes(abaNome)) existente.tabs.push(abaNome);
+        } else {
+          map.set(key, {
+            key,
+            name: desc.paintName,
+            code: desc.paintCode,
+            manufacturer: desc.paintBrand,
+            tabs: [abaNome],
           });
         }
-      }
-    }
+      });
+    });
     return [...map.values()];
   });
 
@@ -210,10 +433,10 @@
     return 'var(--color-neutral-500)';
   }
 
-  function toggleOwned(paintId: number) {
+  function toggleOwned(key: string) {
     const next = new Set(ownedPaints);
-    if (next.has(paintId)) next.delete(paintId);
-    else next.add(paintId);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
     ownedPaints = next;
   }
 
@@ -310,6 +533,8 @@
     return () => ro.disconnect();
   });
 
+  // RN8/CA14: o checklist "tenho" é do PLANO — trocar a foto de uma aba não
+  // zera mais `ownedPaints` (a marcação sobrevive, como manda a spec).
   function loadImage(src: string) {
     const img = new Image();
     img.onload = () => {
@@ -318,24 +543,19 @@
       regions = [];
       nextId = 1;
       selectedId = null;
-      ownedPaints = new Set();
       imageDataUrl = src;
       marcarAlteracao();
     };
     img.src = src;
   }
 
-  /** Restaura a foto de um plano/rascunho carregado — sem zerar regiões
-   *  (quem chama já as restaura à parte) e sem contar como alteração de
-   *  conteúdo (hidratação, não input do usuário). */
-  function loadImageForHydration(src: string): Promise<void> {
+  /** Carrega o bitmap de uma foto sem tocar no estado de trabalho — usado na
+   *  hidratação, para as abas que ainda não são a ativa. */
+  function loadImageBitmap(src: string): Promise<HTMLImageElement | null> {
     return new Promise(resolve => {
       const img = new Image();
-      img.onload = () => {
-        image = img;
-        resolve();
-      };
-      img.onerror = () => resolve();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
       img.src = src;
     });
   }
@@ -444,6 +664,11 @@
 
   async function addRegion(ix: number, iy: number) {
     if (!image) return;
+    // RN2/CA9: teto de 50 regiões É POR ABA — a mensagem cita a aba (RN15).
+    if (regions.length >= 50) {
+      toast(`${displayTabName(tabs[activeTabIndex], activeTabIndex)}: ${t('errRegionsMax')}`, 'error');
+      return;
+    }
     const tmp = document.createElement('canvas');
     tmp.width = image.width;
     tmp.height = image.height;
@@ -469,12 +694,28 @@
     marcarAlteracao();
   }
 
+  /** Acha a região `id` pela identidade da aba (`tabUid`) — nunca pelo
+   *  binding vivo `regions`, que passa a apontar para outra aba assim que o
+   *  usuário troca de aba. Os ids de região reiniciam em 1 por aba: ler
+   *  direto de `regions` gravaria o resultado na região de mesmo id da aba
+   *  que virou ativa (achado 1 do guardrail rf-09). Enquanto a aba de
+   *  origem continuar ativa, `regions` É o espelho dela; se deixou de ser,
+   *  o espelho já foi estacionado em `tabs` por `snapshotActiveIntoTabs`. */
+  function regiaoDaAba(tabUid: number, id: number): PlannerRegion | null {
+    const arr = tabs[activeTabIndex]?.uid === tabUid ? regions : (tabs.find(a => a.uid === tabUid)?.regions ?? null);
+    return arr?.find(r => r.id === id) ?? null;
+  }
+
   /** D-002b: o cálculo é endereçado por ID, nunca por referência.
    *  `regions` é `$state`, então o que está no array é o PROXY da região —
    *  escrever no objeto cru que `addRegion` criou não dispara reatividade
-   *  nenhuma, e a tela fica presa em "calculando" com a resposta já em mãos. */
-  async function computeRegion(id: number) {
-    const alvo = () => regions.find(r => r.id === id) ?? null;
+   *  nenhuma, e a tela fica presa em "calculando" com a resposta já em mãos.
+   *  `tabUidChamada` (mesmo padrão de época do `onManufacturerChange`, com
+   *  `salvamentoSeq`) fixa a aba de origem no instante da chamada — troca de
+   *  aba durante o cálculo nunca escreve na aba errada nem deixa a região de
+   *  origem presa em "calculando" (achado 1 do guardrail rf-09). */
+  async function computeRegion(id: number, tabUidChamada: number = tabs[activeTabIndex].uid) {
+    const alvo = () => regiaoDaAba(tabUidChamada, id);
     const inicio = alvo();
     if (!inicio) return;
     inicio.computing = true;
@@ -579,30 +820,54 @@
     return { ...mapRegionCommon(r, i), painted: r.painted ? 1 : 0 };
   }
 
-  function buildPlanoDTO(): PlanoDTO {
+  function buildAbaDTO(aba: AbaState): AbaDTO {
     return {
-      id: planId ?? undefined,
-      name: planName,
-      imageData: imageDataUrl,
-      selectedManufacturerId: manufacturerId,
-      regions: regions.map((r, i) => regiaoParaDTO(r, i)),
+      id: aba.serverId,
+      name: aba.name,
+      imageData: aba.imageDataUrl,
+      selectedManufacturerId: aba.manufacturerId,
+      useStockOnly: aba.useStockOnly ? 1 : 0,
+      regions: aba.regions.map((r, i) => regiaoParaDTO(r, i)),
     };
   }
 
-  // ── rf-07: auto save local (RN3/RN4) ──
+  function buildAbaRascunho(aba: AbaState): AbaRascunho {
+    return {
+      id: aba.serverId ?? null,
+      name: aba.name,
+      imageData: aba.imageDataUrl,
+      selectedManufacturerId: aba.manufacturerId,
+      useStockOnly: aba.useStockOnly,
+      regions: aba.regions.map((r, i) => regiaoParaRascunho(r, i)),
+    };
+  }
+
+  function buildPlanoDTO(): PlanoDTO {
+    snapshotActiveIntoTabs();
+    return {
+      id: planId ?? undefined,
+      name: planName,
+      tabs: tabs.map(buildAbaDTO),
+    };
+  }
+
+  // ── rf-07/rf-09: auto save local (RN3/RN4/RN5) ──
   /** Chamada explícita nos mutadores de CONTEÚDO — nunca em zoom/pan/view
-   *  (RN4/CA7) e nunca antes da hidratação terminar (RN5). */
+   *  (RN4/CA21) e nunca antes da hidratação terminar (RN5). Criar, renomear,
+   *  reordenar e excluir aba TAMBÉM chamam esta função (RN5/CA22); trocar de
+   *  aba nunca chama (switchTab só faz snapshot). */
   function marcarAlteracao() {
     if (!hidratado) {
       alteradoDuranteHidratacao = true;
       return;
     }
+    snapshotActiveIntoTabs();
     const payload: Rascunho = {
+      v: 2,
       planId,
       name: planName,
-      imageData: imageDataUrl,
-      regions: regions.map((r, i) => regiaoParaRascunho(r, i)),
-      selectedManufacturerId: manufacturerId,
+      abaAtiva: activeTabIndex,
+      tabs: tabs.map(buildAbaRascunho),
       salvoEm: new Date().toISOString(),
     };
     alteracaoSeq++;
@@ -612,56 +877,100 @@
     setTimeout(() => { autoSaveStatus = estadoAutoSave(); }, 1600);
   }
 
-  // ── rf-07: hidratar / aplicar plano carregado ──
+  // ── rf-07/rf-09: hidratar / aplicar plano carregado ──
   function resetToEmpty() {
     planId = null;
     planName = '';
-    imageDataUrl = '';
-    image = null;
-    hasImage = false;
-    regions = [];
-    nextId = 1;
-    selectedId = null;
     ownedPaints = new Set();
-    manufacturerId = null;
+    tabs = [emptyAba()];
+    activeTabIndex = 0;
+    loadTabIntoWorkingState(0);
+  }
+
+  async function computeRegionInAba(aba: AbaState, id: number): Promise<void> {
+    const alvo = () => aba.regions.find(r => r.id === id) ?? null;
+    const inicio = alvo();
+    if (!inicio) return;
+    inicio.computing = true;
+    try {
+      const res =
+        aba.manufacturerId != null
+          ? await suggestRecipeForColor(inicio.r, inicio.g, inicio.b, aba.manufacturerId)
+          : null;
+      const agora = alvo();
+      if (agora) agora.result = res;
+    } catch (e) {
+      console.error('Erro ao calcular região:', e);
+      const agora = alvo();
+      if (agora) agora.result = null;
+    } finally {
+      const agora = alvo();
+      if (agora) agora.computing = false;
+    }
+  }
+
+  async function recomputeAba(aba: AbaState): Promise<void> {
+    if (aba.manufacturerId == null) return;
+    await Promise.all(aba.regions.map(r => computeRegionInAba(aba, r.id)));
   }
 
   /** Aplica um `PlanoDTO` (do servidor ou remontado do rascunho) ao estado
-   *  da tela. Nunca chama `marcarAlteracao` — é hidratação, não input. */
-  function applyLoadedPlan(plano: PlanoDTO, recalcular = true) {
+   *  da tela — uma `AbaState` por `AbaDTO`. Nunca chama `marcarAlteracao` —
+   *  é hidratação, não input. `abaAtivaIndex` (rascunho) escolhe qual aba
+   *  fica em foco; planos vindos do servidor sempre abrem na primeira. */
+  async function applyLoadedPlan(plano: PlanoDTO, recalcular = true, abaAtivaIndex = 0): Promise<void> {
     planId = plano.id ?? null;
     planName = plano.name;
-    imageDataUrl = plano.imageData || '';
-    manufacturerId = plano.selectedManufacturerId ?? null;
-    selectedId = null;
+    // rf-09/"Não faz": o checklist "tenho" não sobrevive ao recarregar o plano.
     ownedPaints = new Set();
-    nextId = 1;
-    regions = plano.regions.map((rd): PlannerRegion => ({
-      id: nextId++,
-      x: rd.x, y: rd.y, r: rd.r, g: rd.g, b: rd.b, hex: rd.hex,
-      painted: rd.painted === 1,
-      result: null,
-      computing: false,
-      salvo: {
-        paintId: rd.paintId ?? null,
-        paintBrand: rd.paintBrand,
-        paintName: rd.paintName,
-        paintCode: rd.paintCode,
-        deltaE: rd.deltaE,
-      },
-    }));
-    if (imageDataUrl) {
-      hasImage = true;
-      void loadImageForHydration(imageDataUrl);
-    } else {
-      hasImage = false;
-      image = null;
+
+    const tabsDTO = plano.tabs.length > 0 ? plano.tabs : [
+      { name: '', imageData: '', selectedManufacturerId: null, useStockOnly: 0 as const, regions: [] },
+    ];
+
+    const novasAbas: AbaState[] = [];
+    for (const abaDTO of tabsDTO) {
+      let nextIdLocal = 1;
+      const abaRegions: PlannerRegion[] = abaDTO.regions.map((rd): PlannerRegion => ({
+        id: nextIdLocal++,
+        x: rd.x, y: rd.y, r: rd.r, g: rd.g, b: rd.b, hex: rd.hex,
+        painted: rd.painted === 1,
+        result: null,
+        computing: false,
+        salvo: {
+          paintId: rd.paintId ?? null,
+          paintBrand: rd.paintBrand,
+          paintName: rd.paintName,
+          paintCode: rd.paintCode,
+          deltaE: rd.deltaE,
+        },
+      }));
+      const image = abaDTO.imageData ? await loadImageBitmap(abaDTO.imageData) : null;
+      novasAbas.push({
+        uid: abaUidSeq++,
+        serverId: abaDTO.id,
+        name: abaDTO.name,
+        useStockOnly: abaDTO.useStockOnly === 1,
+        imageDataUrl: abaDTO.imageData || '',
+        hasImage: !!abaDTO.imageData,
+        image,
+        regions: abaRegions,
+        nextId: nextIdLocal,
+        selectedId: null,
+        view: { zoom: 1, panX: 0, panY: 0 },
+        manufacturerId: abaDTO.selectedManufacturerId ?? null,
+      });
     }
+
     // CA8: restaurar rascunho não consulta o servidor — a tinta já veio no
-    // próprio rascunho. Só o plano vindo do banco recalcula.
-    if (recalcular && manufacturerId != null) {
-      for (const r of regions) void computeRegion(r.id);
+    // próprio rascunho. Só o plano vindo do banco recalcula (por aba).
+    if (recalcular) {
+      await Promise.all(novasAbas.map(recomputeAba));
     }
+
+    tabs = novasAbas;
+    activeTabIndex = Math.min(Math.max(abaAtivaIndex, 0), tabs.length - 1);
+    loadTabIntoWorkingState(activeTabIndex);
   }
 
   /** RN5 — entrada em T2: rascunho vence; senão plano ativo; senão vazia. */
@@ -672,33 +981,53 @@
         toast(t('draftCorrupted'), 'error');
       }
       if (rascunho) {
-        // RN8 cortou a foto para caber na cota: a imagem continua no banco,
-        // então busca de lá em vez de reabrir o plano sem foto — e sem ela o
-        // Salvar seguinte apagaria a foto do plano no servidor.
-        let fotoDoServidor = '';
-        if (!rascunho.imageData && rascunho.planId != null) {
+        // RN8 cortou a foto de TODAS as abas para caber na cota: a imagem
+        // continua no banco, então busca de lá (por posição) em vez de
+        // reabrir o plano sem foto — sem ela o Salvar seguinte apagaria a
+        // foto das abas no servidor.
+        const semFoto = rascunho.tabs.some(aba => !aba.imageData);
+        let abasServidor: AbaDTO[] | null = null;
+        if (semFoto && rascunho.planId != null) {
           try {
             const salvo = await carregarPlano(rascunho.planId);
-            fotoDoServidor = salvo.imageData;
+            abasServidor = salvo.tabs;
           } catch {
             toast(t('draftNoPhoto'), 'error');
           }
         }
-        applyLoadedPlan({
-          id: rascunho.planId ?? undefined,
-          name: rascunho.name,
-          imageData: rascunho.imageData || fotoDoServidor,
-          selectedManufacturerId: rascunho.selectedManufacturerId,
-          regions: rascunho.regions.map((rr): RegiaoDTO => ({
+        // achado 2 do guardrail rf-09: casa a aba do rascunho com a do
+        // servidor por identidade estável — o `id` da aba quando existir, e
+        // o nome como segundo critério — nunca pela posição na tira, que
+        // pode ter sido reordenada depois do último Salvar.
+        const abaServidorPorIdentidade = (rt: AbaRascunho): AbaDTO | undefined => {
+          if (!abasServidor) return undefined;
+          if (rt.id != null) {
+            const porId = abasServidor.find(a => a.id === rt.id);
+            if (porId) return porId;
+          }
+          return abasServidor.find(a => a.name === rt.name);
+        };
+        const tabsDTO: AbaDTO[] = rascunho.tabs.map((rt) => ({
+          id: undefined,
+          name: rt.name,
+          imageData: rt.imageData || abaServidorPorIdentidade(rt)?.imageData || '',
+          selectedManufacturerId: rt.selectedManufacturerId,
+          useStockOnly: rt.useStockOnly ? 1 : 0,
+          regions: rt.regions.map((rr): RegiaoDTO => ({
             x: rr.x, y: rr.y, r: rr.r, g: rr.g, b: rr.b, hex: rr.hex,
             regionName: rr.regionName, note: rr.note,
             paintId: rr.paintId, paintBrand: rr.paintBrand,
             paintName: rr.paintName, paintCode: rr.paintCode,
             deltaE: rr.deltaE, painted: rr.painted ? 1 : 0,
           })),
-        }, false);
+        }));
+        await applyLoadedPlan(
+          { id: rascunho.planId ?? undefined, name: rascunho.name, tabs: tabsDTO },
+          false,
+          rascunho.abaAtiva,
+        );
         draftBannerVisible = true;
-        // CAN8: reaproveita a mensagem de teto de regiões — mesmo limite,
+        // CAN5/CAN8: reaproveita a mensagem de teto de regiões — mesmo limite,
         // mesmo aviso.
         if (truncado) toast(t('errRegionsMax'), 'error');
         return;
@@ -709,7 +1038,7 @@
           const plano = await carregarPlano(idAtivo);
           // O usuário mexeu na tela enquanto o GET vinha: o trabalho dele
           // vence o plano do servidor, e vira rascunho na próxima marcação.
-          if (!alteradoDuranteHidratacao) applyLoadedPlan(plano);
+          if (!alteradoDuranteHidratacao) await applyLoadedPlan(plano);
         } catch (e) {
           limparPlanoAtivo();
           if (!alteradoDuranteHidratacao) resetToEmpty();
@@ -734,7 +1063,7 @@
       // permanece intacto.
       try {
         const plano = await carregarPlano(planId);
-        applyLoadedPlan(plano);
+        await applyLoadedPlan(plano);
         apagarRascunho();
       } catch (e) {
         if (e instanceof PlanoError && e.code === 'nao-encontrado') {
@@ -766,12 +1095,12 @@
     const dto = buildPlanoDTO();
     const erro = validarPlano(dto);
     if (erro) {
-      // validarPlano devolve uma chave i18n como string solta (plans.ts não
-      // é arquivo desta fatia) — as chaves usadas são sempre as da spec.
-      validationErrorKey = erro as DictKey;
+      // validarPlano devolve a chave i18n e, para erro de aba (RN15), o nome
+      // dela — validationErrorText compõe a mensagem final.
+      validationError = erro;
       return;
     }
-    validationErrorKey = null;
+    validationError = null;
     saveErrorKey = null;
     saveState = 'saving';
     const seqNoEnvio = alteracaoSeq;
@@ -868,7 +1197,92 @@
     {/snippet}
   </Header>
 
-  <div style="flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 34%);">
+  <!-- rf-09: tira de abas — uma por figura. Aba ativa se distingue por texto
+       E contorno (nunca só cor). Botões de mover/excluir seguem o alvo de
+       toque de 44×44 do resto de T2; nenhum componente visual novo. -->
+  <div
+    role="tablist"
+    aria-label={t('tabsListLabel')}
+    style="flex-shrink: 0; display: flex; align-items: center; gap: 6px; padding: 8px 20px; border-bottom: 1px solid var(--color-line); overflow-x: auto;"
+  >
+    {#each tabs as aba, i (aba.uid)}
+      <div style="display: flex; align-items: center; gap: 2px; flex-shrink: 0;">
+        {#if renamingTabIndex === i}
+          <!-- achado 4 do guardrail rf-09/CA28: o `tabpanel` referencia
+               `t2-tab-btn-{i}` por `aria-labelledby`; enquanto o botão vira
+               o campo de rename esse id some do DOM. Este span invisível
+               mantém a referência válida durante a edição. -->
+          <span id={`t2-tab-btn-${i}`} style="position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap;">{displayTabName(aba, i)}</span>
+          <label for={`t2-tab-rename-${aba.uid}`} style="position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap;">{t('renameTabLabel')}</label>
+          <input
+            id={`t2-tab-rename-${aba.uid}`}
+            type="text"
+            bind:value={tabs[i].name}
+            maxlength="80"
+            onblur={commitRename}
+            onkeydown={onRenameKeydown}
+            style="min-width: 120px; height: 44px; padding: 0 10px; border: 2px solid var(--color-accent); border-radius: 8px; background: var(--color-bg); color: var(--color-text); font-family: inherit; font-size: 13.5px;"
+          />
+        {:else}
+          <button
+            id={`t2-tab-btn-${i}`}
+            role="tab"
+            data-tab-index={i}
+            aria-selected={i === activeTabIndex}
+            aria-controls="t2-tab-panel"
+            tabindex={i === activeTabIndex ? 0 : -1}
+            class="t2-tab-btn"
+            onclick={() => switchTab(i)}
+            ondblclick={() => startRename(i)}
+            onkeydown={(e) => onTabKeydown(e, i)}
+            style="display: inline-flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; min-width: 44px; min-height: 44px; padding: 4px 12px; border: 2px solid {i === activeTabIndex ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 8px; background: {i === activeTabIndex ? 'var(--color-accent-panel)' : 'var(--color-bg)'}; color: {i === activeTabIndex ? 'var(--color-accent-400)' : 'var(--color-neutral-300)'}; font-family: inherit; font-size: 13.5px; font-weight: {i === activeTabIndex ? '700' : '500'}; cursor: pointer;"
+          >
+            <span>{displayTabName(aba, i)}</span>
+            <span class="font-mono" style="font-size: 11px; opacity: 0.85;">{tabProgressLabel(i)}</span>
+          </button>
+        {/if}
+        <button
+          aria-label={t('renameTabLabel')}
+          title={t('renameTabLabel')}
+          onclick={() => startRename(i)}
+          style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer;"
+        ><i class="ph ph-pencil-simple" style="font-size: 15px;"></i></button>
+        <button
+          aria-label={t('moveTabLeft')}
+          title={t('moveTabLeft')}
+          disabled={i === 0}
+          onclick={() => moveTab(i, -1)}
+          style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer; opacity: {i === 0 ? 0.4 : 1};"
+        ><i class="ph ph-caret-left" style="font-size: 15px;"></i></button>
+        <button
+          aria-label={t('moveTabRight')}
+          title={t('moveTabRight')}
+          disabled={i === tabs.length - 1}
+          onclick={() => moveTab(i, 1)}
+          style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer; opacity: {i === tabs.length - 1 ? 0.4 : 1};"
+        ><i class="ph ph-caret-right" style="font-size: 15px;"></i></button>
+        <button
+          aria-label={t('deleteTabBtn')}
+          title={t('deleteTabBtn')}
+          onclick={() => onDeleteTabClick(i)}
+          style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-500); cursor: pointer;"
+        ><i class="ph ph-trash-simple" style="font-size: 15px;"></i></button>
+      </div>
+    {/each}
+    <button
+      aria-label={t('addTabBtn')}
+      title={t('addTabBtn')}
+      onclick={addTab}
+      style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-accent-700); border-radius: 8px; background: transparent; color: var(--color-accent-400); cursor: pointer; flex-shrink: 0;"
+    ><i class="ph ph-plus" style="font-size: 18px;"></i></button>
+  </div>
+
+  <div
+    role="tabpanel"
+    id="t2-tab-panel"
+    aria-labelledby={`t2-tab-btn-${activeTabIndex}`}
+    style="flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 34%);"
+  >
     <div style="position: relative; border-right: 1px solid var(--color-line); overflow: hidden;">
       <div
         bind:this={boxEl}
@@ -935,7 +1349,7 @@
       {/if}
 
       <div style="position: absolute; left: 20px; bottom: 20px; display: flex; align-items: center; gap: 14px; padding: 12px 18px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: rgba(22,24,38,0.92); backdrop-filter: blur(8px);">
-        <span style="font-size: 15px; color: var(--color-neutral-400);">{t('progress', { a: paintedCount, b: regions.length })}</span>
+        <span style="font-size: 15px; color: var(--color-neutral-400);">{t('progress', { a: paintedCount, b: totalRegionsCount })}</span>
         <span style="width: 160px; height: 6px; border-radius: 999px; background: var(--color-rule); overflow: hidden;">
           <span style="display: block; height: 6px; width: {progressPct}%; background: var(--color-accent);"></span>
         </span>
@@ -1040,13 +1454,13 @@
 
         <p class="section-label" style="margin: 26px 0 12px;">{t('piecePaints')}</p>
         <div style="display: flex; flex-direction: column;">
-          {#each shoppingItems as s (s.paintId)}
-            {@const owned = ownedPaints.has(s.paintId)}
+          {#each shoppingItems as s (s.key)}
+            {@const owned = ownedPaints.has(s.key)}
             <div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 2px; border-bottom: 1px solid var(--color-line);">
               <button
                 aria-pressed={owned}
                 style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: none; background: transparent; cursor: pointer; flex-shrink: 0;"
-                onclick={() => toggleOwned(s.paintId)}
+                onclick={() => toggleOwned(s.key)}
               >
                 <span style="display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid {owned ? 'var(--color-accent)' : 'var(--color-field-border)'}; border-radius: 4px; background: {owned ? 'var(--color-accent)' : 'transparent'};">
                   {#if owned}<i class="ph-bold ph-check" style="font-size: 15px; color: var(--color-accent-100);"></i>{/if}
@@ -1055,6 +1469,7 @@
               <span style="display: flex; flex-direction: column; flex: 1; min-width: 0;">
                 <span style="font-size: 15px; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{s.name}</span>
                 <span class="font-mono" style="font-size: 12.5px; color: var(--color-neutral-500);">{s.code} · {s.manufacturer}</span>
+                <span style="font-size: 11.5px; color: var(--color-neutral-600);">{t('usedInTabsLabel', { tabs: s.tabs.join(', ') })}</span>
               </span>
               <span style="font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: {owned ? 'var(--color-accent-2)' : 'var(--color-neutral-500)'}; flex-shrink: 0;">{owned ? t('tagHave') : t('tagBuy')}</span>
             </div>
@@ -1094,9 +1509,9 @@
           style="height: 44px; padding: 0 12px; border: 1px solid var(--color-field-border); border-radius: 8px; background: var(--color-bg); color: var(--color-text); font-family: inherit; font-size: 14px;"
         />
 
-        {#if validationErrorKey}
+        {#if validationErrorText}
           <div role="alert" style="font-size: 13px; color: var(--color-neutral-300);">
-            <i class="ph ph-warning-circle" style="margin-right: 6px;"></i>{t(validationErrorKey)}
+            <i class="ph ph-warning-circle" style="margin-right: 6px;"></i>{validationErrorText}
           </div>
         {/if}
 
@@ -1179,6 +1594,15 @@
 
   .t2-mfr-pill:hover {
     border-color: var(--color-accent-700);
+  }
+
+  .t2-tab-btn:hover {
+    border-color: var(--color-accent-700);
+  }
+
+  .t2-tab-btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 
   .t2-region-card:hover {

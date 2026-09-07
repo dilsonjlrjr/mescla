@@ -235,8 +235,9 @@ func contrastingTextColor(c color.RGBA) color.Color {
 	return color.White
 }
 
-// reportData é o contrato de composição do relatório, fornecido pela outra
-// fatia do pacote (planning_report.go). Não redefinido aqui — apenas usado.
+// reportData, reportTabBlock, reportRow e reportPaint são o contrato de
+// composição do relatório, fornecido pela outra fatia do pacote
+// (planning_report.go). Não redefinidos aqui — apenas usados.
 
 // reportFontCache evita reanalisar o TTF embutido a cada chamada.
 var reportFontCollection *opentype.Font
@@ -276,14 +277,18 @@ const (
 	headerTitleSz  = 22
 	headerMetaSz   = 13
 	sectionTitleSz = 16
+	subtitleTextSz = 15
 	bodyTextSz     = 13
 	tableRowH      = 26
 	colorSwatchPx  = 16
 )
 
-// renderPNG monta o relatório único em PNG, largura fixa reportWidth,
-// fundo branco, altura conforme o conteúdo (RN9). Retorna ErrReportFailed
-// quando o resultado codificado passa de 10 MB.
+// renderPNG monta o relatório único em PNG, largura fixa reportWidth, fundo
+// branco, altura conforme o conteúdo (RN9 do rf-08): cabeçalho do plano,
+// depois um subtítulo + desenho por aba (RN13 do rf-09; abas sem foto não
+// entram no laço) e, ao final, a tabela única (com a coluna Aba) e a lista
+// de tintas. Retorna ErrReportFailed quando o resultado codificado passa do
+// teto (maxReportOutputBytes).
 func renderPNG(ctx context.Context, d reportData) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -294,10 +299,17 @@ func renderPNG(ctx context.Context, d reportData) ([]byte, error) {
 	defer metaFace.Close()
 	sectionFace := reportFontFace(sectionTitleSz)
 	defer sectionFace.Close()
+	subtitleFace := reportFontFace(subtitleTextSz)
+	defer subtitleFace.Close()
 	bodyFace := reportFontFace(bodyTextSz)
 	defer bodyFace.Close()
 
 	innerWidth := reportWidth - 2*pagePadding
+
+	type blockLayout struct {
+		width, height int
+	}
+	layouts := make([]blockLayout, len(d.Blocks))
 
 	// 1) mede a altura total antes de desenhar, para alocar a imagem já no
 	// tamanho final (RN9: altura conforme o conteúdo).
@@ -306,20 +318,28 @@ func renderPNG(ctx context.Context, d reportData) ([]byte, error) {
 	y += lineHeight     // "Generated"
 	y += 16             // respiro pós-cabeçalho
 
-	var drawingHeight int
-	var drawingWidth int
-	if d.Drawing != nil {
-		b := d.Drawing.Bounds()
-		drawingWidth, drawingHeight = fitWithin(b.Dx(), b.Dy(), innerWidth, 900)
-		y += drawingHeight + 20
+	for i, block := range d.Blocks {
+		if block.Drawing == nil {
+			continue
+		}
+		b := block.Drawing.Bounds()
+		w, h := fitWithin(b.Dx(), b.Dy(), innerWidth, 900)
+		layouts[i] = blockLayout{width: w, height: h}
+		y += lineHeight + 4 // subtítulo da aba
+		y += h + 20
+	}
+
+	allRows := make([]reportRow, 0)
+	for _, block := range d.Blocks {
+		allRows = append(allRows, block.Rows...)
 	}
 
 	y += lineHeight + 6 // título da tabela
-	if len(d.Rows) == 0 {
+	if len(allRows) == 0 {
 		y += lineHeight // "nenhuma região marcada"
 	} else {
 		y += tableRowH // cabeçalho da tabela
-		y += tableRowH * len(d.Rows)
+		y += tableRowH * len(allRows)
 	}
 	y += 24
 
@@ -348,51 +368,71 @@ func renderPNG(ctx context.Context, d reportData) ([]byte, error) {
 	cursor += lineHeight
 	cursor += 16
 
-	// desenho
-	if d.Drawing != nil {
-		scaled := image.NewRGBA(image.Rect(0, 0, drawingWidth, drawingHeight))
-		xdraw.ApproxBiLinear.Scale(scaled, scaled.Bounds(), d.Drawing, d.Drawing.Bounds(), xdraw.Over, nil)
-		offsetX := pagePadding + (innerWidth-drawingWidth)/2
-		draw.Draw(img, image.Rect(offsetX, cursor, offsetX+drawingWidth, cursor+drawingHeight), scaled, image.Point{}, draw.Over)
-		cursor += drawingHeight + 20
+	// um subtítulo + desenho por aba com foto
+	for i, block := range d.Blocks {
+		if block.Drawing == nil {
+			continue
+		}
+		drawLeftText(img, subtitleFace, block.Name, pagePadding, cursor+subtitleTextSz, color.Black)
+		cursor += lineHeight + 4
+
+		layout := layouts[i]
+		// O teto de tempo só vale se for verificado DENTRO do trabalho: com um
+		// check só na entrada, 10 abas de 50 regiões rodavam 12 s depois do
+		// prazo estourado.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		scaled := image.NewRGBA(image.Rect(0, 0, layout.width, layout.height))
+		xdraw.ApproxBiLinear.Scale(scaled, scaled.Bounds(), block.Drawing, block.Drawing.Bounds(), xdraw.Over, nil)
+		offsetX := pagePadding + (innerWidth-layout.width)/2
+		draw.Draw(img, image.Rect(offsetX, cursor, offsetX+layout.width, cursor+layout.height), scaled, image.Point{}, draw.Over)
+		cursor += layout.height + 20
 	}
 
-	// tabela de áreas marcadas
+	// tabela de áreas marcadas (única, contínua, com a coluna Aba)
 	drawLeftText(img, sectionFace, "Áreas marcadas", pagePadding, cursor+sectionTitleSz, color.Black)
 	cursor += lineHeight + 6
-	if len(d.Rows) == 0 {
+	if len(allRows) == 0 {
 		drawLeftText(img, bodyFace, "nenhuma região marcada", pagePadding, cursor+bodyTextSz, color.Black)
 		cursor += lineHeight
 	} else {
-		headers := []string{"Pin", "Região", "Cor", "Hex", "Tinta", "ΔE00", "Estado", "Anotação"}
+		headers := []string{"Pin", "Aba", "Região", "Cor", "Hex", "Tinta", "ΔE00", "Estado", "Anotação"}
 		colX := tableColumnOffsets(innerWidth)
 		for i, h := range headers {
 			drawLeftText(img, bodyFace, h, pagePadding+colX[i], cursor+bodyTextSz, color.Black)
 		}
 		cursor += tableRowH
-		for _, row := range d.Rows {
+		for i, row := range allRows {
+			if i%10 == 0 {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+			}
 			rowY := cursor + bodyTextSz
 			drawLeftText(img, bodyFace, strconv.Itoa(row.N), pagePadding+colX[0], rowY, color.Black)
-			nomeRegiao := truncarNaLargura(bodyFace, sanitizeReportText(row.RegionName), colX[2]-colX[1]-colGapPx)
-			drawLeftText(img, bodyFace, nomeRegiao, pagePadding+colX[1], rowY, color.Black)
-			swatchX := pagePadding + colX[2]
+			abaTxt := truncarNaLargura(bodyFace, sanitizeReportText(row.TabName), colX[2]-colX[1]-colGapPx)
+			drawLeftText(img, bodyFace, abaTxt, pagePadding+colX[1], rowY, color.Black)
+			nomeRegiao := truncarNaLargura(bodyFace, sanitizeReportText(row.RegionName), colX[3]-colX[2]-colGapPx)
+			drawLeftText(img, bodyFace, nomeRegiao, pagePadding+colX[2], rowY, color.Black)
+			swatchX := pagePadding + colX[3]
 			swatchY := cursor + (tableRowH-colorSwatchPx)/2
 			draw.Draw(img, image.Rect(swatchX, swatchY, swatchX+colorSwatchPx, swatchY+colorSwatchPx), image.NewUniform(parseHexColor(row.Hex)), image.Point{}, draw.Src)
-			drawLeftText(img, bodyFace, row.Hex, pagePadding+colX[3], rowY, color.Black)
+			drawLeftText(img, bodyFace, row.Hex, pagePadding+colX[4], rowY, color.Black)
 			paintLabel := row.PaintLabel
 			if strings.TrimSpace(paintLabel) == "" {
 				paintLabel = "sem equivalente"
 			}
-			paintLabel = truncarNaLargura(bodyFace, sanitizeReportText(paintLabel), colX[5]-colX[4]-colGapPx)
-			drawLeftText(img, bodyFace, paintLabel, pagePadding+colX[4], rowY, color.Black)
-			drawLeftText(img, bodyFace, formatDeltaE(row.DeltaE), pagePadding+colX[5], rowY, color.Black)
+			paintLabel = truncarNaLargura(bodyFace, sanitizeReportText(paintLabel), colX[6]-colX[5]-colGapPx)
+			drawLeftText(img, bodyFace, paintLabel, pagePadding+colX[5], rowY, color.Black)
+			drawLeftText(img, bodyFace, formatDeltaE(row.DeltaE), pagePadding+colX[6], rowY, color.Black)
 			state := "a pintar"
 			if row.Painted {
 				state = "pintada"
 			}
-			drawLeftText(img, bodyFace, state, pagePadding+colX[6], rowY, color.Black)
-			nota := truncarNaLargura(bodyFace, sanitizeReportText(row.Note), innerWidth-colX[7])
-			drawLeftText(img, bodyFace, nota, pagePadding+colX[7], rowY, color.Black)
+			drawLeftText(img, bodyFace, state, pagePadding+colX[7], rowY, color.Black)
+			nota := truncarNaLargura(bodyFace, sanitizeReportText(row.Note), innerWidth-colX[8])
+			drawLeftText(img, bodyFace, nota, pagePadding+colX[8], rowY, color.Black)
 			cursor += tableRowH
 		}
 	}
@@ -405,7 +445,7 @@ func renderPNG(ctx context.Context, d reportData) ([]byte, error) {
 		drawLeftText(img, bodyFace, "nenhuma região marcada", pagePadding, cursor+bodyTextSz, color.Black)
 	} else {
 		for _, paint := range d.Paints {
-			line := fmt.Sprintf("%s (%s)", sanitizeReportText(paint.Label), formatPinList(paint.Pins))
+			line := sanitizeReportText(formatPaintLine(paint))
 			drawLeftText(img, bodyFace, line, pagePadding, cursor+bodyTextSz, color.Black)
 			cursor += lineHeight
 		}
@@ -415,16 +455,17 @@ func renderPNG(ctx context.Context, d reportData) ([]byte, error) {
 	if err := png.Encode(&buf, img); err != nil {
 		return nil, ErrReportFailed
 	}
-	if buf.Len() > 10*1024*1024 {
+	if buf.Len() > maxReportOutputBytes {
 		return nil, ErrReportFailed
 	}
 	return buf.Bytes(), nil
 }
 
-func tableColumnOffsets(innerWidth int) [8]int {
+func tableColumnOffsets(innerWidth int) [9]int {
 	// proporções fixas somando innerWidth; a anotação leva o excedente.
-	weights := [8]float64{0.06, 0.16, 0.06, 0.10, 0.20, 0.08, 0.10, 0.24}
-	var offsets [8]int
+	// Pin, Aba, Região, Cor, Hex, Tinta, ΔE00, Estado, Anotação.
+	weights := [9]float64{0.05, 0.09, 0.13, 0.04, 0.09, 0.17, 0.06, 0.09, 0.28}
+	var offsets [9]int
 	acc := 0.0
 	for i, w := range weights {
 		offsets[i] = int(acc * float64(innerWidth))

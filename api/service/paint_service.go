@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"paint-match-ai/api/domain/ai"
 	"paint-match-ai/api/domain/color"
@@ -68,19 +69,24 @@ func NewPaintService(embeddedSeed []byte) (*PaintService, error) {
 // pra ser reaproveitado tanto pela resolução local do desktop/CLI quanto pelo
 // caminho direto de MESCLA_DB_PATH (apiserver em container, path do volume).
 func openPaintService(dbPath string) (*PaintService, error) {
-	db, err := sql.Open("sqlite", dbPath)
+	// Os pragmas vão no DSN, não em db.Exec: database/sql mantém um POOL, e um
+	// `PRAGMA foreign_keys = ON` executado solto vale só para a conexão que o
+	// rodou. Com o pragma no DSN o driver o aplica a cada conexão nova — sem
+	// isso, um DELETE que caísse noutra conexão não dispararia cascata nenhuma
+	// e deixaria abas e regiões órfãs para sempre.
+	dsn := dbPath
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	dsn += sep + "_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)"
+
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("abrindo banco: %w", err)
 	}
-
-	pragmas := []string{
-		"PRAGMA foreign_keys = ON",
-		"PRAGMA journal_mode = WAL",
-	}
-	for _, p := range pragmas {
-		if _, err := db.Exec(p); err != nil {
-			return nil, fmt.Errorf("pragma: %w", err)
-		}
+	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		return nil, fmt.Errorf("pragma: %w", err)
 	}
 
 	// O estoque do usuário vive no mesmo banco (já no diretório de dados dele),

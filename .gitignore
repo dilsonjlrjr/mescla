@@ -38,3 +38,4 @@ Thumbs.db
 # Claude Code local config
 .claude/
 api/db/embedded/*.db
+coverage.out

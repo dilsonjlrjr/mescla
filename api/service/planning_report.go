@@ -22,13 +22,18 @@ var ErrPlanNotFound = errors.New("plano não encontrado")
 // interno do servidor na resposta (rf-08, evita repetir o achado S-001).
 var ErrReportFailed = errors.New("não foi possível gerar o relatório")
 
-// maxReportOutputBytes é o teto de saída do relatório (rf-08, seção "Limites").
-// Acima disso a geração é abortada com ErrReportFailed.
-const maxReportOutputBytes = 10 * 1024 * 1024
+// maxReportOutputBytes é o teto de saída do relatório. Subiu de 10 para 25 MB
+// no rf-09 (RN13), porque o relatório passou a ter um bloco de desenho por
+// aba em vez de um só. Acima disso a geração é abortada com ErrReportFailed.
+const maxReportOutputBytes = 25 * 1024 * 1024
 
-// reportRow é uma linha da tabela de áreas marcadas do relatório (RN2, RN4, RN11-tabela).
+// reportRow é uma linha da tabela de áreas marcadas do relatório (RN2, RN4,
+// RN11-tabela do rf-08). TabName é a aba de origem (RN13 do rf-09): a tabela
+// do relatório é única e contínua, mas cada linha carrega o nome da figura
+// de onde veio.
 type reportRow struct {
 	N          int
+	TabName    string
 	RegionName string
 	Hex        string
 	R, G, B    int
@@ -38,19 +43,48 @@ type reportRow struct {
 	Note       string
 }
 
-// reportPaint é uma entrada da lista de tintas da peça (RN5): uma linha por
-// tinta distinta (paintBrand+paintCode), citando os pins onde é usada.
+// reportPaintTab é a ocorrência de uma tinta dentro de uma aba específica:
+// o nome da aba e os pins, dentro dela, onde a tinta aparece.
+type reportPaintTab struct {
+	Tab  string
+	Pins []int
+}
+
+// reportPaint é uma entrada da lista de tintas do plano (RN5 do rf-08, RN7
+// do rf-09): uma linha por tinta distinta (paintBrand+paintCode+paintName),
+// citando as abas — e, dentro de cada uma, os pins — onde é usada.
 type reportPaint struct {
 	Label string // "Khorne Red — Citadel (22-14)"
-	Pins  []int
+	Tabs  []reportPaintTab
+}
+
+// addOccurrence registra que a tinta apareceu no pin da aba dada, agrupando
+// por aba (uma tinta usada duas vezes na mesma aba cita os dois pins juntos).
+func (p *reportPaint) addOccurrence(tabName string, pin int) {
+	for i := range p.Tabs {
+		if p.Tabs[i].Tab == tabName {
+			p.Tabs[i].Pins = append(p.Tabs[i].Pins, pin)
+			return
+		}
+	}
+	p.Tabs = append(p.Tabs, reportPaintTab{Tab: tabName, Pins: []int{pin}})
+}
+
+// reportTabBlock é o bloco de relatório de uma aba (RN13 do rf-09): nome da
+// figura, seu desenho — nil quando a aba não tem foto ou a foto não decodifica
+// (RN7 do rf-08) — e as linhas de tabela da aba, já com os pins reiniciados
+// em 1 dentro dela.
+type reportTabBlock struct {
+	Name    string
+	Drawing *image.RGBA
+	Rows    []reportRow
 }
 
 // reportData é a composição pronta para desenho, comum ao PDF e ao PNG.
 type reportData struct {
-	Title     string      // nome do plano
-	Generated string      // "06/09/2026"
-	Drawing   *image.RGBA // nil quando não há imagem utilizável (RN7)
-	Rows      []reportRow
+	Title     string // nome do plano
+	Generated string // "06/09/2026"
+	Blocks    []reportTabBlock
 	Paints    []reportPaint
 }
 
@@ -79,21 +113,15 @@ func (s *PaintService) BuildPlanReport(ctx context.Context, id int64, format str
 		Generated: agora.Format("02/01/2006"),
 	}
 
-	if plan.ImageData != "" {
-		if img, decErr := decodePlanImage(plan.ImageData); decErr == nil {
-			pins := buildPinsForDrawing(plan.Regions)
-			data.Drawing = drawPins(img, pins)
+	data.Blocks = make([]reportTabBlock, 0, len(plan.Tabs))
+	for _, t := range plan.Tabs {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, "", ctxErr
 		}
-		// RN7: decodificação falha é ignorada — Drawing continua nil, sem
-		// abortar o relatório.
+		data.Blocks = append(data.Blocks, buildTabBlock(t))
 	}
 
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		return nil, "", ctxErr
-	}
-
-	data.Rows = buildReportRows(plan.Regions)
-	data.Paints = buildReportPaints(plan.Regions)
+	data.Paints = buildReportPaints(plan.Tabs)
 
 	var out []byte
 	switch format {
@@ -119,8 +147,29 @@ func (s *PaintService) BuildPlanReport(ctx context.Context, id int64, format str
 	return out, filename, nil
 }
 
-// buildPinsForDrawing converte as regiões (já ordenadas por sort_order pelo
-// LoadPlan) nos pins numerados a partir de 1 (RN2, RN3).
+// buildTabBlock monta o bloco de relatório de uma aba (RN13): o desenho com
+// os pins reiniciados em 1 — nil quando a aba não tem foto ou a foto falha ao
+// decodificar (RN7 do rf-08, sem abortar o relatório) — e as linhas de tabela
+// da aba, já citando o nome dela.
+func buildTabBlock(tab PaintingTabDTO) reportTabBlock {
+	name := sanitizeText(tab.Name)
+	block := reportTabBlock{Name: name}
+
+	if tab.ImageData != "" {
+		if img, decErr := decodePlanImage(tab.ImageData); decErr == nil {
+			pins := buildPinsForDrawing(tab.Regions)
+			block.Drawing = drawPins(img, pins)
+		}
+	}
+
+	block.Rows = buildReportRows(name, tab.Regions)
+	return block
+}
+
+// buildPinsForDrawing converte as regiões de uma aba (já ordenadas por
+// sort_order pelo LoadPlan) nos pins numerados a partir de 1 (RN2/RN3 do
+// rf-08). Chamada uma vez por aba, a numeração reinicia a cada chamada — é
+// assim que a RN13 do rf-09 (pins reiniciados por aba) se cumpre.
 func buildPinsForDrawing(regions []PaintingRegionDTO) []pinDesenho {
 	pins := make([]pinDesenho, 0, len(regions))
 	for i, r := range regions {
@@ -134,8 +183,10 @@ func buildPinsForDrawing(regions []PaintingRegionDTO) []pinDesenho {
 	return pins
 }
 
-// buildReportRows monta a tabela de áreas marcadas (RN2, RN4, RN11-estado).
-func buildReportRows(regions []PaintingRegionDTO) []reportRow {
+// buildReportRows monta as linhas de tabela de uma aba (RN2, RN4, RN11-estado
+// do rf-08), com TabName preenchido (RN13 do rf-09) e a numeração de pin
+// reiniciada em 1 para essa aba.
+func buildReportRows(tabName string, regions []PaintingRegionDTO) []reportRow {
 	rows := make([]reportRow, 0, len(regions))
 	for i, r := range regions {
 		// A ausência de tinta é medida pelo texto, não por `paint_id`: receita
@@ -144,6 +195,7 @@ func buildReportRows(regions []PaintingRegionDTO) []reportRow {
 		label := formatPaintLabel(r.PaintBrand, r.PaintName, r.PaintCode)
 		rows = append(rows, reportRow{
 			N:          i + 1,
+			TabName:    tabName,
 			RegionName: sanitizeText(r.RegionName),
 			Hex:        r.Hex,
 			R:          int(r.R),
@@ -158,33 +210,53 @@ func buildReportRows(regions []PaintingRegionDTO) []reportRow {
 	return rows
 }
 
-// buildReportPaints agrupa por paintBrand+paintCode (RN5): a mesma tinta usada
-// em várias regiões aparece uma vez, citando todos os pins.
-func buildReportPaints(regions []PaintingRegionDTO) []reportPaint {
-	type key struct{ brand, code string }
+// buildReportPaints agrupa por paintBrand+paintCode+paintName atravessando
+// todas as abas do plano (RN7 do rf-09): a mesma tinta usada em várias abas
+// aparece uma vez só, citando cada aba e os pins dela.
+func buildReportPaints(tabs []PaintingTabDTO) []reportPaint {
+	type key struct{ brand, code, name string }
 	order := make([]key, 0)
 	byKey := make(map[key]*reportPaint)
 
-	for i, r := range regions {
-		label := formatPaintLabel(r.PaintBrand, r.PaintName, r.PaintCode)
-		if label == semEquivalente {
-			continue
+	for _, t := range tabs {
+		tabName := sanitizeText(t.Name)
+		for i, r := range t.Regions {
+			label := formatPaintLabel(r.PaintBrand, r.PaintName, r.PaintCode)
+			if label == semEquivalente {
+				continue
+			}
+			k := key{brand: r.PaintBrand, code: r.PaintCode, name: r.PaintName}
+			p, ok := byKey[k]
+			if !ok {
+				p = &reportPaint{Label: label}
+				byKey[k] = p
+				order = append(order, k)
+			}
+			p.addOccurrence(tabName, i+1)
 		}
-		k := key{brand: r.PaintBrand, code: r.PaintCode + "|" + r.PaintName}
-		p, ok := byKey[k]
-		if !ok {
-			p = &reportPaint{Label: label}
-			byKey[k] = p
-			order = append(order, k)
-		}
-		p.Pins = append(p.Pins, i+1)
 	}
 
 	paints := make([]reportPaint, 0, len(order))
 	for _, k := range order {
-		paints = append(paints, *byKey[k])
+		// `order` só recebe chave no mesmo passo em que `byKey` recebe o
+		// ponteiro, então a busca não falha — mas desreferenciar sem checar
+		// deixaria um nil panic latente se alguém mexesse na ordem disso.
+		if p, ok := byKey[k]; ok && p != nil {
+			paints = append(paints, *p)
+		}
 	}
 	return paints
+}
+
+// formatPaintLine monta a linha de uma tinta na lista final do relatório,
+// citando as abas — e, dentro de cada uma, os pins — onde ela é usada
+// (RN7 do rf-09). Usada pelo PDF e pelo PNG.
+func formatPaintLine(p reportPaint) string {
+	parts := make([]string, 0, len(p.Tabs))
+	for _, t := range p.Tabs {
+		parts = append(parts, fmt.Sprintf("%s (%s)", t.Tab, formatPinList(t.Pins)))
+	}
+	return fmt.Sprintf("%s — %s", p.Label, strings.Join(parts, "; "))
 }
 
 // alturaMaximaDesenhoMM limita o bloco do desenho no PDF: sem teto, uma foto
@@ -313,10 +385,12 @@ func SlugPlano(nome string) string {
 	return s
 }
 
-// renderPDF monta o PDF A4 retrato do relatório (RN8): margem 15mm, cabeçalho
-// com título e data, desenho reduzido preservando proporção, tabela paginada
-// repetindo o cabeçalho em cada página (RN8/CA15), seguida da lista de
-// tintas. Fonte core do fpdf é cp1252, então todo texto passa pelo tradutor.
+// renderPDF monta o PDF A4 retrato do relatório (RN8 do rf-08): margem 15mm,
+// cabeçalho com título e data, um bloco de desenho por aba — com o nome dela
+// como subtítulo, reduzido preservando proporção — seguido da tabela única e
+// contínua (coluna Aba incluída, RN13 do rf-09), paginada e repetindo o
+// cabeçalho em cada página (RN8/CA15), e por fim a lista de tintas. Fonte
+// core do fpdf é cp1252, então todo texto passa pelo tradutor.
 func renderPDF(ctx context.Context, d reportData) ([]byte, error) {
 	const margin = 15.0
 
@@ -328,12 +402,14 @@ func renderPDF(ctx context.Context, d reportData) ([]byte, error) {
 	pageW, _ := pdf.GetPageSize()
 	usableW := pageW - 2*margin
 
+	// #, Aba, Região, Cor, Tinta, Delta E00, Estado, Nota
+	widths := []float64{8, 22, 28, 18, 37, 14, 17, 36}
+	// A fonte core do fpdf é cp1252, que não tem Δ — "ΔE00" sairia ".E00".
+	headers := []string{"#", "Aba", "Região", "Cor", "Tinta", "Delta E00", "Estado", "Nota"}
+
 	drawTableHeader := func() {
 		pdf.SetFont("Arial", "B", 9)
 		pdf.SetFillColor(230, 230, 230)
-		widths := []float64{10, 35, 20, 45, 15, 20, 35}
-		// A fonte core do fpdf é cp1252, que não tem Δ — "ΔE00" sairia ".E00".
-		headers := []string{"#", "Região", "Cor", "Tinta", "Delta E00", "Estado", "Nota"}
 		for i, h := range headers {
 			pdf.CellFormat(widths[i], 7, tr(h), "1", 0, "C", true, 0, "")
 		}
@@ -355,10 +431,20 @@ func renderPDF(ctx context.Context, d reportData) ([]byte, error) {
 		return nil, err
 	}
 
-	if d.Drawing != nil {
+	for bi, block := range d.Blocks {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if block.Drawing == nil {
+			continue
+		}
+
+		pdf.SetFont("Arial", "B", 12)
+		pdf.CellFormat(usableW, 7, tr(block.Name), "", 1, "L", false, 0, "")
+
 		var buf bytes.Buffer
-		if err := png.Encode(&buf, d.Drawing); err == nil {
-			bounds := d.Drawing.Bounds()
+		if err := png.Encode(&buf, block.Drawing); err == nil {
+			bounds := block.Drawing.Bounds()
 			imgW := float64(bounds.Dx())
 			imgH := float64(bounds.Dy())
 			if imgW > 0 && imgH > 0 {
@@ -371,27 +457,32 @@ func renderPDF(ctx context.Context, d reportData) ([]byte, error) {
 					drawW = drawH * imgW / imgH
 				}
 				opt := fpdf.ImageOptions{ImageType: "PNG", ReadDpi: true}
-				pdf.RegisterImageOptionsReader("plano-desenho", opt, &buf)
-				pdf.ImageOptions("plano-desenho", pdf.GetX(), pdf.GetY(), drawW, drawH, true, opt, 0, "")
+				imgName := fmt.Sprintf("plano-desenho-%d", bi)
+				pdf.RegisterImageOptionsReader(imgName, opt, &buf)
+				pdf.ImageOptions(imgName, pdf.GetX(), pdf.GetY(), drawW, drawH, true, opt, 0, "")
 			}
 		}
+		pdf.Ln(4)
 	}
 
-	pdf.Ln(4)
+	allRows := make([]reportRow, 0)
+	for _, block := range d.Blocks {
+		allRows = append(allRows, block.Rows...)
+	}
 
-	if len(d.Rows) == 0 {
+	if len(allRows) == 0 {
 		pdf.SetFont("Arial", "", 11)
 		pdf.CellFormat(usableW, 7, tr("Nenhuma região marcada"), "", 1, "L", false, 0, "")
 	} else {
 		drawTableHeader()
-		for _, row := range d.Rows {
-			// RN13: checagem a cada linha.
+		for _, row := range allRows {
+			// RN13 do rf-08: checagem a cada linha.
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
 			if pdf.GetY() > 297-margin-14 {
 				pdf.AddPage()
-				// RN13: checagem a cada página.
+				// RN13 do rf-08: checagem a cada página.
 				if err := ctx.Err(); err != nil {
 					return nil, err
 				}
@@ -401,20 +492,20 @@ func renderPDF(ctx context.Context, d reportData) ([]byte, error) {
 			if row.Painted {
 				estado = "pintada"
 			}
-			widths := []float64{10, 35, 20, 45, 15, 20, 35}
 			pdf.CellFormat(widths[0], 7, strconv.Itoa(row.N), "1", 0, "C", false, 0, "")
-			pdf.CellFormat(widths[1], 7, cortar(pdf, tr(row.RegionName), widths[1]), "1", 0, "L", false, 0, "")
+			pdf.CellFormat(widths[1], 7, cortar(pdf, tr(row.TabName), widths[1]), "1", 0, "L", false, 0, "")
+			pdf.CellFormat(widths[2], 7, cortar(pdf, tr(row.RegionName), widths[2]), "1", 0, "L", false, 0, "")
 			corX, corY := pdf.GetX(), pdf.GetY()
-			pdf.CellFormat(widths[2], 7, cortar(pdf, tr(row.Hex), widths[2]-6), "1", 0, "R", false, 0, "")
+			pdf.CellFormat(widths[3], 7, cortar(pdf, tr(row.Hex), widths[3]-6), "1", 0, "R", false, 0, "")
 			// Amostra da cor alvo (escopo Faz): quadrado à esquerda do hex.
 			cr, cg, cb := hexParaRGB(row.Hex)
 			pdf.SetFillColor(cr, cg, cb)
 			pdf.Rect(corX+1.5, corY+2, 4, 3, "F")
 			pdf.SetFillColor(240, 240, 240)
-			pdf.CellFormat(widths[3], 7, cortar(pdf, tr(row.PaintLabel), widths[3]), "1", 0, "L", false, 0, "")
-			pdf.CellFormat(widths[4], 7, formatDeltaE(row.DeltaE), "1", 0, "C", false, 0, "")
-			pdf.CellFormat(widths[5], 7, tr(estado), "1", 0, "C", false, 0, "")
-			pdf.CellFormat(widths[6], 7, cortar(pdf, tr(row.Note), widths[6]), "1", 0, "L", false, 0, "")
+			pdf.CellFormat(widths[4], 7, cortar(pdf, tr(row.PaintLabel), widths[4]), "1", 0, "L", false, 0, "")
+			pdf.CellFormat(widths[5], 7, formatDeltaE(row.DeltaE), "1", 0, "C", false, 0, "")
+			pdf.CellFormat(widths[6], 7, tr(estado), "1", 0, "C", false, 0, "")
+			pdf.CellFormat(widths[7], 7, cortar(pdf, tr(row.Note), widths[7]), "1", 0, "L", false, 0, "")
 			pdf.Ln(-1)
 		}
 	}
@@ -432,12 +523,7 @@ func renderPDF(ctx context.Context, d reportData) ([]byte, error) {
 		pdf.CellFormat(usableW, 7, tr("Nenhuma região marcada"), "", 1, "L", false, 0, "")
 	} else {
 		for _, p := range d.Paints {
-			pins := make([]string, 0, len(p.Pins))
-			for _, n := range p.Pins {
-				pins = append(pins, strconv.Itoa(n))
-			}
-			line := fmt.Sprintf("%s — pins %s", p.Label, strings.Join(pins, ", "))
-			pdf.CellFormat(usableW, 6, tr(line), "", 1, "L", false, 0, "")
+			pdf.CellFormat(usableW, 6, tr(formatPaintLine(p)), "", 1, "L", false, 0, "")
 		}
 	}
 

@@ -1,12 +1,13 @@
 // Rascunho local de T2 (Plano da peça): auto save sem rede, com debounce e
-// escada de cota. Formato e chaves congelados na nota macro de 2026-09-06
-// (M5) e detalhados em rf-07. O timer do debounce mora aqui, não na tela.
+// escada de cota. Formato v2 (rf-09, várias abas) — migra o v1 (rf-07, uma
+// foto/regiões na raiz) na leitura. O timer do debounce mora aqui, não na tela.
 
 const RASCUNHO_KEY = 'mescla:plano-rascunho';
 const PLANO_ATIVO_KEY = 'mescla:plano-ativo';
 
 const DEBOUNCE_MS = 1500;
 const MAX_REGIOES = 50;
+const MAX_ABAS = 10;
 
 const PREFIXOS_IMAGEM_VALIDOS = ['data:image/png;base64,', 'data:image/jpeg;base64,'];
 
@@ -27,12 +28,25 @@ export interface RegiaoRascunho {
   painted: boolean;
 }
 
-export interface Rascunho {
-  planId: number | null;
+export interface AbaRascunho {
+  /** Identidade estável da aba no servidor (achado 2 do guardrail rf-09):
+   *  ausente numa aba nunca salva. Usada para casar a aba do rascunho com a
+   *  do servidor na hidratação — nunca a posição na tira, que pode ter sido
+   *  reordenada depois do último Salvar. */
+  id?: number | null;
   name: string;
   imageData: string;
-  regions: RegiaoRascunho[];
   selectedManufacturerId: number | null;
+  useStockOnly: boolean;
+  regions: RegiaoRascunho[];
+}
+
+export interface Rascunho {
+  v: 2;
+  planId: number | null;
+  name: string;
+  abaAtiva: number;
+  tabs: AbaRascunho[];
   salvoEm: string;
 }
 
@@ -41,7 +55,7 @@ export type EstadoAutoSave = 'ligado' | 'sem-foto' | 'desligado';
 let timer: ReturnType<typeof setTimeout> | null = null;
 let estado: EstadoAutoSave = 'ligado';
 
-function normalizarPainted(valor: unknown): boolean {
+function normalizarBooleano(valor: unknown): boolean {
   return valor === true || valor === 1;
 }
 
@@ -67,19 +81,19 @@ function normalizarRegiao(r: unknown): RegiaoRascunho | null {
     paintName: typeof o.paintName === 'string' ? o.paintName : '',
     paintCode: typeof o.paintCode === 'string' ? o.paintCode : '',
     deltaE: Number(o.deltaE) || 0,
-    painted: normalizarPainted(o.painted),
+    painted: normalizarBooleano(o.painted),
   };
 }
 
-/** Normalização defensiva de um rascunho lido do disco: JSON inválido ou
- *  formato inesperado nunca quebra a tela (CAN6, CAN7, CAN8). */
 /** Identificador vindo do rascunho: só inteiro positivo passa. Rascunho
  *  adulterado com `-7` ou `1.5` viraria `id` no POST (CAN1). */
 function idValido(v: unknown): number | null {
   return typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : null;
 }
 
-function normalizar(bruto: unknown): { rascunho: Rascunho; truncado: boolean } | null {
+/** Uma aba do rascunho, com o mesmo corte de 50 regiões (CAN5 estende a
+ *  aba). `truncado` sinaliza que a aba tinha mais regiões do que o teto. */
+function normalizarAba(bruto: unknown): { aba: AbaRascunho; truncado: boolean } | null {
   if (typeof bruto !== 'object' || bruto === null) return null;
   const o = bruto as Record<string, unknown>;
 
@@ -90,19 +104,73 @@ function normalizar(bruto: unknown): { rascunho: Rascunho; truncado: boolean } |
   const truncado = regioesValidas.length > MAX_REGIOES;
   const regions = truncado ? regioesValidas.slice(0, MAX_REGIOES) : regioesValidas;
 
-  const rascunho: Rascunho = {
-    planId: idValido(o.planId),
+  const aba: AbaRascunho = {
+    id: idValido(o.id),
     name: typeof o.name === 'string' ? o.name : '',
     imageData: normalizarImagem(o.imageData),
-    regions,
     selectedManufacturerId: idValido(o.selectedManufacturerId),
+    useStockOnly: normalizarBooleano(o.useStockOnly),
+    regions,
+  };
+  return { aba, truncado };
+}
+
+/** Normalização defensiva de um rascunho lido do disco: JSON inválido ou
+ *  formato inesperado nunca quebra a tela (CAN6). RN11: payload sem `v` e
+ *  com `regions` na raiz é o formato v1 (rf-07) — migra para uma aba única
+ *  `Figura 1`, sem descartar nada. */
+function normalizar(bruto: unknown): { rascunho: Rascunho; truncado: boolean } | null {
+  if (typeof bruto !== 'object' || bruto === null) return null;
+  const o = bruto as Record<string, unknown>;
+
+  const ehV1 = o.v !== 2 && Array.isArray(o.regions);
+
+  const tabsBrutas: unknown[] = ehV1
+    ? [
+        {
+          name: 'Figura 1',
+          imageData: o.imageData,
+          selectedManufacturerId: o.selectedManufacturerId,
+          useStockOnly: false,
+          regions: o.regions,
+        },
+      ]
+    : Array.isArray(o.tabs)
+      ? o.tabs
+      : [];
+
+  const abasNormalizadas = tabsBrutas
+    .map(normalizarAba)
+    .filter((a): a is { aba: AbaRascunho; truncado: boolean } => a !== null);
+
+  const truncadoAbas = abasNormalizadas.length > MAX_ABAS;
+  const abasFinal = truncadoAbas ? abasNormalizadas.slice(0, MAX_ABAS) : abasNormalizadas;
+  const truncadoRegioes = abasFinal.some(a => a.truncado);
+
+  // Plano/rascunho sem aba é impossível (mesma invariante do servidor,
+  // RN1) — um payload vazio ou irreconhecível ainda vira uma aba em branco.
+  const tabs = abasFinal.length > 0 ? abasFinal.map(a => a.aba) : [
+    { name: '', imageData: '', selectedManufacturerId: null, useStockOnly: false, regions: [] },
+  ];
+
+  const abaAtivaBruta = Number.isInteger(o.abaAtiva) ? (o.abaAtiva as number) : 0;
+  const abaAtiva = Math.min(Math.max(abaAtivaBruta, 0), tabs.length - 1);
+
+  const rascunho: Rascunho = {
+    v: 2,
+    planId: idValido(o.planId),
+    name: typeof o.name === 'string' ? o.name : '',
+    abaAtiva,
+    tabs,
     salvoEm: typeof o.salvoEm === 'string' ? o.salvoEm : new Date().toISOString(),
   };
-  return { rascunho, truncado };
+  return { rascunho, truncado: truncadoAbas || truncadoRegioes };
 }
 
 /** Lê o rascunho gravado. JSON inválido apaga a chave e devolve `corrompido:
- *  true` (CAN7); mais de 50 regiões corta e devolve `truncado: true` (CAN8). */
+ *  true` (CAN6); mais de 10 abas ou mais de 50 regiões numa aba corta e
+ *  devolve `truncado: true` (CAN5). Rascunho v1 nunca é descartado em
+ *  silêncio — é migrado (RN11, CA17). */
 export function lerRascunho(): { rascunho: Rascunho | null; corrompido: boolean; truncado: boolean } {
   let raw: string | null;
   try {
@@ -133,11 +201,15 @@ function gravar(payload: Rascunho): void {
     localStorage.setItem(RASCUNHO_KEY, JSON.stringify(payload));
   } catch {
     if (estado === 'desligado') return;
-    // Degrau único da RN8: cortar a foto. Vale tanto na primeira falha
-    // quanto já em `sem-foto` — o rascunho sem imagem ainda salva o
-    // trabalho, e só desliga quando nem ele cabe.
+    // Degrau único da RN8 (estendida a N abas): cortar a foto de *todas* as
+    // abas. O rascunho sem imagem ainda salva o trabalho (nomes, regiões,
+    // cores), e só desliga quando nem ele cabe.
     try {
-      localStorage.setItem(RASCUNHO_KEY, JSON.stringify({ ...payload, imageData: '' }));
+      const semFotos: Rascunho = {
+        ...payload,
+        tabs: payload.tabs.map(t => ({ ...t, imageData: '' })),
+      };
+      localStorage.setItem(RASCUNHO_KEY, JSON.stringify(semFotos));
       estado = 'sem-foto';
     } catch {
       estado = 'desligado';
@@ -145,8 +217,8 @@ function gravar(payload: Rascunho): void {
   }
 }
 
-/** Agenda a gravação do rascunho após 1500 ms de silêncio (RN3); chamadas
- *  seguidas dentro da janela resultam em uma única gravação (CA5, CA6). */
+/** Agenda a gravação do rascunho após 1500 ms de silêncio (RN3 do rf-07);
+ *  chamadas seguidas dentro da janela resultam em uma única gravação. */
 export function agendarGravacao(payload: Rascunho): void {
   if (estado === 'desligado') return;
   if (timer !== null) clearTimeout(timer);

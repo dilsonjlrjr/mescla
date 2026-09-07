@@ -103,7 +103,14 @@ export const dict = {
     exportReportBtn: 'Exportar relatório', exportFormatLabel: 'Formato', exportPdf: 'PDF', exportPng: 'PNG',
     exportSaveFirst: 'Salve o plano antes de exportar', exportGenerating: 'Gerando relatório…',
     exportFailed: 'Não foi possível gerar o relatório. Tente de novo.',
-    exportInvalid: 'Não foi possível exportar: pedido inválido'
+    exportInvalid: 'Não foi possível exportar: pedido inválido',
+    errTabsMax: 'O plano aceita no máximo 10 figuras',
+    errTabNameMax: 'O nome da figura tem no máximo 80 caracteres',
+    errTabDeleteLast: 'O plano precisa de pelo menos uma figura',
+    tabsListLabel: 'Abas da peça', renameTabLabel: 'Nome da figura', addTabBtn: 'Nova figura',
+    moveTabLeft: 'Mover figura para a esquerda', moveTabRight: 'Mover figura para a direita',
+    deleteTabBtn: 'Excluir figura', deleteTabConfirm: 'Excluir a figura “{name}” e suas regiões?',
+    tabProgressShort: '{a}/{b}', usedInTabsLabel: 'Usada em {tabs}'
   },
   en: {
     _name: 'English (US)', _dec: '.',
@@ -204,7 +211,14 @@ export const dict = {
     exportReportBtn: 'Export report', exportFormatLabel: 'Format', exportPdf: 'PDF', exportPng: 'PNG',
     exportSaveFirst: 'Save the plan before exporting', exportGenerating: 'Generating report…',
     exportFailed: 'Could not generate the report. Try again.',
-    exportInvalid: 'Could not export: invalid request'
+    exportInvalid: 'Could not export: invalid request',
+    errTabsMax: 'The plan accepts at most 10 figures',
+    errTabNameMax: 'The figure name is at most 80 characters',
+    errTabDeleteLast: 'The plan needs at least one figure',
+    tabsListLabel: 'Model figures', renameTabLabel: 'Figure name', addTabBtn: 'New figure',
+    moveTabLeft: 'Move figure left', moveTabRight: 'Move figure right',
+    deleteTabBtn: 'Delete figure', deleteTabConfirm: 'Delete figure "{name}" and its regions?',
+    tabProgressShort: '{a}/{b}', usedInTabsLabel: 'Used in {tabs}'
   },
   es: {
     _name: 'Español', _dec: ',',
@@ -305,7 +319,14 @@ export const dict = {
     exportReportBtn: 'Exportar informe', exportFormatLabel: 'Formato', exportPdf: 'PDF', exportPng: 'PNG',
     exportSaveFirst: 'Guarda el plan antes de exportar', exportGenerating: 'Generando informe…',
     exportFailed: 'No se pudo generar el informe. Inténtalo de nuevo.',
-    exportInvalid: 'No se pudo exportar: pedido inválido'
+    exportInvalid: 'No se pudo exportar: pedido inválido',
+    errTabsMax: 'El plan acepta como máximo 10 figuras',
+    errTabNameMax: 'El nombre de la figura tiene como máximo 80 caracteres',
+    errTabDeleteLast: 'El plan necesita al menos una figura',
+    tabsListLabel: 'Figuras de la pieza', renameTabLabel: 'Nombre de la figura', addTabBtn: 'Nueva figura',
+    moveTabLeft: 'Mover figura a la izquierda', moveTabRight: 'Mover figura a la derecha',
+    deleteTabBtn: 'Eliminar figura', deleteTabConfirm: '¿Eliminar la figura “{name}” y sus regiones?',
+    tabProgressShort: '{a}/{b}', usedInTabsLabel: 'Usada en {tabs}'
   },
   fr: {
     _name: 'Français', _dec: ',',
@@ -406,7 +427,14 @@ export const dict = {
     exportReportBtn: 'Exporter le rapport', exportFormatLabel: 'Format', exportPdf: 'PDF', exportPng: 'PNG',
     exportSaveFirst: 'Enregistrez le plan avant d’exporter', exportGenerating: 'Génération du rapport…',
     exportFailed: 'Impossible de générer le rapport. Réessayez.',
-    exportInvalid: 'Impossible d’exporter : requête invalide'
+    exportInvalid: 'Impossible d’exporter : requête invalide',
+    errTabsMax: 'Le plan accepte au maximum 10 figures',
+    errTabNameMax: 'Le nom de la figure compte au maximum 80 caractères',
+    errTabDeleteLast: 'Le plan a besoin d’au moins une figure',
+    tabsListLabel: 'Figures de la pièce', renameTabLabel: 'Nom de la figure', addTabBtn: 'Nouvelle figure',
+    moveTabLeft: 'Déplacer la figure à gauche', moveTabRight: 'Déplacer la figure à droite',
+    deleteTabBtn: 'Supprimer la figure', deleteTabConfirm: 'Supprimer la figure « {name} » et ses zones ?',
+    tabProgressShort: '{a}/{b}', usedInTabsLabel: 'Utilisée dans {tabs}'
   }
 } as const;
 

@@ -1,6 +1,8 @@
 // Persistência do plano da peça (T2) — POST /plans (criar/atualizar) e
 // GET /plans/{id} (retomar). Contrato espelha service.PaintingPlanDTO/
-// PaintingRegionDTO do Go (rf-07). RN11: a mensagem crua do servidor (achado
+// PaintingTabDTO/PaintingRegionDTO do Go (rf-09): o plano agora carrega
+// `tabs[]`, cada aba com sua foto, seu fabricante e suas regiões próprias.
+// RN11 do rf-07 continua valendo: a mensagem crua do servidor (achado
 // S-001, texto do driver SQLite) nunca sai deste módulo — só PlanoError.code.
 
 import { apiPost } from './api';
@@ -24,15 +26,22 @@ export interface RegiaoDTO {
   paintName: string;
   paintCode: string;
   deltaE: number;
-  painted: number;
+  painted: 0 | 1;
+}
+
+export interface AbaDTO {
+  id?: number;
+  name: string;
+  imageData: string;
+  selectedManufacturerId?: number | null;
+  useStockOnly: 0 | 1;
+  regions: RegiaoDTO[];
 }
 
 export interface PlanoDTO {
   id?: number;
   name: string;
-  imageData: string;
-  selectedManufacturerId?: number | null;
-  regions: RegiaoDTO[];
+  tabs: AbaDTO[];
 }
 
 /** Código estável que a tela traduz — nunca o texto original do servidor. */
@@ -42,9 +51,20 @@ export class PlanoError extends Error {
   }
 }
 
+/** Erro de validação de `validarPlano`: a `chave` é traduzida pela tela, que
+ *  monta a mensagem final — para os erros por aba, `abaNome` acompanha (RN15,
+ *  ex.: "Figura 2: o plano aceita no máximo 50 regiões"). Erros de escopo do
+ *  plano inteiro (quantidade de abas, nome do plano) não trazem `abaNome`. */
+export interface ErroValidacaoPlano {
+  chave: string;
+  abaNome?: string;
+}
+
 const IMAGE_DATA_URL_PREFIXES = ['data:image/png;base64,', 'data:image/jpeg;base64,'];
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_PLAN_NAME = 200;
+const MAX_TAB_NAME = 80;
+const MAX_ABAS = 10;
 const MAX_REGIONS = 50;
 const MAX_REGION_NAME = 100;
 const MAX_NOTE = 2000;
@@ -55,33 +75,61 @@ function logOriginalErrorOnlyInDev(context: string, original: unknown): void {
   }
 }
 
-/** Ordem fixa das guardas (contrato da spec) — devolve a chave i18n do primeiro erro. */
-export function validarPlano(dto: PlanoDTO): string | null {
-  if (dto.name.trim().length === 0) return 'errPlanNameEmpty';
-  if (dto.name.length > MAX_PLAN_NAME) return 'errPlanNameMax';
-  if (dto.regions.length > MAX_REGIONS) return 'errRegionsMax';
+/** Nome efetivo da aba pra citar num erro — antes do salvar aplicar a
+ *  RN3 (vazio vira `Figura N`), a mensagem já precisa de algo pra mostrar. */
+function nomeEfetivoDaAba(aba: AbaDTO, indice: number): string {
+  const nome = aba.name.trim();
+  return nome.length > 0 ? nome : `Figura ${indice + 1}`;
+}
 
-  if (dto.imageData.length > 0) {
-    const temPrefixoValido = IMAGE_DATA_URL_PREFIXES.some(prefixo =>
-      dto.imageData.startsWith(prefixo)
-    );
-    if (!temPrefixoValido) return 'errImageType';
-    if (new TextEncoder().encode(dto.imageData).length > MAX_IMAGE_BYTES) return 'errImageMax';
+/** Ordem fixa das guardas (contrato da spec): quantidade de abas → nome do
+ *  plano → por aba, na ordem nome/regiões/imagem/regionName/note — devolve a
+ *  chave i18n do primeiro erro, com o nome da aba quando o erro é dela. */
+export function validarPlano(dto: PlanoDTO): ErroValidacaoPlano | null {
+  if (dto.tabs.length > MAX_ABAS) return { chave: 'errTabsMax' };
+
+  if (dto.name.trim().length === 0) return { chave: 'errPlanNameEmpty' };
+  if (dto.name.length > MAX_PLAN_NAME) return { chave: 'errPlanNameMax' };
+
+  for (let i = 0; i < dto.tabs.length; i++) {
+    const aba = dto.tabs[i];
+    const abaNome = nomeEfetivoDaAba(aba, i);
+
+    if (aba.name.length > MAX_TAB_NAME) return { chave: 'errTabNameMax', abaNome };
+    if (aba.regions.length > MAX_REGIONS) return { chave: 'errRegionsMax', abaNome };
+
+    if (aba.imageData.length > 0) {
+      const temPrefixoValido = IMAGE_DATA_URL_PREFIXES.some(prefixo =>
+        aba.imageData.startsWith(prefixo)
+      );
+      if (!temPrefixoValido) return { chave: 'errImageType', abaNome };
+      if (new TextEncoder().encode(aba.imageData).length > MAX_IMAGE_BYTES) {
+        return { chave: 'errImageMax', abaNome };
+      }
+    }
+
+    if (aba.regions.some(r => r.regionName.length > MAX_REGION_NAME)) {
+      return { chave: 'errRegionNameMax', abaNome };
+    }
+    if (aba.regions.some(r => r.note.length > MAX_NOTE)) {
+      return { chave: 'errNoteMax', abaNome };
+    }
   }
 
-  if (dto.regions.some(r => r.regionName.length > MAX_REGION_NAME)) return 'errRegionNameMax';
-  if (dto.regions.some(r => r.note.length > MAX_NOTE)) return 'errNoteMax';
-
   return null;
+}
+
+function contarRegioes(plano: Pick<PlanoDTO, 'tabs'>): number {
+  return (plano.tabs ?? []).reduce((acc, aba) => acc + (aba.regions?.length ?? 0), 0);
 }
 
 export async function salvarPlano(
   dto: PlanoDTO
 ): Promise<{ plano: PlanoDTO; suspeitaD003: boolean }> {
-  const regioesEnviadas = dto.regions.length;
+  const regioesEnviadas = contarRegioes(dto);
   try {
     const plano = await apiPost<PlanoDTO>('/plans', dto);
-    const suspeitaD003 = regioesEnviadas > 0 && (plano.regions?.length ?? 0) < regioesEnviadas;
+    const suspeitaD003 = regioesEnviadas > 0 && contarRegioes(plano) < regioesEnviadas;
     return { plano, suspeitaD003 };
   } catch (err) {
     logOriginalErrorOnlyInDev('salvarPlano: POST /plans falhou', err);
