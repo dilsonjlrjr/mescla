@@ -11,8 +11,8 @@ import (
 // pra ajustar empiricamente conforme o feedback de uso real com tintas físicas.
 const (
 	lightnessThreshold = 0.06 // ~6% de diferença de luminosidade já é perceptível
-	saturationFloor     = 0.12 // abaixo disso a cor é quase neutra; hue vira ruído
-	hueThresholdDeg     = 12.0 // graus de diferença de matiz pra valer uma dica
+	saturationFloor    = 0.12 // abaixo disso a cor é quase neutra; hue vira ruído
+	hueThresholdDeg    = 12.0 // graus de diferença de matiz pra valer uma dica
 )
 
 // GenerateTips gera dicas de ajuste em texto comparando o HSL da cor alvo

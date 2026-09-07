@@ -56,7 +56,7 @@ func Suggest(source mix.PaintInput, sourceManufacturer, targetManufacturer strin
 	}
 
 	l, a, b := color.RGBToLab(source.R, source.G, source.B)
-	recipe := mix.SuggestBestSubset([3]float64{l, a, b}, kept, minIngredients, 3)
+	recipe := mix.SuggestBestSubset([3]float64{l, a, b}, kept, minIngredients, 0)
 	tips := mix.GenerateTips(source.R, source.G, source.B, recipe)
 
 	return Result{
@@ -84,7 +84,7 @@ func SuggestFromStock(source mix.PaintInput, stock []mix.PaintInput) (Result, er
 	}
 
 	l, a, b := color.RGBToLab(source.R, source.G, source.B)
-	recipe := mix.SuggestBestSubset([3]float64{l, a, b}, stock, 1, 3)
+	recipe := mix.SuggestBestSubset([3]float64{l, a, b}, stock, 1, 0)
 	tips := mix.GenerateTips(source.R, source.G, source.B, recipe)
 
 	return Result{
