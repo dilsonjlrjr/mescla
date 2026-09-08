@@ -226,6 +226,11 @@ export function lerRascunho(): { rascunho: Rascunho | null; corrompido: boolean;
 function gravar(payload: Rascunho): void {
   try {
     localStorage.setItem(RASCUNHO_KEY, JSON.stringify(payload));
+    // D-005: a gravação cheia passou, então o degrau 'sem-foto' era da
+    // gravação anterior, não da sessão. Sem esta volta, uma única foto grande
+    // deixava 'sem-foto' colado e cortava também toda foto seguinte, mesmo
+    // pequena. 'desligado' continua colado na sessão — a RN8 diz isso.
+    if (estado === 'sem-foto') estado = 'ligado';
   } catch {
     if (estado === 'desligado') return;
     // Degrau único da RN8 (estendida a N abas): cortar a foto de *todas* as

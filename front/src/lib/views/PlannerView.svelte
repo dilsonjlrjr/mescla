@@ -33,7 +33,7 @@
     type Rascunho, type RegiaoRascunho, type AbaRascunho, type EstadoAutoSave,
   } from '../planner/rascunho';
   import {
-    validarPlano, salvarPlano, carregarPlano, baixarRelatorio, PlanoError,
+    validarPlano, validarImagemDaAba, salvarPlano, carregarPlano, baixarRelatorio, PlanoError,
     type PlanoDTO, type RegiaoDTO, type AbaDTO, type ErroValidacaoPlano,
   } from '../services/plans';
 
@@ -597,7 +597,23 @@
     const file = input.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => loadImage(reader.result as string);
+    reader.onload = () => {
+      const src = reader.result as string;
+      // D-005: a MESMA guarda da CA17, aplicada já no upload em vez de só no
+      // Salvar. Uma foto acima do teto entrava no estado, o auto save batia
+      // na cota e a RN8 cortava a foto de TODAS as abas; o usuário só
+      // descobria ao recarregar, com a foto perdida e — em plano nunca salvo
+      // — sem servidor de onde buscá-la. Recusar na entrada mantém o estado
+      // sempre gravável.
+      const erroImagem = validarImagemDaAba(src);
+      if (erroImagem) {
+        toast(t(erroImagem as DictKey), 'error');
+        // Libera o input para o usuário reescolher, inclusive o mesmo arquivo.
+        input.value = '';
+        return;
+      }
+      loadImage(src);
+    };
     reader.readAsDataURL(file);
   }
 
@@ -1126,8 +1142,19 @@
             const salvo = await carregarPlano(rascunho.planId);
             abasServidor = salvo.tabs;
           } catch {
-            toast(t('draftNoPhoto'), 'error');
+            /* sem o plano do servidor não há foto de resgate — avisa abaixo. */
           }
+        }
+        // D-005: região só nasce de um clique sobre a foto, então aba COM
+        // região e SEM `imageData` é foto cortada pela RN8, não aba ainda
+        // vazia. O aviso da CA21 morreu junto com a sessão anterior; sem este,
+        // a foto some sem explicação nenhuma. Cobre também o plano nunca
+        // salvo, que não tem `planId` para buscar a foto no servidor.
+        if (
+          abasServidor === null &&
+          rascunho.tabs.some(aba => !aba.imageData && aba.regions.length > 0)
+        ) {
+          toast(t('draftNoPhoto'), 'error');
         }
         // achado 2 do guardrail rf-09: casa a aba do rascunho com a do
         // servidor por identidade estável — o `id` da aba quando existir, e

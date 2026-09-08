@@ -87,6 +87,17 @@ function nomeEfetivoDaAba(aba: AbaDTO, indice: number): string {
   return nome.length > 0 ? nome : `Figura ${indice + 1}`;
 }
 
+/** Guarda da foto de uma aba (M5/CA17): prefixo em lista branca e teto de
+ *  2 MB. Devolve a chave i18n do erro, ou `null` se a foto passa. Exportada
+ *  para T2 aplicar a mesma guarda no upload (D-005) — no Salvar apenas, a
+ *  foto grande já teria sido cortada pela RN8 antes do usuário ver o aviso. */
+export function validarImagemDaAba(imageData: string): string | null {
+  if (imageData.length === 0) return null;
+  if (!IMAGE_DATA_URL_PREFIXES.some(prefixo => imageData.startsWith(prefixo))) return 'errImageType';
+  if (new TextEncoder().encode(imageData).length > MAX_IMAGE_BYTES) return 'errImageMax';
+  return null;
+}
+
 /** Ordem fixa das guardas (contrato da spec): quantidade de abas → nome do
  *  plano → por aba, na ordem nome/regiões/imagem/regionName/note — devolve a
  *  chave i18n do primeiro erro, com o nome da aba quando o erro é dela. */
@@ -103,15 +114,8 @@ export function validarPlano(dto: PlanoDTO): ErroValidacaoPlano | null {
     if (aba.name.length > MAX_TAB_NAME) return { chave: 'errTabNameMax', abaNome };
     if (aba.regions.length > MAX_REGIONS) return { chave: 'errRegionsMax', abaNome };
 
-    if (aba.imageData.length > 0) {
-      const temPrefixoValido = IMAGE_DATA_URL_PREFIXES.some(prefixo =>
-        aba.imageData.startsWith(prefixo)
-      );
-      if (!temPrefixoValido) return { chave: 'errImageType', abaNome };
-      if (new TextEncoder().encode(aba.imageData).length > MAX_IMAGE_BYTES) {
-        return { chave: 'errImageMax', abaNome };
-      }
-    }
+    const erroImagem = validarImagemDaAba(aba.imageData);
+    if (erroImagem) return { chave: erroImagem, abaNome };
 
     if (aba.regions.some(r => r.regionName.length > MAX_REGION_NAME)) {
       return { chave: 'errRegionNameMax', abaNome };
