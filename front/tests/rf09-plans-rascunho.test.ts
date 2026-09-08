@@ -18,14 +18,13 @@ function regiao(overrides: Partial<RegiaoDTO> = {}): RegiaoDTO {
 
 function aba(overrides: Partial<AbaDTO> = {}): AbaDTO {
   return {
-    name: 'Figura 1', imageData: '', selectedManufacturerId: null,
-    useStockOnly: 0, regions: [],
+    name: 'Figura 1', imageData: '', regions: [],
     ...overrides,
   };
 }
 
 function plano(overrides: Partial<PlanoDTO> = {}): PlanoDTO {
-  return { name: 'Plano', tabs: [aba()], ...overrides };
+  return { name: 'Plano', useStockOnly: 0, tabs: [aba()], ...overrides };
 }
 
 describe('validarPlano — por aba (plans.ts)', () => {
@@ -107,7 +106,7 @@ describe('lerRascunho — migração v1 → v2 (rascunho.ts)', () => {
     localStorage.clear();
   });
 
-  it('CA17 — rascunho v1 vira aba Figura 1', () => {
+  it('CA17 — rascunho v1 vira aba Figura 1 (selectedManufacturerId migra para a raiz — mudança macro 07/09/2026)', () => {
     const v1 = {
       planId: 7,
       name: 'Miniatura',
@@ -128,7 +127,7 @@ describe('lerRascunho — migração v1 → v2 (rascunho.ts)', () => {
     expect(r.tabs).toHaveLength(1);
     expect(r.tabs[0].name).toBe('Figura 1');
     expect(r.tabs[0].imageData).toBe('data:image/png;base64,AAA');
-    expect(r.tabs[0].selectedManufacturerId).toBe(3);
+    expect(r.selectedManufacturerId).toBe(3);
     expect(r.tabs[0].regions).toHaveLength(1);
     expect(r.tabs[0].regions[0].regionName).toBe('Manto');
     expect(r.tabs[0].regions[0].painted).toBe(true);
@@ -144,15 +143,17 @@ describe('lerRascunho — migração v1 → v2 (rascunho.ts)', () => {
     expect(rascunho).not.toBeNull();
   });
 
-  it('rascunho v2 já no formato novo é lido sem migração', () => {
+  it('rascunho v2 já no formato novo é lido sem migração (useStockOnly na raiz — mudança macro 07/09/2026)', () => {
     const v2: Rascunho = {
       v: 2,
       planId: null,
       name: 'Plano',
+      selectedManufacturerId: null,
+      useStockOnly: true,
       abaAtiva: 1,
       tabs: [
-        { name: 'Frente', imageData: '', selectedManufacturerId: null, useStockOnly: false, regions: [] },
-        { name: 'Costas', imageData: '', selectedManufacturerId: null, useStockOnly: true, regions: [] },
+        { name: 'Frente', imageData: '', regions: [] },
+        { name: 'Costas', imageData: '', regions: [] },
       ],
       salvoEm: '2026-09-06T10:00:00.000Z',
     };
@@ -163,7 +164,7 @@ describe('lerRascunho — migração v1 → v2 (rascunho.ts)', () => {
     expect(truncado).toBe(false);
     expect(rascunho?.tabs).toHaveLength(2);
     expect(rascunho?.abaAtiva).toBe(1);
-    expect(rascunho?.tabs[1].useStockOnly).toBe(true);
+    expect(rascunho?.useStockOnly).toBe(true);
   });
 
   it('CAN5 — rascunho adulterado com 40 abas é cortado em 10 com aviso', () => {
@@ -218,41 +219,35 @@ describe('lerRascunho — migração v1 → v2 (rascunho.ts)', () => {
     expect(localStorage.getItem('mescla:plano-rascunho')).toBeNull();
   });
 
-  it('CAN10 — useStockOnly com "sim" ou 2 é normalizado para booleano, sem quebrar', () => {
-    const adulterado = {
-      v: 2,
-      planId: null,
-      name: 'X',
-      abaAtiva: 0,
-      tabs: [
-        { name: 'A', imageData: '', selectedManufacturerId: null, useStockOnly: 'sim', regions: [] },
-        { name: 'B', imageData: '', selectedManufacturerId: null, useStockOnly: 2, regions: [] },
-        { name: 'C', imageData: '', selectedManufacturerId: null, useStockOnly: 1, regions: [] },
-      ],
-      salvoEm: 'x',
-    };
-    localStorage.setItem('mescla:plano-rascunho', JSON.stringify(adulterado));
+  it('CAN10 — useStockOnly (raiz, mudança macro 07/09/2026) com "sim" ou 2 é normalizado para booleano, sem quebrar', () => {
+    const base = { v: 2, planId: null, name: 'X', abaAtiva: 0, tabs: [{ name: 'A', imageData: '', regions: [] }], salvoEm: 'x' };
 
-    const { rascunho } = lerRascunho();
-    expect(rascunho?.tabs[0].useStockOnly).toBe(false);
-    expect(rascunho?.tabs[1].useStockOnly).toBe(false);
-    expect(rascunho?.tabs[2].useStockOnly).toBe(true);
+    localStorage.setItem('mescla:plano-rascunho', JSON.stringify({ ...base, useStockOnly: 'sim' }));
+    expect(lerRascunho().rascunho?.useStockOnly).toBe(false);
+
+    localStorage.setItem('mescla:plano-rascunho', JSON.stringify({ ...base, useStockOnly: 2 }));
+    expect(lerRascunho().rascunho?.useStockOnly).toBe(false);
+
+    localStorage.setItem('mescla:plano-rascunho', JSON.stringify({ ...base, useStockOnly: 1 }));
+    expect(lerRascunho().rascunho?.useStockOnly).toBe(true);
   });
 
-  it('planId e selectedManufacturerId adulterados (negativo/fracionário) viram null', () => {
+  it('planId e selectedManufacturerId (raiz) adulterados (negativo/fracionário) viram null', () => {
     const adulterado = {
       v: 2,
       planId: -7,
       name: 'X',
+      selectedManufacturerId: 1.5,
+      useStockOnly: false,
       abaAtiva: 0,
-      tabs: [{ name: 'A', imageData: '', selectedManufacturerId: 1.5, useStockOnly: false, regions: [] }],
+      tabs: [{ name: 'A', imageData: '', regions: [] }],
       salvoEm: 'x',
     };
     localStorage.setItem('mescla:plano-rascunho', JSON.stringify(adulterado));
 
     const { rascunho } = lerRascunho();
     expect(rascunho?.planId).toBeNull();
-    expect(rascunho?.tabs[0].selectedManufacturerId).toBeNull();
+    expect(rascunho?.selectedManufacturerId).toBeNull();
   });
 
   it('imageData com prefixo fora da lista branca vira vazio', () => {
@@ -261,7 +256,7 @@ describe('lerRascunho — migração v1 → v2 (rascunho.ts)', () => {
       planId: null,
       name: 'X',
       abaAtiva: 0,
-      tabs: [{ name: 'A', imageData: 'data:text/html,<script>', selectedManufacturerId: null, useStockOnly: false, regions: [] }],
+      tabs: [{ name: 'A', imageData: 'data:text/html,<script>', regions: [] }],
       salvoEm: 'x',
     };
     localStorage.setItem('mescla:plano-rascunho', JSON.stringify(adulterado));

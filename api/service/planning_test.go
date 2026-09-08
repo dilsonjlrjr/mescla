@@ -153,8 +153,8 @@ func TestMigratePlanningTabsCreatesFigura1FromLegacyPlan(t *testing.T) {
 	if tab.ImageData != "data:image/png;base64,legacyimg" {
 		t.Fatal("foto do plano legado não foi levada para a aba")
 	}
-	if tab.SelectedManufacturerID == nil || *tab.SelectedManufacturerID != 7 {
-		t.Fatalf("fabricante do plano legado não foi levado para a aba: %+v", tab.SelectedManufacturerID)
+	if plan.SelectedManufacturerID == nil || *plan.SelectedManufacturerID != 7 {
+		t.Fatalf("fabricante do plano legado não foi levado para o plano: %+v", plan.SelectedManufacturerID)
 	}
 	if len(tab.Regions) != 1 {
 		t.Fatalf("esperava 1 região reapontada, veio %d", len(tab.Regions))
@@ -346,12 +346,12 @@ func TestSavePlanRoundTripsTwoTabs(t *testing.T) {
 	mfg := int64(3)
 
 	plan, err := s.SavePlan(PaintingPlanDTO{
-		Name: "Duas Figuras",
+		Name:                   "Duas Figuras",
+		SelectedManufacturerID: &mfg,
 		Tabs: []PaintingTabDTO{
 			{
-				Name:                   "Figura 1",
-				ImageData:              "data:image/png;base64,foto1",
-				SelectedManufacturerID: &mfg,
+				Name:      "Figura 1",
+				ImageData: "data:image/png;base64,foto1",
 				Regions: []PaintingRegionDTO{
 					{X: 10, Y: 20, R: 255, G: 0, B: 0, Hex: "#FF0000", RegionName: "capa"},
 				},
@@ -381,8 +381,8 @@ func TestSavePlanRoundTripsTwoTabs(t *testing.T) {
 	if t1.Name != "Figura 1" || t1.ImageData != "data:image/png;base64,foto1" {
 		t.Fatalf("aba 1 não preservada: %+v", t1)
 	}
-	if t1.SelectedManufacturerID == nil || *t1.SelectedManufacturerID != 3 {
-		t.Fatalf("fabricante da aba 1 não preservado: %+v", t1.SelectedManufacturerID)
+	if loaded.SelectedManufacturerID == nil || *loaded.SelectedManufacturerID != 3 {
+		t.Fatalf("fabricante do plano não preservado: %+v", loaded.SelectedManufacturerID)
 	}
 	if len(t1.Regions) != 1 {
 		t.Fatalf("aba 1 deveria ter 1 região, veio %d", len(t1.Regions))
@@ -532,18 +532,17 @@ func TestSavePlanFiftyFirstRegionInTabRefusedCitingTab(t *testing.T) {
 	}
 }
 
-// ========== CA27: useStockOnly e selectedManufacturerId sobrevivem ao round-trip ==========
+// ========== CA27 (mudança macro de 2026-09-07): useStockOnly e
+// selectedManufacturerId são do plano, não da aba, e sobrevivem ao round-trip ==========
 func TestSavePlanRoundTripsUseStockOnlyAndManufacturer(t *testing.T) {
 	s := newPlanningTestService(t)
 	mfg := int64(9)
 
 	plan, err := s.SavePlan(PaintingPlanDTO{
-		Name: "Estoque",
-		Tabs: []PaintingTabDTO{{
-			Name:                   "Figura 1",
-			SelectedManufacturerID: &mfg,
-			UseStockOnly:           1,
-		}},
+		Name:                   "Estoque",
+		SelectedManufacturerID: &mfg,
+		UseStockOnly:           1,
+		Tabs:                   []PaintingTabDTO{{Name: "Figura 1"}},
 	})
 	if err != nil {
 		t.Fatalf("SavePlan: %v", err)
@@ -553,12 +552,11 @@ func TestSavePlanRoundTripsUseStockOnlyAndManufacturer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPlan: %v", err)
 	}
-	tab := loaded.Tabs[0]
-	if tab.UseStockOnly != 1 {
-		t.Fatalf("useStockOnly deveria sobreviver ao round-trip, veio %d", tab.UseStockOnly)
+	if loaded.UseStockOnly != 1 {
+		t.Fatalf("useStockOnly deveria sobreviver ao round-trip, veio %d", loaded.UseStockOnly)
 	}
-	if tab.SelectedManufacturerID == nil || *tab.SelectedManufacturerID != 9 {
-		t.Fatalf("selectedManufacturerId deveria sobreviver ao round-trip: %+v", tab.SelectedManufacturerID)
+	if loaded.SelectedManufacturerID == nil || *loaded.SelectedManufacturerID != 9 {
+		t.Fatalf("selectedManufacturerId deveria sobreviver ao round-trip: %+v", loaded.SelectedManufacturerID)
 	}
 }
 
@@ -680,22 +678,23 @@ func TestSavePlanNormalizesUseStockOnlyOutsideRange(t *testing.T) {
 	s := newPlanningTestService(t)
 
 	plan, err := s.SavePlan(PaintingPlanDTO{
-		Name: "Normaliza",
-		Tabs: []PaintingTabDTO{{Name: "Figura 1", UseStockOnly: 2}},
+		Name:         "Normaliza",
+		UseStockOnly: 2,
+		Tabs:         []PaintingTabDTO{{Name: "Figura 1"}},
 	})
 	if err != nil {
 		t.Fatalf("SavePlan: %v", err)
 	}
-	if plan.Tabs[0].UseStockOnly != 1 {
-		t.Fatalf("useStockOnly=2 deveria normalizar para 1, veio %d", plan.Tabs[0].UseStockOnly)
+	if plan.UseStockOnly != 1 {
+		t.Fatalf("useStockOnly=2 deveria normalizar para 1, veio %d", plan.UseStockOnly)
 	}
 
 	loaded, err := s.LoadPlan(plan.ID)
 	if err != nil {
 		t.Fatalf("LoadPlan: %v", err)
 	}
-	if loaded.Tabs[0].UseStockOnly != 1 {
-		t.Fatalf("useStockOnly normalizado deveria persistir, veio %d", loaded.Tabs[0].UseStockOnly)
+	if loaded.UseStockOnly != 1 {
+		t.Fatalf("useStockOnly normalizado deveria persistir, veio %d", loaded.UseStockOnly)
 	}
 }
 

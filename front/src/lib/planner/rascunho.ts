@@ -38,15 +38,18 @@ export interface AbaRascunho {
   id?: number | null;
   name: string;
   imageData: string;
-  selectedManufacturerId: number | null;
-  useStockOnly: boolean;
   regions: RegiaoRascunho[];
 }
 
+// selectedManufacturerId/useStockOnly são do plano inteiro desde a mudança
+// macro de 2026-09-07 — um controle só em T2, valendo para todas as abas.
+// Antes disso eram campos de AbaRascunho.
 export interface Rascunho {
   v: 2;
   planId: number | null;
   name: string;
+  selectedManufacturerId: number | null;
+  useStockOnly: boolean;
   abaAtiva: number;
   tabs: AbaRascunho[];
   salvoEm: string;
@@ -111,11 +114,36 @@ function normalizarAba(bruto: unknown): { aba: AbaRascunho; truncado: boolean } 
     id: idValido(o.id),
     name: typeof o.name === 'string' ? o.name : '',
     imageData: normalizarImagem(o.imageData),
-    selectedManufacturerId: idValido(o.selectedManufacturerId),
-    useStockOnly: normalizarBooleano(o.useStockOnly),
     regions,
   };
   return { aba, truncado };
+}
+
+/** Fabricante base e modo estoque (mudança macro de 07/09/2026) são da raiz
+ *  do rascunho, não da aba. Um rascunho v1 já os guardava na raiz (formato
+ *  antigo do plano inteiro, pré-abas) — lido direto. Um rascunho v2 gravado
+ *  ANTES desta mudança os guardava na primeira aba: sem o campo na raiz,
+ *  cai para lá em vez de perder o valor em silêncio (mesma disciplina da
+ *  RN11 para o v1). */
+function extrairFabricanteEstoqueRaiz(
+  o: Record<string, unknown>,
+  tabsBrutas: unknown[]
+): { selectedManufacturerId: number | null; useStockOnly: boolean } {
+  if ('selectedManufacturerId' in o || 'useStockOnly' in o) {
+    return {
+      selectedManufacturerId: idValido(o.selectedManufacturerId),
+      useStockOnly: normalizarBooleano(o.useStockOnly),
+    };
+  }
+  const primeira = tabsBrutas[0];
+  if (typeof primeira === 'object' && primeira !== null) {
+    const p = primeira as Record<string, unknown>;
+    return {
+      selectedManufacturerId: idValido(p.selectedManufacturerId),
+      useStockOnly: normalizarBooleano(p.useStockOnly),
+    };
+  }
+  return { selectedManufacturerId: null, useStockOnly: false };
 }
 
 /** Normalização defensiva de um rascunho lido do disco: JSON inválido ou
@@ -129,18 +157,12 @@ function normalizar(bruto: unknown): { rascunho: Rascunho; truncado: boolean } |
   const ehV1 = o.v !== 2 && Array.isArray(o.regions);
 
   const tabsBrutas: unknown[] = ehV1
-    ? [
-        {
-          name: 'Figura 1',
-          imageData: o.imageData,
-          selectedManufacturerId: o.selectedManufacturerId,
-          useStockOnly: false,
-          regions: o.regions,
-        },
-      ]
+    ? [{ name: 'Figura 1', imageData: o.imageData, regions: o.regions }]
     : Array.isArray(o.tabs)
       ? o.tabs
       : [];
+
+  const { selectedManufacturerId, useStockOnly } = extrairFabricanteEstoqueRaiz(o, tabsBrutas);
 
   const abasNormalizadas = tabsBrutas
     .map(normalizarAba)
@@ -153,7 +175,7 @@ function normalizar(bruto: unknown): { rascunho: Rascunho; truncado: boolean } |
   // Plano/rascunho sem aba é impossível (mesma invariante do servidor,
   // RN1) — um payload vazio ou irreconhecível ainda vira uma aba em branco.
   const tabs = abasFinal.length > 0 ? abasFinal.map(a => a.aba) : [
-    { name: '', imageData: '', selectedManufacturerId: null, useStockOnly: false, regions: [] },
+    { name: '', imageData: '', regions: [] },
   ];
 
   const abaAtivaBruta = Number.isInteger(o.abaAtiva) ? (o.abaAtiva as number) : 0;
@@ -163,6 +185,8 @@ function normalizar(bruto: unknown): { rascunho: Rascunho; truncado: boolean } |
     v: 2,
     planId: idValido(o.planId),
     name: typeof o.name === 'string' ? o.name : '',
+    selectedManufacturerId,
+    useStockOnly,
     abaAtiva,
     tabs,
     salvoEm: typeof o.salvoEm === 'string' ? o.salvoEm : new Date().toISOString(),

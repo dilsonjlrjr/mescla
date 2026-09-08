@@ -75,15 +75,16 @@
   }
 
   /** rf-09 — estado de uma aba (figura). `regions`, `image`, `hasImage`,
-   *  `imageDataUrl`, `nextId`, `selectedId`, `view` e `manufacturerId` só
-   *  pertencem à aba ATIVA nas variáveis de topo (abaixo); o resto do tempo
-   *  moram aqui. `uid` é a chave estável do `{#each}` — nunca o índice, que
-   *  muda ao reordenar/excluir. */
+   *  `imageDataUrl`, `nextId`, `selectedId` e `view` só pertencem à aba ATIVA
+   *  nas variáveis de topo (abaixo); o resto do tempo moram aqui. `uid` é a
+   *  chave estável do `{#each}` — nunca o índice, que muda ao
+   *  reordenar/excluir. Fabricante base, modo estoque e a resposta do
+   *  diálogo de fallback (rf-11) são do PLANO inteiro desde a mudança macro
+   *  de 2026-09-07 — vivem só nas variáveis de topo, nunca aqui. */
   interface AbaState {
     uid: number;
     serverId?: number;
     name: string;
-    useStockOnly: boolean;
     imageDataUrl: string;
     hasImage: boolean;
     image: HTMLImageElement | null;
@@ -91,10 +92,6 @@
     nextId: number;
     selectedId: number | null;
     view: View;
-    manufacturerId: number | null;
-    /** rf-11 RN4: resposta do diálogo de fallback, lembrada por aba.
-     *  null = ainda não perguntou nesta aba. */
-    saidaAutorizada: 'marca' | 'todos' | null;
   }
 
   let canvasEl: HTMLCanvasElement | undefined = $state();
@@ -115,6 +112,9 @@
   let touchStartZoom = 1;
 
   let manufacturers = $derived(allManufacturers());
+  // rf-11 + mudança macro de 2026-09-07: fabricante base, modo estoque e a
+  // resposta do diálogo de fallback são do PLANO inteiro — um controle só em
+  // T2, valendo para todas as abas. Nunca mais mirados em AbaState.
   let manufacturerId: number | null = $state(null);
   let useStockOnly = $state(false);
   let saidaAutorizada: 'marca' | 'todos' | null = $state(null);
@@ -144,7 +144,6 @@
       uid: abaUidSeq++,
       serverId: undefined,
       name: '',
-      useStockOnly: false,
       imageDataUrl: '',
       hasImage: false,
       image: null,
@@ -152,8 +151,6 @@
       nextId: 1,
       selectedId: null,
       view: { zoom: 1, panX: 0, panY: 0 },
-      manufacturerId: null,
-      saidaAutorizada: null,
     };
   }
   let tabs: AbaState[] = $state([emptyAba()]);
@@ -196,8 +193,7 @@
     if (!atual) return;
     tabs[activeTabIndex] = {
       ...atual,
-      imageDataUrl, hasImage, image, regions, nextId, selectedId, view, manufacturerId,
-      useStockOnly, saidaAutorizada,
+      imageDataUrl, hasImage, image, regions, nextId, selectedId, view,
     };
   }
 
@@ -212,9 +208,6 @@
     nextId = aba.nextId;
     selectedId = aba.selectedId;
     view = aba.view;
-    manufacturerId = aba.manufacturerId;
-    useStockOnly = aba.useStockOnly;
-    saidaAutorizada = aba.saidaAutorizada;
     // CAN5: o diálogo é da região da aba anterior — fecha ao trocar.
     regiaoNoDialogo = null;
     universoVazioMotivo = null;
@@ -781,14 +774,22 @@
     dialogoMelhorTodos = await melhorDeltaE(r, g, b, {});
   }
 
-  /** A escolha vale para as demais regiões da aba (RN4) e dispara o recálculo. */
+  /** RN4 (mudança macro 07/09/2026): a escolha vale para o plano inteiro —
+   *  um controle só — e dispara o recálculo de todas as abas. */
   async function escolherSaida(saida: 'marca' | 'todos'): Promise<void> {
     saidaAutorizada = saida;
-    tabs[activeTabIndex].saidaAutorizada = saida;
     regiaoNoDialogo = null;
     devolverFoco();
     marcarAlteracao();
-    await Promise.all(regions.map(r => computeRegion(r.id)));
+    await recalcularTodasAsAbas();
+  }
+
+  /** RN8 (mudança macro 07/09/2026): trocar o controle único de
+   *  fabricante/estoque recalcula as regiões de TODAS as abas do plano, não
+   *  só a ativa — `tabRegions`/`computeRegion` já sabem ler a ativa do
+   *  espelho de trabalho e as demais de `tabs[i].regions`. */
+  async function recalcularTodasAsAbas(): Promise<void> {
+    await Promise.all(tabs.flatMap((aba, i) => tabRegions(i).map(r => computeRegion(r.id, aba.uid))));
   }
 
   function devolverFoco(): void {
@@ -813,11 +814,9 @@
   async function onUseStockOnlyChange(valor: boolean): Promise<void> {
     useStockOnly = valor;
     saidaAutorizada = null;
-    tabs[activeTabIndex].useStockOnly = valor;
-    tabs[activeTabIndex].saidaAutorizada = null;
     universoVazioMotivo = null;
     marcarAlteracao();
-    await Promise.all(regions.map(r => computeRegion(r.id)));
+    await recalcularTodasAsAbas();
   }
 
   async function computeRegion(id: number, tabUidChamada: number = tabs[activeTabIndex].uid) {
@@ -853,19 +852,19 @@
     }
   }
 
-  // CA14: trocar de fabricante recalcula TODAS as regiões visíveis.
+  // CA14: trocar de fabricante recalcula TODAS as abas do plano (RN8, mudança
+  // macro 07/09/2026), não só a ativa.
   async function onManufacturerChange(id: number) {
     manufacturerId = id;
     // RN8: trocar de fabricante base limpa a resposta lembrada — a mesma
     // disciplina do estoque em onUseStockOnlyChange.
     saidaAutorizada = null;
-    tabs[activeTabIndex].saidaAutorizada = null;
     universoVazioMotivo = null;
     const epoca = salvamentoSeq;
     // marcarAlteracao só depois que o laço de recálculo termina — nunca
     // antes, e nunca por região (um `$effect` sobre `regions` dispararia a
     // cada escrita assíncrona de computeRegion, o que a spec proíbe).
-    await Promise.all(regions.map(r => computeRegion(r.id)));
+    await recalcularTodasAsAbas();
     // Um Salvar concluiu durante o recálculo: marcar agora ressuscitaria um
     // rascunho para um plano que já está salvo.
     if (salvamentoSeq === epoca) marcarAlteracao();
@@ -951,8 +950,6 @@
       id: aba.serverId,
       name: aba.name,
       imageData: aba.imageDataUrl,
-      selectedManufacturerId: aba.manufacturerId,
-      useStockOnly: aba.useStockOnly ? 1 : 0,
       regions: aba.regions.map((r, i) => regiaoParaDTO(r, i)),
     };
   }
@@ -962,8 +959,6 @@
       id: aba.serverId ?? null,
       name: aba.name,
       imageData: aba.imageDataUrl,
-      selectedManufacturerId: aba.manufacturerId,
-      useStockOnly: aba.useStockOnly,
       regions: aba.regions.map((r, i) => regiaoParaRascunho(r, i)),
     };
   }
@@ -973,6 +968,8 @@
     return {
       id: planId ?? undefined,
       name: planName,
+      selectedManufacturerId: manufacturerId,
+      useStockOnly: useStockOnly ? 1 : 0,
       tabs: tabs.map(buildAbaDTO),
     };
   }
@@ -992,6 +989,8 @@
       v: 2,
       planId,
       name: planName,
+      selectedManufacturerId: manufacturerId,
+      useStockOnly,
       abaAtiva: activeTabIndex,
       tabs: tabs.map(buildAbaRascunho),
       salvoEm: new Date().toISOString(),
@@ -1007,23 +1006,26 @@
   function resetToEmpty() {
     planId = null;
     planName = '';
+    manufacturerId = null;
+    useStockOnly = false;
+    saidaAutorizada = null;
     ownedPaints = new Set();
     tabs = [emptyAba()];
     activeTabIndex = 0;
     loadTabIntoWorkingState(0);
   }
 
+  // rf-11 + mudança macro de 2026-09-07: universo é do plano (variáveis de
+  // topo), nunca da aba — mesma leitura de `universoAtual()`, aplicada aqui a
+  // uma aba que ainda não está em `tabs` (hidratação, antes do `tabs =
+  // novasAbas` em `applyLoadedPlan` — `computeRegion` não a alcançaria).
   async function computeRegionInAba(aba: AbaState, id: number): Promise<void> {
     const alvo = () => aba.regions.find(r => r.id === id) ?? null;
     const inicio = alvo();
     if (!inicio) return;
     inicio.computing = true;
     try {
-      const resp = await suggestRecipeForColor(inicio.r, inicio.g, inicio.b, {
-        targetManufacturerId: aba.saidaAutorizada === 'todos' ? undefined : aba.manufacturerId ?? undefined,
-        useStockOnly: aba.saidaAutorizada === null && aba.useStockOnly,
-        foraDoUniverso: aba.saidaAutorizada !== null,
-      });
+      const resp = await suggestRecipeForColor(inicio.r, inicio.g, inicio.b, universoAtual());
       const agora = alvo();
       if (agora) agora.result = ehUniversoVazio(resp) ? null : resp;
     } catch (e) {
@@ -1037,7 +1039,7 @@
   }
 
   async function recomputeAba(aba: AbaState): Promise<void> {
-    if (aba.manufacturerId == null) return;
+    if (manufacturerId == null) return;
     await Promise.all(aba.regions.map(r => computeRegionInAba(aba, r.id)));
   }
 
@@ -1048,11 +1050,17 @@
   async function applyLoadedPlan(plano: PlanoDTO, recalcular = true, abaAtivaIndex = 0): Promise<void> {
     planId = plano.id ?? null;
     planName = plano.name;
+    // Mudança macro 07/09/2026: fabricante/estoque são do plano — setar ANTES
+    // do recálculo abaixo, que lê as variáveis de topo (recomputeAba).
+    manufacturerId = plano.selectedManufacturerId ?? null;
+    useStockOnly = plano.useStockOnly === 1;
+    // rf-11 "Não faz": a resposta do diálogo não persiste — nunca vem do plano.
+    saidaAutorizada = null;
     // rf-09/"Não faz": o checklist "tenho" não sobrevive ao recarregar o plano.
     ownedPaints = new Set();
 
     const tabsDTO = plano.tabs.length > 0 ? plano.tabs : [
-      { name: '', imageData: '', selectedManufacturerId: null, useStockOnly: 0 as const, regions: [] },
+      { name: '', imageData: '', regions: [] },
     ];
 
     const novasAbas: AbaState[] = [];
@@ -1078,8 +1086,6 @@
         uid: abaUidSeq++,
         serverId: abaDTO.id,
         name: abaDTO.name,
-        useStockOnly: abaDTO.useStockOnly === 1,
-        saidaAutorizada: null,
         imageDataUrl: abaDTO.imageData || '',
         hasImage: !!abaDTO.imageData,
         image,
@@ -1087,7 +1093,6 @@
         nextId: nextIdLocal,
         selectedId: null,
         view: { zoom: 1, panX: 0, panY: 0 },
-        manufacturerId: abaDTO.selectedManufacturerId ?? null,
       });
     }
 
@@ -1140,8 +1145,6 @@
           id: undefined,
           name: rt.name,
           imageData: rt.imageData || abaServidorPorIdentidade(rt)?.imageData || '',
-          selectedManufacturerId: rt.selectedManufacturerId,
-          useStockOnly: rt.useStockOnly ? 1 : 0,
           regions: rt.regions.map((rr): RegiaoDTO => ({
             x: rr.x, y: rr.y, r: rr.r, g: rr.g, b: rr.b, hex: rr.hex,
             regionName: rr.regionName, note: rr.note,
@@ -1151,7 +1154,13 @@
           })),
         }));
         await applyLoadedPlan(
-          { id: rascunho.planId ?? undefined, name: rascunho.name, tabs: tabsDTO },
+          {
+            id: rascunho.planId ?? undefined,
+            name: rascunho.name,
+            selectedManufacturerId: rascunho.selectedManufacturerId,
+            useStockOnly: rascunho.useStockOnly ? 1 : 0,
+            tabs: tabsDTO,
+          },
           false,
           rascunho.abaAtiva,
         );

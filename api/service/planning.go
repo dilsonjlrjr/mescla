@@ -79,6 +79,9 @@ func ensurePlanningSchema(db *sql.DB) error {
 	if err := migratePlanningTabsIfNeeded(db); err != nil {
 		return err
 	}
+	if err := migratePlanFabricanteEstoqueIfNeeded(db); err != nil {
+		return err
+	}
 
 	// O índice fica DEPOIS da migração de propósito: numa base do formato
 	// antigo, painting_regions ainda tem plan_id quando o bloco de DDL acima
@@ -220,6 +223,82 @@ func migratePlanningTabsIfNeeded(db *sql.DB) error {
 	return tx.Commit()
 }
 
+// migratePlanFabricanteEstoqueIfNeeded aplica a mudança macro de 2026-09-07
+// (ver 2026-09-07-macro-fabricante-estoque-nivel-plano.md): fabricante base e
+// modo estoque deixam de ser por aba e sobem para o plano — um controle só em
+// T2. Copia da aba de sort_order mínimo (a primeira figura) para o plano.
+// O disparo é a própria criação de painting_plans.use_stock_only: a coluna
+// nunca existia antes desta migração, então sua presença já é o marcador de
+// "já rodou" — sem precisar de tabela ou coluna de controle à parte. Coluna e
+// cópia andam na mesma transação: se a cópia falhar no meio, a coluna some
+// junto e o próximo boot tenta de novo inteiro (mesma disciplina do CAN8 da
+// migração de abas).
+func migratePlanFabricanteEstoqueIfNeeded(db *sql.DB) error {
+	exists, err := columnExists(db, "painting_plans", "use_stock_only")
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil // já migrado
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("iniciando transação de migração de fabricante/estoque: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`ALTER TABLE painting_plans ADD COLUMN use_stock_only INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return fmt.Errorf("adicionando painting_plans.use_stock_only: %w", err)
+	}
+
+	rows, err := tx.Query(`
+		SELECT p.id, t.selected_manufacturer_id, t.use_stock_only
+		FROM painting_plans p
+		JOIN painting_tabs t ON t.id = (
+			SELECT id FROM painting_tabs WHERE plan_id = p.id
+			ORDER BY sort_order, id LIMIT 1
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("selecionando fabricante/estoque da primeira aba de cada plano: %w", err)
+	}
+	type planFabricante struct {
+		id             int64
+		manufacturerID sql.NullInt64
+		useStockOnly   int
+	}
+	var planos []planFabricante
+	for rows.Next() {
+		var pf planFabricante
+		if err := rows.Scan(&pf.id, &pf.manufacturerID, &pf.useStockOnly); err != nil {
+			rows.Close()
+			return fmt.Errorf("lendo fabricante/estoque da primeira aba: %w", err)
+		}
+		planos = append(planos, pf)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("iterando fabricante/estoque das abas: %w", err)
+	}
+	rows.Close()
+
+	for _, pf := range planos {
+		var manufacturerID interface{}
+		if pf.manufacturerID.Valid {
+			manufacturerID = pf.manufacturerID.Int64
+		}
+		if _, err := tx.Exec(
+			`UPDATE painting_plans SET selected_manufacturer_id = ?, use_stock_only = ? WHERE id = ?`,
+			manufacturerID, pf.useStockOnly, pf.id,
+		); err != nil {
+			return fmt.Errorf("migrando fabricante/estoque do plano %d: %w", pf.id, err)
+		}
+	}
+
+	return tx.Commit()
+}
+
 // columnExists reporta se column existe em table, via PRAGMA table_info.
 func columnExists(db *sql.DB, table, column string) (bool, error) {
 	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
@@ -271,24 +350,27 @@ func addColumnIfMissing(db *sql.DB, table, column, definition string) error {
 // PaintingPlanDTO é um plano de pintura no formato trocado com o frontend.
 // A partir do rf-09 o plano é só o envelope: foto, fabricante e regiões
 // vivem em cada aba (Tabs).
+// Fabricante base e modo estoque (SelectedManufacturerID/UseStockOnly) são do
+// plano inteiro desde a mudança macro de 2026-09-07 — um controle só em T2,
+// valendo para todas as abas. Antes disso eram campos de PaintingTabDTO.
 type PaintingPlanDTO struct {
-	ID          int64            `json:"id"`
-	Name        string           `json:"name"`
-	Tabs        []PaintingTabDTO `json:"tabs"`
-	CreatedAt   string           `json:"createdAt"`
-	UpdatedAt   string           `json:"updatedAt"`
-	RegionCount int              `json:"regionCount,omitempty"`
+	ID                     int64            `json:"id"`
+	Name                   string           `json:"name"`
+	SelectedManufacturerID *int64           `json:"selectedManufacturerId,omitempty"`
+	UseStockOnly           int              `json:"useStockOnly"`
+	Tabs                   []PaintingTabDTO `json:"tabs"`
+	CreatedAt              string           `json:"createdAt"`
+	UpdatedAt              string           `json:"updatedAt"`
+	RegionCount            int              `json:"regionCount,omitempty"`
 }
 
-// PaintingTabDTO é uma aba de figura dentro de um plano (rf-09): foto,
-// fabricante/modo e regiões próprios.
+// PaintingTabDTO é uma aba de figura dentro de um plano (rf-09): foto e
+// regiões próprias.
 type PaintingTabDTO struct {
-	ID                     int64               `json:"id"`
-	Name                   string              `json:"name"`
-	ImageData              string              `json:"imageData,omitempty"`
-	SelectedManufacturerID *int64              `json:"selectedManufacturerId,omitempty"`
-	UseStockOnly           int                 `json:"useStockOnly"`
-	Regions                []PaintingRegionDTO `json:"regions"`
+	ID        int64               `json:"id"`
+	Name      string              `json:"name"`
+	ImageData string              `json:"imageData,omitempty"`
+	Regions   []PaintingRegionDTO `json:"regions"`
 }
 
 // PaintingRegionDTO é uma região de cor identificada, sempre dentro de uma aba.
@@ -364,7 +446,6 @@ func validateAndNormalizeTabs(tabs []PaintingTabDTO) ([]PaintingTabDTO, error) {
 			}
 		}
 
-		t.UseStockOnly = normalizeUseStockOnly(t.UseStockOnly)
 		normalized[i] = t
 	}
 	return normalized, nil
@@ -381,6 +462,7 @@ func (s *PaintService) SavePlan(plan PaintingPlanDTO) (PaintingPlanDTO, error) {
 		return PaintingPlanDTO{}, err
 	}
 	plan.Tabs = tabs
+	plan.UseStockOnly = normalizeUseStockOnly(plan.UseStockOnly)
 
 	// Nome padrão
 	if strings.TrimSpace(plan.Name) == "" {
@@ -404,8 +486,8 @@ func (s *PaintService) SavePlan(plan PaintingPlanDTO) (PaintingPlanDTO, error) {
 		plan.CreatedAt = now
 		plan.UpdatedAt = now
 		res, err := tx.Exec(
-			"INSERT INTO painting_plans (name, created_at, updated_at) VALUES (?, ?, ?)",
-			plan.Name, plan.CreatedAt, plan.UpdatedAt,
+			"INSERT INTO painting_plans (name, selected_manufacturer_id, use_stock_only, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+			plan.Name, plan.SelectedManufacturerID, plan.UseStockOnly, plan.CreatedAt, plan.UpdatedAt,
 		)
 		if err != nil {
 			return PaintingPlanDTO{}, fmt.Errorf("inserindo plano: %w", err)
@@ -423,8 +505,8 @@ func (s *PaintService) SavePlan(plan PaintingPlanDTO) (PaintingPlanDTO, error) {
 				plan.CreatedAt = now
 				plan.UpdatedAt = now
 				res, insErr := tx.Exec(
-					"INSERT INTO painting_plans (name, created_at, updated_at) VALUES (?, ?, ?)",
-					plan.Name, plan.CreatedAt, plan.UpdatedAt,
+					"INSERT INTO painting_plans (name, selected_manufacturer_id, use_stock_only, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+					plan.Name, plan.SelectedManufacturerID, plan.UseStockOnly, plan.CreatedAt, plan.UpdatedAt,
 				)
 				if insErr != nil {
 					return PaintingPlanDTO{}, fmt.Errorf("inserindo plano: %w", insErr)
@@ -438,8 +520,8 @@ func (s *PaintService) SavePlan(plan PaintingPlanDTO) (PaintingPlanDTO, error) {
 			plan.UpdatedAt = now
 
 			res, err := tx.Exec(
-				"UPDATE painting_plans SET name = ?, updated_at = ? WHERE id = ?",
-				plan.Name, plan.UpdatedAt, plan.ID,
+				"UPDATE painting_plans SET name = ?, selected_manufacturer_id = ?, use_stock_only = ?, updated_at = ? WHERE id = ?",
+				plan.Name, plan.SelectedManufacturerID, plan.UseStockOnly, plan.UpdatedAt, plan.ID,
 			)
 			if err != nil {
 				return PaintingPlanDTO{}, fmt.Errorf("atualizando plano: %w", err)
@@ -465,9 +547,9 @@ func (s *PaintService) SavePlan(plan PaintingPlanDTO) (PaintingPlanDTO, error) {
 	// Insere as abas e, dentro de cada uma, suas regiões.
 	for ti, t := range plan.Tabs {
 		tabRes, err := tx.Exec(
-			`INSERT INTO painting_tabs (plan_id, name, image_data, selected_manufacturer_id, use_stock_only, sort_order)
-			 VALUES (?, ?, ?, ?, ?, ?)`,
-			plan.ID, t.Name, t.ImageData, t.SelectedManufacturerID, t.UseStockOnly, ti,
+			`INSERT INTO painting_tabs (plan_id, name, image_data, sort_order)
+			 VALUES (?, ?, ?, ?)`,
+			plan.ID, t.Name, t.ImageData, ti,
 		)
 		if err != nil {
 			return PaintingPlanDTO{}, fmt.Errorf("inserindo aba %q: %w", t.Name, err)
@@ -557,19 +639,23 @@ func (s *PaintService) ListPlans() ([]PaintingPlanDTO, error) {
 // com suas regiões em sort_order.
 func (s *PaintService) LoadPlan(id int64) (PaintingPlanDTO, error) {
 	var plan PaintingPlanDTO
+	var manufacturerID sql.NullInt64
 	err := s.db.QueryRow(
-		"SELECT id, name, created_at, updated_at FROM painting_plans WHERE id = ?",
+		"SELECT id, name, selected_manufacturer_id, use_stock_only, created_at, updated_at FROM painting_plans WHERE id = ?",
 		id,
-	).Scan(&plan.ID, &plan.Name, &plan.CreatedAt, &plan.UpdatedAt)
+	).Scan(&plan.ID, &plan.Name, &manufacturerID, &plan.UseStockOnly, &plan.CreatedAt, &plan.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return PaintingPlanDTO{}, fmt.Errorf("plano não encontrado (id %d)", id)
 		}
 		return PaintingPlanDTO{}, err
 	}
+	if manufacturerID.Valid {
+		plan.SelectedManufacturerID = &manufacturerID.Int64
+	}
 
 	tabRows, err := s.db.Query(`
-		SELECT id, name, COALESCE(image_data, ''), selected_manufacturer_id, use_stock_only
+		SELECT id, name, COALESCE(image_data, '')
 		FROM painting_tabs
 		WHERE plan_id = ?
 		ORDER BY sort_order
@@ -582,12 +668,8 @@ func (s *PaintService) LoadPlan(id int64) (PaintingPlanDTO, error) {
 	plan.Tabs = make([]PaintingTabDTO, 0)
 	for tabRows.Next() {
 		var t PaintingTabDTO
-		var manufacturerID sql.NullInt64
-		if err := tabRows.Scan(&t.ID, &t.Name, &t.ImageData, &manufacturerID, &t.UseStockOnly); err != nil {
+		if err := tabRows.Scan(&t.ID, &t.Name, &t.ImageData); err != nil {
 			return PaintingPlanDTO{}, err
-		}
-		if manufacturerID.Valid {
-			t.SelectedManufacturerID = &manufacturerID.Int64
 		}
 		plan.Tabs = append(plan.Tabs, t)
 	}

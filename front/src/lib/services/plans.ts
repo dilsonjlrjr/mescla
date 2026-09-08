@@ -35,14 +35,17 @@ export interface AbaDTO {
   id?: number;
   name: string;
   imageData: string;
-  selectedManufacturerId?: number | null;
-  useStockOnly: 0 | 1;
   regions: RegiaoDTO[];
 }
 
+// selectedManufacturerId/useStockOnly são do plano inteiro desde a mudança
+// macro de 2026-09-07 — um controle só em T2, valendo para todas as abas.
+// Antes disso eram campos de AbaDTO.
 export interface PlanoDTO {
   id?: number;
   name: string;
+  selectedManufacturerId?: number | null;
+  useStockOnly: 0 | 1;
   tabs: AbaDTO[];
 }
 
