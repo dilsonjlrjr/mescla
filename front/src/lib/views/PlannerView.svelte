@@ -1335,77 +1335,50 @@
     {/snippet}
   </Header>
 
-  <!-- rf-09: tira de abas — uma por figura. Aba ativa se distingue por texto
-       E contorno (nunca só cor). Botões de mover/excluir seguem o alvo de
-       toque de 44×44 do resto de T2; nenhum componente visual novo. -->
+  <!-- rf-09 (revisão 2026-09-08): tira de abas — uma por figura, só seleção.
+       Mover/excluir NÃO ficam mais por aba (eram 4 botões × N abas,
+       duplicando controle a cada figura nova); viram um controle único, no
+       painel direito, agindo sobre a aba ATIVA. -->
   <div
     role="tablist"
     aria-label={t('tabsListLabel')}
     style="flex-shrink: 0; display: flex; align-items: center; gap: 6px; padding: 8px 20px; border-bottom: 1px solid var(--color-line); overflow-x: auto;"
   >
     {#each tabs as aba, i (aba.uid)}
-      <div style="display: flex; align-items: center; gap: 2px; flex-shrink: 0;">
-        {#if renamingTabIndex === i}
-          <!-- achado 4 do guardrail rf-09/CA28: o `tabpanel` referencia
-               `t2-tab-btn-{i}` por `aria-labelledby`; enquanto o botão vira
-               o campo de rename esse id some do DOM. Este span invisível
-               mantém a referência válida durante a edição. -->
-          <span id={`t2-tab-btn-${i}`} style="position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap;">{displayTabName(aba, i)}</span>
-          <label for={`t2-tab-rename-${aba.uid}`} style="position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap;">{t('renameTabLabel')}</label>
-          <input
-            id={`t2-tab-rename-${aba.uid}`}
-            type="text"
-            bind:value={tabs[i].name}
-            maxlength="80"
-            onblur={commitRename}
-            onkeydown={onRenameKeydown}
-            style="min-width: 120px; height: 44px; padding: 0 10px; border: 2px solid var(--color-accent); border-radius: 8px; background: var(--color-bg); color: var(--color-text); font-family: inherit; font-size: 13.5px;"
-          />
-        {:else}
-          <button
-            id={`t2-tab-btn-${i}`}
-            role="tab"
-            data-tab-index={i}
-            aria-selected={i === activeTabIndex}
-            aria-controls="t2-tab-panel"
-            tabindex={i === activeTabIndex ? 0 : -1}
-            class="t2-tab-btn"
-            onclick={() => switchTab(i)}
-            ondblclick={() => startRename(i)}
-            onkeydown={(e) => onTabKeydown(e, i)}
-            style="display: inline-flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; min-width: 44px; min-height: 44px; padding: 4px 12px; border: 2px solid {i === activeTabIndex ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 8px; background: {i === activeTabIndex ? 'var(--color-accent-panel)' : 'var(--color-bg)'}; color: {i === activeTabIndex ? 'var(--color-accent-400)' : 'var(--color-neutral-300)'}; font-family: inherit; font-size: 13.5px; font-weight: {i === activeTabIndex ? '700' : '500'}; cursor: pointer;"
-          >
-            <span>{displayTabName(aba, i)}</span>
-            <span class="font-mono" style="font-size: 11px; opacity: 0.85;">{tabProgressLabel(i)}</span>
-          </button>
-        {/if}
+      {#if renamingTabIndex === i}
+        <!-- achado 4 do guardrail rf-09/CA28: o `tabpanel` referencia
+             `t2-tab-btn-{i}` por `aria-labelledby`; enquanto o botão vira
+             o campo de rename esse id some do DOM. Este span invisível
+             mantém a referência válida durante a edição. -->
+        <span id={`t2-tab-btn-${i}`} style="position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap;">{displayTabName(aba, i)}</span>
+        <label for={`t2-tab-rename-${aba.uid}`} style="position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap;">{t('renameTabLabel')}</label>
+        <input
+          id={`t2-tab-rename-${aba.uid}`}
+          type="text"
+          bind:value={tabs[i].name}
+          maxlength="80"
+          onblur={commitRename}
+          onkeydown={onRenameKeydown}
+          style="min-width: 120px; height: 44px; padding: 0 10px; border: 2px solid var(--color-accent); border-radius: 8px; background: var(--color-bg); color: var(--color-text); font-family: inherit; font-size: 13.5px; flex-shrink: 0;"
+        />
+      {:else}
         <button
-          aria-label={t('renameTabLabel')}
-          title={t('renameTabLabel')}
-          onclick={() => startRename(i)}
-          style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer;"
-        ><i class="ph ph-pencil-simple" style="font-size: 15px;"></i></button>
-        <button
-          aria-label={t('moveTabLeft')}
-          title={t('moveTabLeft')}
-          disabled={i === 0}
-          onclick={() => moveTab(i, -1)}
-          style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer; opacity: {i === 0 ? 0.4 : 1};"
-        ><i class="ph ph-caret-left" style="font-size: 15px;"></i></button>
-        <button
-          aria-label={t('moveTabRight')}
-          title={t('moveTabRight')}
-          disabled={i === tabs.length - 1}
-          onclick={() => moveTab(i, 1)}
-          style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer; opacity: {i === tabs.length - 1 ? 0.4 : 1};"
-        ><i class="ph ph-caret-right" style="font-size: 15px;"></i></button>
-        <button
-          aria-label={t('deleteTabBtn')}
-          title={t('deleteTabBtn')}
-          onclick={() => onDeleteTabClick(i)}
-          style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-500); cursor: pointer;"
-        ><i class="ph ph-trash-simple" style="font-size: 15px;"></i></button>
-      </div>
+          id={`t2-tab-btn-${i}`}
+          role="tab"
+          data-tab-index={i}
+          aria-selected={i === activeTabIndex}
+          aria-controls="t2-tab-panel"
+          tabindex={i === activeTabIndex ? 0 : -1}
+          class="t2-tab-btn"
+          onclick={() => switchTab(i)}
+          ondblclick={() => startRename(i)}
+          onkeydown={(e) => onTabKeydown(e, i)}
+          style="display: inline-flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; min-width: 44px; min-height: 44px; padding: 4px 12px; border: 2px solid {i === activeTabIndex ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 8px; background: {i === activeTabIndex ? 'var(--color-accent-panel)' : 'var(--color-bg)'}; color: {i === activeTabIndex ? 'var(--color-accent-400)' : 'var(--color-neutral-300)'}; font-family: inherit; font-size: 13.5px; font-weight: {i === activeTabIndex ? '700' : '500'}; cursor: pointer; flex-shrink: 0;"
+        >
+          <span>{displayTabName(aba, i)}</span>
+          <span class="font-mono" style="font-size: 11px; opacity: 0.85;">{tabProgressLabel(i)}</span>
+        </button>
+      {/if}
     {/each}
     <button
       aria-label={t('addTabBtn')}
@@ -1496,6 +1469,32 @@
 
     <div style="min-height: 0; display: flex; flex-direction: column;">
       <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 20px;">
+        <!-- rf-09 (revisão 2026-09-08): controle único da aba ativa — excluir/
+             voltar/avançar. Antes vinha 4× por aba na tira; agora é um só,
+             aqui no painel direito, agindo sobre `activeTabIndex`. -->
+        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-bottom: 14px;">
+          <button
+            aria-label={t('moveTabLeft')}
+            title={t('moveTabLeft')}
+            disabled={activeTabIndex === 0}
+            onclick={() => moveTab(activeTabIndex, -1)}
+            style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer; opacity: {activeTabIndex === 0 ? 0.4 : 1};"
+          ><i class="ph ph-caret-left" style="font-size: 15px;"></i></button>
+          <button
+            aria-label={t('moveTabRight')}
+            title={t('moveTabRight')}
+            disabled={activeTabIndex === tabs.length - 1}
+            onclick={() => moveTab(activeTabIndex, 1)}
+            style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer; opacity: {activeTabIndex === tabs.length - 1 ? 0.4 : 1};"
+          ><i class="ph ph-caret-right" style="font-size: 15px;"></i></button>
+          <button
+            aria-label={t('deleteTabBtn')}
+            title={t('deleteTabBtn')}
+            onclick={() => onDeleteTabClick(activeTabIndex)}
+            style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-500); cursor: pointer;"
+          ><i class="ph ph-trash-simple" style="font-size: 15px;"></i></button>
+        </div>
+
         <p class="section-label" style="margin: 0 0 10px;">{t('paintWithMine')}</p>
         <div style="display: flex; flex-wrap: wrap; gap: 8px;">
           {#each manufacturers as m (m.id)}
