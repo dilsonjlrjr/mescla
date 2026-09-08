@@ -42,16 +42,25 @@ func handleEquivalences(svc *service.PaintService) fasthttp.RequestHandler {
 	}
 }
 
-// handleRecipeByPaint atende GET /recipes/by-paint?sourcePaintId=&targetManufacturerId=.
+// handleRecipeByPaint atende GET /recipes/by-paint?sourcePaintId=&targetManufacturerId=&maxIngredients=.
+// rf-13: targetManufacturerId deixou de ser obrigatório — ausente é catálogo
+// inteiro, cross-brand (RG-13).
 func handleRecipeByPaint(svc *service.PaintService) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		sourceID := queryInt64(ctx, "sourcePaintId", 0)
-		targetMfrID := queryInt64(ctx, "targetManufacturerId", 0)
-		if sourceID == 0 || targetMfrID == 0 {
-			writeError(ctx, fasthttp.StatusBadRequest, "sourcePaintId e targetManufacturerId são obrigatórios")
+
+		targetMfrID, ok := queryManufacturerID(ctx)
+		if !ok || targetMfrID < 0 {
+			writeError(ctx, fasthttp.StatusBadRequest, "fabricante não encontrado")
 			return
 		}
-		recipe, err := svc.SuggestEquivalentRecipe(sourceID, targetMfrID)
+		maxIngredients, ok := queryMaxIngredients(ctx)
+		if !ok {
+			writeError(ctx, fasthttp.StatusBadRequest, "maxIngredients fora da faixa")
+			return
+		}
+
+		recipe, err := svc.SuggestEquivalentRecipe(sourceID, targetMfrID, maxIngredients)
 		if err != nil {
 			writeError(ctx, fasthttp.StatusBadRequest, err.Error())
 			return
@@ -77,7 +86,22 @@ func queryManufacturerID(ctx *fasthttp.RequestCtx) (id int64, valido bool) {
 	return v, true
 }
 
-// handleRecipeByColor atende GET /recipes/by-color?r=&g=&b=&targetManufacturerId=&useStockOnly=&foraDoUniverso=
+// queryMaxIngredients lê maxIngredients (rf-13 RN5): ausente é 0, sem teto —
+// preserva o comportamento de T2/T3. Presente fora de 0-8, ou não numérico, é
+// inválido (CAN2).
+func queryMaxIngredients(ctx *fasthttp.RequestCtx) (n int, valido bool) {
+	raw := strings.TrimSpace(string(ctx.QueryArgs().Peek("maxIngredients")))
+	if raw == "" {
+		return 0, true
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil || v < 0 || v > 8 {
+		return 0, false
+	}
+	return v, true
+}
+
+// handleRecipeByColor atende GET /recipes/by-color?r=&g=&b=&targetManufacturerId=&useStockOnly=&foraDoUniverso=&maxIngredients=
 // — usada pela Roda de cores, onde o "alvo" é um passo calculado, não uma
 // tinta do catálogo. rf-11: targetManufacturerId deixou de ser obrigatório —
 // sem ele e sem useStockOnly, o universo é o catálogo inteiro.
@@ -92,8 +116,13 @@ func handleRecipeByColor(svc *service.PaintService) fasthttp.RequestHandler {
 		}
 		soEstoque := queryBool(ctx, "useStockOnly")
 		foraDoUniverso := queryBool(ctx, "foraDoUniverso")
+		maxIngredients, ok := queryMaxIngredients(ctx)
+		if !ok {
+			writeError(ctx, fasthttp.StatusBadRequest, "maxIngredients fora da faixa")
+			return
+		}
 
-		recipe, err := svc.ResolverCorNoUniverso(r, g, b, targetMfrID, soEstoque, foraDoUniverso)
+		recipe, err := svc.ResolverCorNoUniverso(r, g, b, targetMfrID, soEstoque, foraDoUniverso, maxIngredients)
 		if err != nil {
 			// Universo vazio não é erro de servidor (RN9): a tela mostra a
 			// mensagem e oferece as saídas do diálogo.

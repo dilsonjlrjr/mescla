@@ -39,7 +39,10 @@ type Result struct {
 //     2+ tintas: o usuário já sabe que a tinta existe; ele quer o tom que NÃO
 //     tem, feito com as que tem.
 //   - Reproducible reflete MaxViableDeltaE.
-func Suggest(source mix.PaintInput, sourceManufacturer, targetManufacturer string, candidates []mix.PaintInput) (Result, error) {
+//
+// maxIngredients é o teto repassado direto a mix.SuggestBestSubset (rf-13
+// RN5): <= 0 significa sem teto.
+func Suggest(source mix.PaintInput, sourceManufacturer, targetManufacturer string, candidates []mix.PaintInput, maxIngredients int) (Result, error) {
 	kept := make([]mix.PaintInput, 0, len(candidates))
 	for _, c := range candidates {
 		if c.ID != source.ID {
@@ -56,7 +59,7 @@ func Suggest(source mix.PaintInput, sourceManufacturer, targetManufacturer strin
 	}
 
 	l, a, b := color.RGBToLab(source.R, source.G, source.B)
-	recipe := mix.SuggestBestSubset([3]float64{l, a, b}, kept, minIngredients, 0)
+	recipe := mix.SuggestBestSubset([3]float64{l, a, b}, kept, minIngredients, maxIngredients)
 	tips := mix.GenerateTips(source.R, source.G, source.B, recipe)
 
 	return Result{

@@ -27,6 +27,9 @@ export interface RecipeIngredient {
   r: number;
   g: number;
   b: number;
+  /** rf-13: fabricante DESTE ingrediente — cross-brand mistura potes de marcas diferentes. */
+  manufacturerId: number;
+  manufacturer: string;
 }
 
 export interface EquivalentRecipe {
@@ -51,6 +54,11 @@ export interface EquivalentRecipe {
    *  do usuário no diálogo. */
   foraDoUniverso?: boolean;
   tips: string[];
+  /** rf-13 RN6: true quando os ingredientes têm mais de um manufacturerId distinto.
+   *  Decisão do servidor — o cliente não infere. */
+  crossBrand: boolean;
+  /** rf-13 RN7: fabricantes presentes nos ingredientes, ordenados, sem repetição. */
+  manufacturers: string[];
 }
 
 export interface BrandBest {
@@ -120,14 +128,21 @@ export async function findSimilar(
   return (await apiGet<SearchResult[]>(`/similar?${params}`)) ?? [];
 }
 
+/** rf-13: targetManufacturerId agora é opcional — ausente ou 0 = catálogo inteiro
+ *  (cross-brand real, RG-13). maxIngredients é o teto de ingredientes da fórmula
+ *  (ausente ou 0 = sem teto, comportamento anterior de T2/T3). */
 export async function suggestEquivalentRecipe(
   paintId: number,
-  targetManufacturerId: number,
+  targetManufacturerId?: number,
+  maxIngredients?: number,
 ): Promise<EquivalentRecipe> {
-  const params = new URLSearchParams({
-    sourcePaintId: String(paintId),
-    targetManufacturerId: String(targetManufacturerId),
-  });
+  const params = new URLSearchParams({ sourcePaintId: String(paintId) });
+  if (targetManufacturerId && targetManufacturerId > 0) {
+    params.set('targetManufacturerId', String(targetManufacturerId));
+  }
+  if (maxIngredients !== undefined) {
+    params.set('maxIngredients', String(maxIngredients));
+  }
   return apiGet<EquivalentRecipe>(`/recipes/by-paint?${params}`);
 }
 
@@ -139,6 +154,8 @@ export interface UniversoBusca {
   useStockOnly?: boolean;
   /** Só depois de o usuário autorizar a saída no diálogo de fallback. */
   foraDoUniverso?: boolean;
+  /** rf-13 RN5: teto de ingredientes da receita. Ausente ou 0 = sem teto. */
+  maxIngredients?: number;
 }
 
 /** Resposta possível quando o universo escolhido não tem tinta nenhuma. Não é
@@ -159,6 +176,7 @@ function paramsDoUniverso(r: number, g: number, b: number, u: UniversoBusca): UR
   }
   if (u.useStockOnly) params.set('useStockOnly', '1');
   if (u.foraDoUniverso) params.set('foraDoUniverso', '1');
+  if (u.maxIngredients && u.maxIngredients > 0) params.set('maxIngredients', String(u.maxIngredients));
   return params;
 }
 
@@ -179,8 +197,9 @@ export async function recipeForColorInBrand(
   g: number,
   b: number,
   targetManufacturerId: number,
+  maxIngredients?: number,
 ): Promise<EquivalentRecipe> {
-  const resp = await suggestRecipeForColor(r, g, b, { targetManufacturerId });
+  const resp = await suggestRecipeForColor(r, g, b, { targetManufacturerId, maxIngredients });
   if (ehUniversoVazio(resp)) {
     throw new Error(resp.motivo);
   }

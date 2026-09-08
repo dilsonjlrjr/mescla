@@ -155,18 +155,8 @@ func (s *PaintService) SuggestEquivalentFromPool(sourcePaintID int64, pool []sto
 	}
 	recipe := res.Recipe
 
-	ingredients := make([]RecipeIngredientDTO, 0, len(recipe.Ingredients))
-	for _, ing := range recipe.Ingredients {
-		ingredients = append(ingredients, RecipeIngredientDTO{
-			PaintID:    ing.Paint.ID,
-			Name:       ing.Paint.Name,
-			Code:       ing.Paint.Code,
-			Percentage: ing.Percentage,
-			R:          ing.Paint.R,
-			G:          ing.Paint.G,
-			B:          ing.Paint.B,
-		})
-	}
+	ingredients := mapIngredients(recipe.Ingredients)
+	crossBrand, manufacturers := crossBrandInfo(ingredients)
 
 	return EquivalentRecipeDTO{
 		SourcePaintID:      source.ID,
@@ -184,6 +174,8 @@ func (s *PaintService) SuggestEquivalentFromPool(sourcePaintID int64, pool []sto
 		Method:             recipe.Method,
 		Reproducible:       res.Reproducible,
 		Tips:               res.Tips,
+		CrossBrand:         crossBrand,
+		Manufacturers:      manufacturers,
 	}, nil
 }
 

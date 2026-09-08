@@ -12,6 +12,13 @@ type PaintInput struct {
 	Name    string
 	Code    string
 	R, G, B uint8
+	// ManufacturerID e Manufacturer são carga para o DTO de saída (rf-13,
+	// marca por ingrediente) — o solver (Mix, custo, descerGradiente) nunca os
+	// lê, só R/G/B decidem a mistura. ManufacturerID é sempre o id de
+	// `manufacturers`, mesmo no caminho do estoque (`user_paints` tem espaço
+	// de IDs próprio, que fica só em PaintInput.ID).
+	ManufacturerID int64
+	Manufacturer   string
 }
 
 type Ingredient struct {

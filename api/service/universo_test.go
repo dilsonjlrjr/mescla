@@ -203,7 +203,7 @@ func TestCA5CAN3ReceitaSoUsaOUniversoPedido(t *testing.T) {
 
 	// Alvo azul: existe só na Citadel. Com fabricante base Acrilex, nenhum
 	// ingrediente pode ser Citadel.
-	rec, err := s.ResolverCorNoUniverso(63, 72, 204, 1, false, false)
+	rec, err := s.ResolverCorNoUniverso(63, 72, 204, 1, false, false, 0)
 	if err != nil {
 		t.Fatalf("ResolverCorNoUniverso: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestCA5CAN3ReceitaSoUsaOUniversoPedido(t *testing.T) {
 func TestCA13MarcacaoForaDoUniverso(t *testing.T) {
 	s := newUniversoTestService(t)
 
-	rec, err := s.ResolverCorNoUniverso(63, 72, 204, 0, false, true)
+	rec, err := s.ResolverCorNoUniverso(63, 72, 204, 0, false, true, 0)
 	if err != nil {
 		t.Fatalf("ResolverCorNoUniverso: %v", err)
 	}
@@ -254,11 +254,11 @@ func TestCA12MelhorDeltaEPorUniverso(t *testing.T) {
 func TestCA20ResolucaoDeterministica(t *testing.T) {
 	s := newUniversoTestService(t)
 
-	a, err := s.ResolverCorNoUniverso(100, 140, 60, 0, false, false)
+	a, err := s.ResolverCorNoUniverso(100, 140, 60, 0, false, false, 0)
 	if err != nil {
 		t.Fatalf("primeira: %v", err)
 	}
-	b, err := s.ResolverCorNoUniverso(100, 140, 60, 0, false, false)
+	b, err := s.ResolverCorNoUniverso(100, 140, 60, 0, false, false, 0)
 	if err != nil {
 		t.Fatalf("segunda: %v", err)
 	}

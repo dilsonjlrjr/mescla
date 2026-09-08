@@ -156,6 +156,58 @@ type RecipeIngredientDTO struct {
 	R          uint8   `json:"r"`
 	G          uint8   `json:"g"`
 	B          uint8   `json:"b"`
+	// ManufacturerID e Manufacturer identificam a marca deste ingrediente —
+	// rf-13, obrigatório para cross-brand (a receita pode combinar potes de
+	// fabricantes diferentes).
+	ManufacturerID int64  `json:"manufacturerId"`
+	Manufacturer   string `json:"manufacturer"`
+}
+
+// mapIngredients converte os ingredientes de mix.Recipe para o DTO trocado
+// com o cliente. Extraído porque o mesmo laço se repetia em
+// paint_service.go, universo.go, userstock.go e comparisons.go (rf-13) — os
+// quatro precisam do par manufacturerId/manufacturer.
+func mapIngredients(ingredients []mix.Ingredient) []RecipeIngredientDTO {
+	dto := make([]RecipeIngredientDTO, 0, len(ingredients))
+	for _, ing := range ingredients {
+		dto = append(dto, RecipeIngredientDTO{
+			PaintID:        ing.Paint.ID,
+			Name:           ing.Paint.Name,
+			Code:           ing.Paint.Code,
+			Percentage:     ing.Percentage,
+			R:              ing.Paint.R,
+			G:              ing.Paint.G,
+			B:              ing.Paint.B,
+			ManufacturerID: ing.Paint.ManufacturerID,
+			Manufacturer:   ing.Paint.Manufacturer,
+		})
+	}
+	return dto
+}
+
+// crossBrandInfo decide crossBrand a partir dos ingredientes já montados
+// (RN6) — nunca o cliente. manufacturers sai ordenado alfabeticamente e sem
+// repetição, só os fabricantes presentes nos ingredientes.
+func crossBrandInfo(ingredients []RecipeIngredientDTO) (bool, []string) {
+	// Ingrediente com ManufacturerID 0 é fabricante DESCONHECIDO, não uma
+	// marca a mais: contá-lo daria crossBrand=true com um nome só em
+	// manufacturers, e a tela diria "2 marcas" nomeando uma.
+	ids := make(map[int64]bool)
+	names := make(map[string]bool)
+	for _, ing := range ingredients {
+		if ing.ManufacturerID != 0 {
+			ids[ing.ManufacturerID] = true
+		}
+		if ing.Manufacturer != "" {
+			names[ing.Manufacturer] = true
+		}
+	}
+	manufacturers := make([]string, 0, len(names))
+	for n := range names {
+		manufacturers = append(manufacturers, n)
+	}
+	sort.Strings(manufacturers)
+	return len(ids) > 1, manufacturers
 }
 
 type EquivalentRecipeDTO struct {
@@ -185,6 +237,10 @@ type EquivalentRecipeDTO struct {
 	// ForaDoUniverso marca a receita resolvida fora do universo que o usuário
 	// pediu — só acontece quando ele autorizou a saída no diálogo (rf-11 RN7).
 	ForaDoUniverso bool `json:"foraDoUniverso,omitempty"`
+	// CrossBrand e Manufacturers (rf-13 RN6) — decididos pelo servidor a
+	// partir dos ingredientes, nunca pelo cliente.
+	CrossBrand    bool     `json:"crossBrand"`
+	Manufacturers []string `json:"manufacturers"`
 }
 
 type ManufacturerDTO struct {
@@ -425,9 +481,12 @@ func (s *PaintService) FindEquivalences(paintID int64) ([]SearchResultDTO, error
 }
 
 // SuggestEquivalentRecipe busca a tinta de origem (de qualquer fabricante) e
-// monta uma receita de mistura usando somente tintas do fabricante de destino
-// que aproxima a cor da origem, junto com dicas de ajuste em texto.
-func (s *PaintService) SuggestEquivalentRecipe(sourcePaintID int64, targetManufacturerID int64) (EquivalentRecipeDTO, error) {
+// monta uma receita de mistura que aproxima a cor da origem, junto com dicas
+// de ajuste em texto.
+//
+// targetManufacturerID == 0 (rf-13) abre o pool para o catálogo inteiro —
+// cross-brand real, RG-13. maxIngredients <= 0 é sem teto (RN5).
+func (s *PaintService) SuggestEquivalentRecipe(sourcePaintID int64, targetManufacturerID int64, maxIngredients int) (EquivalentRecipeDTO, error) {
 	source, err := s.GetPaintByID(sourcePaintID)
 	if err != nil {
 		return EquivalentRecipeDTO{}, fmt.Errorf("tinta de origem não encontrada: %w", err)
@@ -436,42 +495,46 @@ func (s *PaintService) SuggestEquivalentRecipe(sourcePaintID int64, targetManufa
 		return EquivalentRecipeDTO{}, fmt.Errorf("tinta de origem não possui dados de cor cadastrados")
 	}
 
-	candidates, err := s.loadPaintsByManufacturerID(targetManufacturerID)
+	var candidates []mix.PaintInput
+	var targetMfrName string
+	if targetManufacturerID > 0 {
+		if err := s.db.QueryRow("SELECT name FROM manufacturers WHERE id = ?", targetManufacturerID).Scan(&targetMfrName); err != nil {
+			return EquivalentRecipeDTO{}, fmt.Errorf("fabricante não encontrado")
+		}
+		candidates, err = s.loadPaintsByManufacturerID(targetManufacturerID)
+	} else {
+		candidates, err = s.catalogoInteiroComCor()
+	}
 	if err != nil {
 		return EquivalentRecipeDTO{}, err
 	}
 	if len(candidates) == 0 {
-		return EquivalentRecipeDTO{}, fmt.Errorf("fabricante de destino não possui tintas cadastradas com cor")
+		if targetManufacturerID > 0 {
+			return EquivalentRecipeDTO{}, fmt.Errorf("fabricante de destino não possui tintas cadastradas com cor")
+		}
+		// Cross-brand não tem fabricante de destino — dizer que "o fabricante"
+		// está vazio mentiria sobre a causa.
+		return EquivalentRecipeDTO{}, fmt.Errorf("o catálogo não tem nenhuma tinta com cor cadastrada")
 	}
-
-	var targetMfrName string
-	s.db.QueryRow("SELECT name FROM manufacturers WHERE id = ?", targetManufacturerID).Scan(&targetMfrName)
 
 	// Toda a regra de negócio (exclusão da tinta-alvo, mistura forçada na mesma
 	// marca, dicas, reproduzível) vive em api/domain/equivalence — compartilhada com o
 	// módulo WASM do app mobile, que deve produzir a mesma receita.
 	sourceInput := mix.PaintInput{ID: source.ID, Name: source.Name, Code: source.Code, R: source.R, G: source.G, B: source.B}
-	res, err := equivalence.Suggest(sourceInput, source.Manufacturer, targetMfrName, candidates)
+	res, err := equivalence.Suggest(sourceInput, source.Manufacturer, targetMfrName, candidates, maxIngredients)
 	if err != nil {
 		if errors.Is(err, equivalence.ErrNoCandidates) {
-			return EquivalentRecipeDTO{}, fmt.Errorf("essa marca não tem outras tintas com cor pra montar a mistura")
+			if targetManufacturerID > 0 {
+				return EquivalentRecipeDTO{}, fmt.Errorf("essa marca não tem outras tintas com cor pra montar a mistura")
+			}
+			return EquivalentRecipeDTO{}, fmt.Errorf("o catálogo não tem outra tinta com cor pra montar a mistura")
 		}
 		return EquivalentRecipeDTO{}, err
 	}
 	recipe := res.Recipe
 
-	ingredients := make([]RecipeIngredientDTO, 0, len(recipe.Ingredients))
-	for _, ing := range recipe.Ingredients {
-		ingredients = append(ingredients, RecipeIngredientDTO{
-			PaintID:    ing.Paint.ID,
-			Name:       ing.Paint.Name,
-			Code:       ing.Paint.Code,
-			Percentage: ing.Percentage,
-			R:          ing.Paint.R,
-			G:          ing.Paint.G,
-			B:          ing.Paint.B,
-		})
-	}
+	ingredients := mapIngredients(recipe.Ingredients)
+	crossBrand, manufacturers := crossBrandInfo(ingredients)
 
 	return EquivalentRecipeDTO{
 		SourcePaintID:      source.ID,
@@ -489,6 +552,8 @@ func (s *PaintService) SuggestEquivalentRecipe(sourcePaintID int64, targetManufa
 		Method:             recipe.Method,
 		Reproducible:       res.Reproducible,
 		Tips:               res.Tips,
+		CrossBrand:         crossBrand,
+		Manufacturers:      manufacturers,
 	}, nil
 }
 
@@ -510,7 +575,7 @@ func (s *PaintService) SuggestRecipeForColor(r, g, b uint8, targetManufacturerID
 	s.db.QueryRow("SELECT name FROM manufacturers WHERE id = ?", targetManufacturerID).Scan(&targetMfrName)
 
 	sourceInput := mix.PaintInput{ID: 0, Name: "cor alvo", Code: "", R: r, G: g, B: b}
-	res, err := equivalence.Suggest(sourceInput, "", targetMfrName, candidates)
+	res, err := equivalence.Suggest(sourceInput, "", targetMfrName, candidates, 0)
 	if err != nil {
 		if errors.Is(err, equivalence.ErrNoCandidates) {
 			return EquivalentRecipeDTO{}, fmt.Errorf("essa marca não tem tintas com cor pra montar a mistura")
@@ -519,18 +584,7 @@ func (s *PaintService) SuggestRecipeForColor(r, g, b uint8, targetManufacturerID
 	}
 	recipe := res.Recipe
 
-	ingredients := make([]RecipeIngredientDTO, 0, len(recipe.Ingredients))
-	for _, ing := range recipe.Ingredients {
-		ingredients = append(ingredients, RecipeIngredientDTO{
-			PaintID:    ing.Paint.ID,
-			Name:       ing.Paint.Name,
-			Code:       ing.Paint.Code,
-			Percentage: ing.Percentage,
-			R:          ing.Paint.R,
-			G:          ing.Paint.G,
-			B:          ing.Paint.B,
-		})
-	}
+	ingredients := mapIngredients(recipe.Ingredients)
 
 	return EquivalentRecipeDTO{
 		SourcePaintID:      0,
@@ -557,9 +611,10 @@ func (s *PaintService) SuggestRecipeForColor(r, g, b uint8, targetManufacturerID
 // não deve virar candidato "preto" silencioso numa receita de mistura.
 func (s *PaintService) loadPaintsByManufacturerID(manufacturerID int64) ([]mix.PaintInput, error) {
 	query := `
-		SELECT p.id, p.name, p.code, pc.rgb_r, pc.rgb_g, pc.rgb_b
+		SELECT p.id, p.name, p.code, pc.rgb_r, pc.rgb_g, pc.rgb_b, p.manufacturer_id, m.name
 		FROM paints p
 		JOIN paint_colors pc ON pc.paint_id = p.id
+		JOIN manufacturers m ON m.id = p.manufacturer_id
 		WHERE p.manufacturer_id = ?
 	`
 	rows, err := s.db.Query(query, manufacturerID)
@@ -571,7 +626,7 @@ func (s *PaintService) loadPaintsByManufacturerID(manufacturerID int64) ([]mix.P
 	var paints []mix.PaintInput
 	for rows.Next() {
 		var p mix.PaintInput
-		if err := rows.Scan(&p.ID, &p.Name, &p.Code, &p.R, &p.G, &p.B); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Code, &p.R, &p.G, &p.B, &p.ManufacturerID, &p.Manufacturer); err != nil {
 			return nil, err
 		}
 		paints = append(paints, p)

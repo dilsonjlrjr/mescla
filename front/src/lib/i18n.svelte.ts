@@ -113,7 +113,12 @@ export const dict = {
     tabsListLabel: 'Abas da peça', renameTabLabel: 'Nome da figura', addTabBtn: 'Nova figura',
     moveTabLeft: 'Mover figura para a esquerda', moveTabRight: 'Mover figura para a direita',
     deleteTabBtn: 'Excluir figura', deleteTabConfirm: 'Excluir a figura “{name}” e suas regiões?',
-    tabProgressShort: '{a}/{b}', usedInTabsLabel: 'Usada em {tabs}'
+    tabProgressShort: '{a}/{b}', usedInTabsLabel: 'Usada em {tabs}',
+    universeLabel: 'Universo de busca', universoMix: 'Misturar marcas', universoBrand: 'Só esta marca',
+    chooseBrandAria: 'Escolher marca', searchEquivalenceBtn: 'Buscar equivalência',
+    targetVolumeLabel: 'Volume alvo', voltarBtn: 'Voltar', sheetTitle: 'Ficha da tinta',
+    tapToCalc: 'Toque em “Buscar equivalência” para ver a resposta.',
+    saveDisabledCrossBrand: 'Fórmulas com mais de uma marca ainda não salvam — restrinja a uma marca para salvar.'
   },
   en: {
     _name: 'English (US)', _dec: '.',
@@ -224,7 +229,12 @@ export const dict = {
     tabsListLabel: 'Model figures', renameTabLabel: 'Figure name', addTabBtn: 'New figure',
     moveTabLeft: 'Move figure left', moveTabRight: 'Move figure right',
     deleteTabBtn: 'Delete figure', deleteTabConfirm: 'Delete figure "{name}" and its regions?',
-    tabProgressShort: '{a}/{b}', usedInTabsLabel: 'Used in {tabs}'
+    tabProgressShort: '{a}/{b}', usedInTabsLabel: 'Used in {tabs}',
+    universeLabel: 'Search universe', universoMix: 'Mix brands', universoBrand: 'Only this brand',
+    chooseBrandAria: 'Choose brand', searchEquivalenceBtn: 'Find equivalence',
+    targetVolumeLabel: 'Target volume', voltarBtn: 'Back', sheetTitle: 'Paint sheet',
+    tapToCalc: 'Tap "Find equivalence" to see the answer.',
+    saveDisabledCrossBrand: 'Cross-brand formulas cannot be saved yet — restrict to one brand to save.'
   },
   es: {
     _name: 'Español', _dec: ',',
@@ -335,7 +345,12 @@ export const dict = {
     tabsListLabel: 'Figuras de la pieza', renameTabLabel: 'Nombre de la figura', addTabBtn: 'Nueva figura',
     moveTabLeft: 'Mover figura a la izquierda', moveTabRight: 'Mover figura a la derecha',
     deleteTabBtn: 'Eliminar figura', deleteTabConfirm: '¿Eliminar la figura “{name}” y sus regiones?',
-    tabProgressShort: '{a}/{b}', usedInTabsLabel: 'Usada en {tabs}'
+    tabProgressShort: '{a}/{b}', usedInTabsLabel: 'Usada en {tabs}',
+    universeLabel: 'Universo de búsqueda', universoMix: 'Mezclar marcas', universoBrand: 'Solo esta marca',
+    chooseBrandAria: 'Elegir marca', searchEquivalenceBtn: 'Buscar equivalencia',
+    targetVolumeLabel: 'Volumen objetivo', voltarBtn: 'Volver', sheetTitle: 'Ficha de la pintura',
+    tapToCalc: 'Toca «Buscar equivalencia» para ver la respuesta.',
+    saveDisabledCrossBrand: 'Las fórmulas con más de una marca aún no se guardan — limita a una marca para guardar.'
   },
   fr: {
     _name: 'Français', _dec: ',',
@@ -446,7 +461,12 @@ export const dict = {
     tabsListLabel: 'Figures de la pièce', renameTabLabel: 'Nom de la figure', addTabBtn: 'Nouvelle figure',
     moveTabLeft: 'Déplacer la figure à gauche', moveTabRight: 'Déplacer la figure à droite',
     deleteTabBtn: 'Supprimer la figure', deleteTabConfirm: 'Supprimer la figure « {name} » et ses zones ?',
-    tabProgressShort: '{a}/{b}', usedInTabsLabel: 'Utilisée dans {tabs}'
+    tabProgressShort: '{a}/{b}', usedInTabsLabel: 'Utilisée dans {tabs}',
+    universeLabel: 'Univers de recherche', universoMix: 'Mélanger les marques', universoBrand: 'Cette marque seulement',
+    chooseBrandAria: 'Choisir la marque', searchEquivalenceBtn: 'Chercher une équivalence',
+    targetVolumeLabel: 'Volume cible', voltarBtn: 'Retour', sheetTitle: 'Fiche de la peinture',
+    tapToCalc: 'Touchez « Chercher une équivalence » pour voir la réponse.',
+    saveDisabledCrossBrand: 'Les formules à plusieurs marques ne sont pas encore enregistrables — limitez à une marque pour enregistrer.'
   }
 } as const;
 

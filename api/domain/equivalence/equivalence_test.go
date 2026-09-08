@@ -17,7 +17,7 @@ func TestSuggestExcludesSourcePaint(t *testing.T) {
 		{ID: 3, Name: "Azul", R: 30, G: 60, B: 180},
 	}
 
-	res, err := Suggest(source, "Acrilex", "Acrilex", candidates)
+	res, err := Suggest(source, "Acrilex", "Acrilex", candidates, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestSuggestSameManufacturerForcesMix(t *testing.T) {
 		{ID: 3, Name: "Red", R: 255, G: 0, B: 0},
 	}
 
-	res, err := Suggest(source, "Vallejo", "Vallejo", candidates)
+	res, err := Suggest(source, "Vallejo", "Vallejo", candidates, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestSuggestSameManufacturerCollapsesToTwin(t *testing.T) {
 		{ID: 3, Name: "Red", R: 255, G: 0, B: 0},
 	}
 
-	res, err := Suggest(source, "Vallejo", "Vallejo", candidates)
+	res, err := Suggest(source, "Vallejo", "Vallejo", candidates, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestSuggestDifferentManufacturerAllowsSingle(t *testing.T) {
 		{ID: 2, Name: "Black", R: 0, G: 0, B: 0},
 	}
 
-	res, err := Suggest(source, "Citadel", "Vallejo", candidates)
+	res, err := Suggest(source, "Citadel", "Vallejo", candidates, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestSuggestReproducibleFlag(t *testing.T) {
 		{ID: 2, Name: "Cinza Escuro", R: 60, G: 60, B: 60},
 	}
 
-	res, err := Suggest(source, "Citadel", "Talento", candidates)
+	res, err := Suggest(source, "Citadel", "Talento", candidates, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestSuggestNoCandidates(t *testing.T) {
 	source := mix.PaintInput{ID: 1, Name: "Única", R: 100, G: 100, B: 100}
 	candidates := []mix.PaintInput{source}
 
-	_, err := Suggest(source, "Corfix", "Corfix", candidates)
+	_, err := Suggest(source, "Corfix", "Corfix", candidates, 0)
 	if !errors.Is(err, ErrNoCandidates) {
 		t.Fatalf("esperava ErrNoCandidates, veio %v", err)
 	}
@@ -136,7 +136,7 @@ func TestSuggestGeneratesTips(t *testing.T) {
 		{ID: 2, Name: "Cinza Escuro", R: 60, G: 60, B: 60},
 	}
 
-	res, err := Suggest(source, "Citadel", "Talento", candidates)
+	res, err := Suggest(source, "Citadel", "Talento", candidates, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

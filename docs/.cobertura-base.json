@@ -1,0 +1,14 @@
+{
+  "limiar": 80,
+  "arquivos": {
+    "api/domain/equivalence/equivalence.go": 100,
+    "api/domain/mix/engine.go": 92.2,
+    "api/domain/stock/stock.go": 94.2,
+    "api/httpapi/similarity.go": 56.3,
+    "api/service/colorpick.go": 90.9,
+    "api/service/comparisons.go": 15,
+    "api/service/paint_service.go": 35.9,
+    "api/service/universo.go": 83.8,
+    "api/service/userstock.go": 58.5
+  }
+}

@@ -104,9 +104,10 @@ func (s *PaintService) montarUniverso(fabricanteID int64, soEstoque bool) ([]mix
 // silencioso na mistura.
 func (s *PaintService) catalogoInteiroComCor() ([]mix.PaintInput, error) {
 	rows, err := s.db.Query(`
-		SELECT p.id, p.name, p.code, pc.rgb_r, pc.rgb_g, pc.rgb_b
+		SELECT p.id, p.name, p.code, pc.rgb_r, pc.rgb_g, pc.rgb_b, p.manufacturer_id, m.name
 		FROM paints p
 		JOIN paint_colors pc ON pc.paint_id = p.id
+		JOIN manufacturers m ON m.id = p.manufacturer_id
 	`)
 	if err != nil {
 		return nil, err
@@ -116,7 +117,7 @@ func (s *PaintService) catalogoInteiroComCor() ([]mix.PaintInput, error) {
 	var paints []mix.PaintInput
 	for rows.Next() {
 		var p mix.PaintInput
-		if err := rows.Scan(&p.ID, &p.Name, &p.Code, &p.R, &p.G, &p.B); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Code, &p.R, &p.G, &p.B, &p.ManufacturerID, &p.Manufacturer); err != nil {
 			return nil, err
 		}
 		paints = append(paints, p)
@@ -129,9 +130,10 @@ func (s *PaintService) catalogoInteiroComCor() ([]mix.PaintInput, error) {
 // corte é direto — não se casa por nome, que varia em grafia.
 func (s *PaintService) estoqueDoFabricante(fabricanteID int64) ([]mix.PaintInput, error) {
 	rows, err := s.db.Query(`
-		SELECT id, name, COALESCE(code, ''), rgb_r, rgb_g, rgb_b
-		FROM user_paints
-		WHERE manufacturer_id = ?
+		SELECT up.id, up.name, COALESCE(up.code, ''), up.rgb_r, up.rgb_g, up.rgb_b, up.manufacturer_id, m.name
+		FROM user_paints up
+		JOIN manufacturers m ON m.id = up.manufacturer_id
+		WHERE up.manufacturer_id = ?
 	`, fabricanteID)
 	if err != nil {
 		return nil, err
@@ -141,7 +143,7 @@ func (s *PaintService) estoqueDoFabricante(fabricanteID int64) ([]mix.PaintInput
 	var paints []mix.PaintInput
 	for rows.Next() {
 		var p mix.PaintInput
-		if err := rows.Scan(&p.ID, &p.Name, &p.Code, &p.R, &p.G, &p.B); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Code, &p.R, &p.G, &p.B, &p.ManufacturerID, &p.Manufacturer); err != nil {
 			return nil, err
 		}
 		paints = append(paints, p)
@@ -155,7 +157,7 @@ func (s *PaintService) estoqueDoFabricante(fabricanteID int64) ([]mix.PaintInput
 // `foraDoUniverso` é decidido por quem chama — a tela só o liga depois de o
 // usuário autorizar a saída no diálogo (RN7/CAN4). O serviço não escolhe sair
 // do universo pedido por conta própria.
-func (s *PaintService) ResolverCorNoUniverso(r, g, b uint8, fabricanteID int64, soEstoque, foraDoUniverso bool) (EquivalentRecipeDTO, error) {
+func (s *PaintService) ResolverCorNoUniverso(r, g, b uint8, fabricanteID int64, soEstoque, foraDoUniverso bool, maxIngredients int) (EquivalentRecipeDTO, error) {
 	pool, err := s.montarUniverso(fabricanteID, soEstoque)
 	if err != nil {
 		return EquivalentRecipeDTO{}, err
@@ -167,20 +169,10 @@ func (s *PaintService) ResolverCorNoUniverso(r, g, b uint8, fabricanteID int64, 
 	}
 
 	l, a, bLab := color.RGBToLab(r, g, b)
-	receita := mix.SuggestBestSubset([3]float64{l, a, bLab}, pool, 1, 0)
+	receita := mix.SuggestBestSubset([3]float64{l, a, bLab}, pool, 1, maxIngredients)
 
-	ingredientes := make([]RecipeIngredientDTO, 0, len(receita.Ingredients))
-	for _, ing := range receita.Ingredients {
-		ingredientes = append(ingredientes, RecipeIngredientDTO{
-			PaintID:    ing.Paint.ID,
-			Name:       ing.Paint.Name,
-			Code:       ing.Paint.Code,
-			Percentage: ing.Percentage,
-			R:          ing.Paint.R,
-			G:          ing.Paint.G,
-			B:          ing.Paint.B,
-		})
-	}
+	ingredientes := mapIngredients(receita.Ingredients)
+	crossBrand, manufacturers := crossBrandInfo(ingredientes)
 
 	faixa := ClassificarFaixa(receita.DeltaE)
 
@@ -203,6 +195,8 @@ func (s *PaintService) ResolverCorNoUniverso(r, g, b uint8, fabricanteID int64, 
 		Tips:           mix.GenerateTips(r, g, b, receita),
 		Faixa:          faixa,
 		ForaDoUniverso: foraDoUniverso,
+		CrossBrand:     crossBrand,
+		Manufacturers:  manufacturers,
 	}, nil
 }
 

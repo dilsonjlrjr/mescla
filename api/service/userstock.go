@@ -266,7 +266,11 @@ func (s *PaintService) loadStockManufacturers() ([]stock.Manufacturer, error) {
 
 // loadStockAsMixInputs carrega o estoque do usuário como pool de mistura.
 func (s *PaintService) loadStockAsMixInputs() ([]mix.PaintInput, error) {
-	rows, err := s.db.Query("SELECT id, name, COALESCE(code, ''), rgb_r, rgb_g, rgb_b FROM user_paints")
+	rows, err := s.db.Query(`
+		SELECT up.id, up.name, COALESCE(up.code, ''), up.rgb_r, up.rgb_g, up.rgb_b, up.manufacturer_id, m.name
+		FROM user_paints up
+		JOIN manufacturers m ON m.id = up.manufacturer_id
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +279,7 @@ func (s *PaintService) loadStockAsMixInputs() ([]mix.PaintInput, error) {
 	var paints []mix.PaintInput
 	for rows.Next() {
 		var p mix.PaintInput
-		if err := rows.Scan(&p.ID, &p.Name, &p.Code, &p.R, &p.G, &p.B); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Code, &p.R, &p.G, &p.B, &p.ManufacturerID, &p.Manufacturer); err != nil {
 			return nil, err
 		}
 		paints = append(paints, p)
@@ -315,18 +319,8 @@ func (s *PaintService) SuggestEquivalentFromStock(sourcePaintID int64) (Equivale
 	}
 	recipe := res.Recipe
 
-	ingredients := make([]RecipeIngredientDTO, 0, len(recipe.Ingredients))
-	for _, ing := range recipe.Ingredients {
-		ingredients = append(ingredients, RecipeIngredientDTO{
-			PaintID:    ing.Paint.ID,
-			Name:       ing.Paint.Name,
-			Code:       ing.Paint.Code,
-			Percentage: ing.Percentage,
-			R:          ing.Paint.R,
-			G:          ing.Paint.G,
-			B:          ing.Paint.B,
-		})
-	}
+	ingredients := mapIngredients(recipe.Ingredients)
+	crossBrand, manufacturers := crossBrandInfo(ingredients)
 
 	return EquivalentRecipeDTO{
 		SourcePaintID:      source.ID,
@@ -344,5 +338,7 @@ func (s *PaintService) SuggestEquivalentFromStock(sourcePaintID int64) (Equivale
 		Method:             recipe.Method,
 		Reproducible:       res.Reproducible,
 		Tips:               res.Tips,
+		CrossBrand:         crossBrand,
+		Manufacturers:      manufacturers,
 	}, nil
 }

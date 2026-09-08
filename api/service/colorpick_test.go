@@ -136,9 +136,9 @@ func TestPickColorWithRecipe(t *testing.T) {
 	s := newColorPickTestService(t)
 
 	// Testa receita diretamente
-	recipe, err := s.SuggestEquivalentRecipe(1, 2)
+	recipe, err := s.SuggestEquivalentRecipe(1, 2, 0)
 	if err != nil {
-		t.Fatalf("SuggestEquivalentRecipe(1,2): %v", err)
+		t.Fatalf("SuggestEquivalentRecipe(1,2,0): %v", err)
 	}
 	if recipe.TargetManufacturer == "" {
 		t.Fatal("Recipe deveria ter TargetManufacturer preenchido")

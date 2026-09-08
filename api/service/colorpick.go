@@ -22,8 +22,8 @@ type ColorMatchDTO struct {
 
 // PickColorResponse é o resultado do color pick.
 type PickColorResponse struct {
-	Hex     string          `json:"hex"`
-	Matches []ColorMatchDTO `json:"matches"`
+	Hex     string               `json:"hex"`
+	Matches []ColorMatchDTO      `json:"matches"`
 	Recipe  *EquivalentRecipeDTO `json:"recipe,omitempty"`
 }
 
@@ -78,7 +78,7 @@ func (s *PaintService) PickColor(r, g, b uint8, targetManufacturerID int64) (Pic
 
 		// Tenta gerar receita para o melhor match
 		bestMatch := resp.Matches[0]
-		recipe, err := s.SuggestEquivalentRecipe(bestMatch.PaintID, targetManufacturerID)
+		recipe, err := s.SuggestEquivalentRecipe(bestMatch.PaintID, targetManufacturerID, 0)
 		if err != nil {
 			// Receita pode falhar (ex: fabricante sem tintas compatíveis) —
 			// retornamos sem receita, não é erro fatal

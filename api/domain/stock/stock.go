@@ -215,7 +215,10 @@ func hexNibble(c byte) (uint8, bool) {
 func ToMixInputs(paints []Paint) []mix.PaintInput {
 	out := make([]mix.PaintInput, 0, len(paints))
 	for _, p := range paints {
-		out = append(out, mix.PaintInput{ID: p.ID, Name: p.Name, Code: p.Code, R: p.R, G: p.G, B: p.B})
+		out = append(out, mix.PaintInput{
+			ID: p.ID, Name: p.Name, Code: p.Code, R: p.R, G: p.G, B: p.B,
+			ManufacturerID: p.ManufacturerID, Manufacturer: p.Manufacturer,
+		})
 	}
 	return out
 }
