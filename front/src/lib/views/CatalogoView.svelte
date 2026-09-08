@@ -33,8 +33,9 @@
   //   - O detalhe de tinta com atalho "gerar mistura equivalente"
   //     (PaintDetailSheet) NÃO existe no protótipo aprovado desta tela —
   //     removido daqui; cada linha só alterna posse ou abre o formulário.
-  //   - "Ler do pote" (câmera, US-20/E9) segue fora desta rodada (Could) —
-  //     botão presente, sem ação (nenhuma rota/captura foi inventada).
+  //   - "Ler do pote" (câmera, US-20/E9) lê a cor da foto no próprio
+  //     navegador (canvas, média do miolo da imagem). A foto não é enviada a
+  //     lugar nenhum e nenhuma rota HTTP nova foi criada.
   //   - Os modais (cadastro/edição, novo fabricante, confirmações) ficam
   //     sempre montados no DOM e alternam via `display:none` em vez de
   //     `{#if}` — mesma técnica do protótipo (sc-if com hint-placeholder,
@@ -203,6 +204,88 @@
   }
 
   let fRgb = $derived(hexToRgb(fHex));
+
+  // O seletor nativo (<input type="color">) só aceita #rrggbb. Enquanto o campo
+  // de texto está pela metade, o seletor mostra a cor do preview (cinza padrão)
+  // em vez de recusar o valor.
+  let pickerHex = $derived(isValidHex(fHex) ? fHex.trim().toLowerCase() : rgbToHex(fRgb.r, fRgb.g, fRgb.b));
+
+  function onPickColor(ev: Event) {
+    fHex = (ev.currentTarget as HTMLInputElement).value.toUpperCase();
+  }
+
+  // ── "Ler do pote": foto → cor (US-20/E9) ──
+  // Leitura local, no navegador: nenhuma rota nova. O <input type="file"
+  // capture="environment"> abre a câmera traseira no iPad e o seletor de
+  // arquivo no desktop — o mesmo elemento cobre os dois.
+  let potInputEl: HTMLInputElement | null = $state(null);
+  let readingPot = $state(false);
+
+  function openPotCamera() {
+    potInputEl?.click();
+  }
+
+  function loadImage(src: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('decode'));
+      img.src = src;
+    });
+  }
+
+  async function hexFromPhoto(file: File): Promise<string | null> {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await loadImage(url);
+      const side = 64;
+      const canvas = document.createElement('canvas');
+      canvas.width = side;
+      canvas.height = side;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return null;
+      ctx.drawImage(img, 0, 0, side, side);
+      // Média só do miolo (50% central): a borda da foto pega mesa e fundo,
+      // não a tinta do pote.
+      const box = Math.floor(side / 2);
+      const origin = Math.floor(side / 4);
+      const { data } = ctx.getImageData(origin, origin, box, box);
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] < 128) continue;
+        r += data[i];
+        g += data[i + 1];
+        b += data[i + 2];
+        n++;
+      }
+      if (n === 0) return null;
+      return rgbToHex(Math.round(r / n), Math.round(g / n), Math.round(b / n)).toUpperCase();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  async function onPotFile(ev: Event) {
+    const input = ev.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    // Zera o valor para que a mesma foto possa ser escolhida de novo.
+    input.value = '';
+    if (!file) return;
+    readingPot = true;
+    try {
+      const hex = await hexFromPhoto(file);
+      if (!hex) {
+        toast(t('potReadFail'), 'error');
+        return;
+      }
+      fHex = hex;
+      toast(t('potReadOk'));
+    } catch {
+      toast(t('potReadFail'), 'error');
+    } finally {
+      readingPot = false;
+    }
+  }
   let fMfrName = $derived(allMfrs.find(m => m.id === fMfr)?.name ?? '');
   let formPreviewMeta = $derived(`${fCode || '—'} · ${fMfrName}${fVolume ? ` · ${fVolume}` : ''}`);
 
@@ -516,7 +599,7 @@
         </label>
         <label style="display: flex; flex-direction: column; gap: 6px; width: 130px; flex-shrink: 0;">
           <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fLeft')}</span>
-          <input type="text" bind:value={fVolume} placeholder="17 ml" style="height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;" />
+          <input type="text" inputmode="decimal" bind:value={fVolume} placeholder="17" style="height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;" />
         </label>
       </div>
 
@@ -537,7 +620,15 @@
       <div style="display: flex; flex-direction: column; gap: 8px;">
         <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fColor')}</span>
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="width: 50px; height: 50px; border-radius: 8px; border: 1px solid var(--color-neutral-800); background: rgb({fRgb.r}, {fRgb.g}, {fRgb.b}); flex-shrink: 0;"></span>
+          <input
+            type="color"
+            class="t4-swatch-picker"
+            value={pickerHex}
+            oninput={onPickColor}
+            aria-label={t('fColorPick')}
+            title={t('fColorPick')}
+            style="width: 50px; height: 50px; border-radius: 8px; border: 1px solid var(--color-neutral-800); background: rgb({fRgb.r}, {fRgb.g}, {fRgb.b}); flex-shrink: 0; cursor: pointer;"
+          />
           <input
             type="text"
             bind:value={fHex}
@@ -549,11 +640,23 @@
             spellcheck="false"
             style="flex: 1; min-width: 0; height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;"
           />
-          <!-- "Ler do pote" (câmera, US-20/E9) — fora desta rodada (Could): botão fiel ao
-               protótipo, sem captura/rota nova. -->
+          <!-- "Ler do pote" (câmera, US-20/E9): captura local no navegador — a foto
+               nunca sai do aparelho e nenhuma rota nova foi criada. -->
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            bind:this={potInputEl}
+            onchange={onPotFile}
+            tabindex="-1"
+            aria-hidden="true"
+            style="position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;"
+          />
           <button
             type="button"
             class="t4-hover-accent"
+            onclick={openPotCamera}
+            disabled={readingPot}
             style="display: inline-flex; align-items: center; gap: 8px; height: 50px; padding: 0 14px; border: 1px solid var(--color-accent-700); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
           >
             <i class="ph ph-camera" style="font-size: 18px;"></i>{t('readPot')}
@@ -664,5 +767,25 @@
   }
   .t4-hover-accent:hover {
     background: var(--color-accent-hover);
+  }
+
+  /* O seletor nativo desenha a cor num miolo com margem própria; sem isto o
+     quadrado de 50px mostra uma moldura clara em volta da cor. */
+  .t4-swatch-picker {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 0;
+    overflow: hidden;
+  }
+  .t4-swatch-picker::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+  .t4-swatch-picker::-webkit-color-swatch {
+    border: none;
+    border-radius: 7px;
+  }
+  .t4-swatch-picker::-moz-color-swatch {
+    border: none;
+    border-radius: 7px;
   }
 </style>
