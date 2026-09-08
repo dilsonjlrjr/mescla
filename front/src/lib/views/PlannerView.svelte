@@ -1335,15 +1335,19 @@
     {/snippet}
   </Header>
 
-  <!-- rf-09 (revisão 2026-09-08): tira de abas — uma por figura, só seleção.
-       Mover/excluir NÃO ficam mais por aba (eram 4 botões × N abas,
-       duplicando controle a cada figura nova); viram um controle único, no
-       painel direito, agindo sobre a aba ATIVA. -->
+  <!-- rf-09 (revisão 2026-09-08, ajuste de posição): tira de abas — uma por
+       figura, só seleção. Mover/excluir NÃO ficam mais por aba (eram 4
+       botões × N abas, duplicando controle a cada figura nova); viram um
+       controle único, na MESMA linha da tira, separado por régua vertical,
+       agindo sobre a aba ATIVA. -->
   <div
-    role="tablist"
-    aria-label={t('tabsListLabel')}
-    style="flex-shrink: 0; display: flex; align-items: center; gap: 6px; padding: 8px 20px; border-bottom: 1px solid var(--color-line); overflow-x: auto;"
+    style="flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 8px 20px; border-bottom: 1px solid var(--color-line);"
   >
+    <div
+      role="tablist"
+      aria-label={t('tabsListLabel')}
+      style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; overflow-x: auto;"
+    >
     {#each tabs as aba, i (aba.uid)}
       {#if renamingTabIndex === i}
         <!-- achado 4 do guardrail rf-09/CA28: o `tabpanel` referencia
@@ -1380,12 +1384,39 @@
         </button>
       {/if}
     {/each}
-    <button
-      aria-label={t('addTabBtn')}
-      title={t('addTabBtn')}
-      onclick={addTab}
-      style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-accent-700); border-radius: 8px; background: transparent; color: var(--color-accent-400); cursor: pointer; flex-shrink: 0;"
-    ><i class="ph ph-plus" style="font-size: 18px;"></i></button>
+      <button
+        aria-label={t('addTabBtn')}
+        title={t('addTabBtn')}
+        onclick={addTab}
+        style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-accent-700); border-radius: 8px; background: transparent; color: var(--color-accent-400); cursor: pointer; flex-shrink: 0;"
+      ><i class="ph ph-plus" style="font-size: 18px;"></i></button>
+    </div>
+
+    <!-- separador entre figuras e controle único da aba ativa -->
+    <div aria-hidden="true" style="flex-shrink: 0; width: 1px; align-self: stretch; margin: 6px 0; background: var(--color-line);"></div>
+
+    <div style="flex-shrink: 0; display: flex; align-items: center; gap: 6px;">
+      <button
+        aria-label={t('moveTabLeft')}
+        title={t('moveTabLeft')}
+        disabled={activeTabIndex === 0}
+        onclick={() => moveTab(activeTabIndex, -1)}
+        style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer; opacity: {activeTabIndex === 0 ? 0.4 : 1};"
+      ><i class="ph ph-caret-left" style="font-size: 15px;"></i></button>
+      <button
+        aria-label={t('moveTabRight')}
+        title={t('moveTabRight')}
+        disabled={activeTabIndex === tabs.length - 1}
+        onclick={() => moveTab(activeTabIndex, 1)}
+        style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer; opacity: {activeTabIndex === tabs.length - 1 ? 0.4 : 1};"
+      ><i class="ph ph-caret-right" style="font-size: 15px;"></i></button>
+      <button
+        aria-label={t('deleteTabBtn')}
+        title={t('deleteTabBtn')}
+        onclick={() => onDeleteTabClick(activeTabIndex)}
+        style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-500); cursor: pointer;"
+      ><i class="ph ph-trash-simple" style="font-size: 15px;"></i></button>
+    </div>
   </div>
 
   <div
@@ -1469,32 +1500,6 @@
 
     <div style="min-height: 0; display: flex; flex-direction: column;">
       <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 20px;">
-        <!-- rf-09 (revisão 2026-09-08): controle único da aba ativa — excluir/
-             voltar/avançar. Antes vinha 4× por aba na tira; agora é um só,
-             aqui no painel direito, agindo sobre `activeTabIndex`. -->
-        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-bottom: 14px;">
-          <button
-            aria-label={t('moveTabLeft')}
-            title={t('moveTabLeft')}
-            disabled={activeTabIndex === 0}
-            onclick={() => moveTab(activeTabIndex, -1)}
-            style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer; opacity: {activeTabIndex === 0 ? 0.4 : 1};"
-          ><i class="ph ph-caret-left" style="font-size: 15px;"></i></button>
-          <button
-            aria-label={t('moveTabRight')}
-            title={t('moveTabRight')}
-            disabled={activeTabIndex === tabs.length - 1}
-            onclick={() => moveTab(activeTabIndex, 1)}
-            style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer; opacity: {activeTabIndex === tabs.length - 1 ? 0.4 : 1};"
-          ><i class="ph ph-caret-right" style="font-size: 15px;"></i></button>
-          <button
-            aria-label={t('deleteTabBtn')}
-            title={t('deleteTabBtn')}
-            onclick={() => onDeleteTabClick(activeTabIndex)}
-            style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-500); cursor: pointer;"
-          ><i class="ph ph-trash-simple" style="font-size: 15px;"></i></button>
-        </div>
-
         <p class="section-label" style="margin: 0 0 10px;">{t('paintWithMine')}</p>
         <div style="display: flex; flex-wrap: wrap; gap: 8px;">
           {#each manufacturers as m (m.id)}
