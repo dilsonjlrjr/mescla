@@ -319,9 +319,12 @@
     try {
       // RG-10 item 1 — pote pronto vence, a menos que o pintor peça a mistura.
       if (!forceMix) {
-        const similar = await findSimilar(tg.r, tg.g, tg.b, 30, 1);
+        // Pede 2: o primeiro resultado da busca por cor é a PRÓPRIA tinta de
+        // origem (ΔE 0), e responder "use a tinta que você já escolheu" não é
+        // equivalência (D-011). Alvo livre (hex) não tem origem a excluir.
+        const similar = await findSimilar(tg.r, tg.g, tg.b, 30, 2);
         if (!isCurrentRequest(seq, requestSeq)) return;
-        const best = similar[0];
+        const best = similar.find(s => s.paintId !== sourcePaint?.id);
         if (best && best.deltaE < 2.5) {
           readyPot = best;
           abrirResposta();
@@ -1091,7 +1094,7 @@
                 {/if}
               </div>
 
-              <p style="margin: 0; font-size: 16px; color: var(--color-neutral-400);">{formula.tips[0] || t('startBiggest')}</p>
+              <p style="margin: 0; font-size: 16px; color: var(--color-neutral-400);">{formula.tips?.[0] || t('startBiggest')}</p>
 
               {#if otherBrands.length > 0}
                 <p class="section-label" style="margin: 12px 0 0;">{t('sameOtherBrand')}</p>

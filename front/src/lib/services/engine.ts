@@ -53,7 +53,9 @@ export interface EquivalentRecipe {
   /** rf-11: a região foi resolvida fora do universo pedido, com autorização
    *  do usuário no diálogo. */
   foraDoUniverso?: boolean;
-  tips: string[];
+  /** D-010: pode vir `null` de servidor antigo (fatia nil do Go virava
+   *  `null` no JSON). Quem lê guarda antes de indexar. */
+  tips: string[] | null;
   /** rf-13 RN6: true quando os ingredientes têm mais de um manufacturerId distinto.
    *  Decisão do servidor — o cliente não infere. */
   crossBrand: boolean;

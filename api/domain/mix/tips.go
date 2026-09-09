@@ -22,7 +22,10 @@ const (
 // 3 dicas: só gera uma quando o desvio é perceptível E existe um ingrediente
 // plausível pra corrigi-lo.
 func GenerateTips(targetR, targetG, targetB uint8, recipe Recipe) []string {
-	var tips []string
+	// Fatia vazia, nunca nil: `var tips []string` serializa como `null` no
+	// JSON da API e quem consome sem guarda quebra no primeiro acesso
+	// (D-010). Sem dica é lista vazia, não ausência de campo.
+	tips := []string{}
 	if len(recipe.Ingredients) == 0 {
 		return tips
 	}
