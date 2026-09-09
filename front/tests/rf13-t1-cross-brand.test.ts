@@ -124,7 +124,7 @@ describe('rf-13 — regressões do guardrail', () => {
   it('as chaves novas do rf-13 existem nos quatro idiomas de LANGS', () => {
     // Achado: entraram só em pt/en; es e fr caíam no fallback português.
     const novas = [
-      'universeLabel', 'universoMix', 'universoBrand', 'chooseBrandAria',
+      'universeLabel', 'universoMix', 'universoBrand', 'chooseBrandAria', 'chooseSupplierPlaceholder',
       'searchEquivalenceBtn', 'targetVolumeLabel', 'voltarBtn', 'sheetTitle',
       'tapToCalc', 'saveDisabledCrossBrand',
     ];

@@ -430,12 +430,16 @@
   }
 
   function buscarEquivalencia() {
-    if (target) void compute();
+    if (target && !buscaBloqueada) void compute();
   }
+
+  // RN15: escolher o universo é preparação, não busca. Trocar de opção ou de
+  // fornecedor no combo muda só o que a próxima busca vai usar — quem calcula é
+  // o botão. Sem fornecedor escolhido não há o que buscar.
+  let buscaBloqueada = $derived(universo.tipo === 'marca' && !universo.manufacturerId);
 
   function onUniversoChange(u: Universo) {
     universo = u;
-    if (target && stage !== 'vazio' && stage !== 'nao-achei') void compute();
   }
 
   function useMixAnyway() {
@@ -443,8 +447,12 @@
     void compute();
   }
 
+  // Exceção declarada da RN15: a linha de "a mesma cor em outra marca" é ação
+  // direta sobre um resultado ("mostre naquela marca"), então vale como o
+  // próprio toque no botão e recalcula na hora.
   function pickOtherBrand(b: BrandBest) {
-    onUniversoChange({ tipo: 'marca', manufacturerId: b.manufacturerId });
+    universo = { tipo: 'marca', manufacturerId: b.manufacturerId };
+    if (target) void compute();
   }
 
   let baseDrops = $derived.by(() => (formula ? computeDropsFromIngredients(formula.ingredients) : []));
@@ -816,7 +824,7 @@
               class="pressable t1h-border"
               aria-pressed={universo.tipo === 'marca'}
               disabled={stage === 'calculando'}
-              onclick={() => onUniversoChange({ tipo: 'marca', manufacturerId: universo.manufacturerId ?? sourcePaint?.manufacturerId ?? allManufacturers()[0]?.id })}
+              onclick={() => onUniversoChange({ tipo: 'marca', manufacturerId: universo.manufacturerId })}
               style="min-height: 44px; height: 48px; padding: 0 16px; border: 1px solid {universo.tipo === 'marca' ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 8px; background: {universo.tipo === 'marca' ? 'var(--color-accent)' : 'transparent'}; color: {universo.tipo === 'marca' ? 'var(--color-accent-100)' : 'var(--color-text)'}; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer;"
               >{t('universoBrand')}</button
             >
@@ -833,10 +841,14 @@
             <select
               aria-label={t('chooseBrandAria')}
               disabled={stage === 'calculando'}
-              value={universo.manufacturerId}
-              onchange={e => onUniversoChange({ tipo: 'marca', manufacturerId: Number((e.currentTarget as HTMLSelectElement).value) })}
+              value={universo.manufacturerId ?? ''}
+              onchange={e => onUniversoChange({ tipo: 'marca', manufacturerId: Number((e.currentTarget as HTMLSelectElement).value) || undefined })}
               style="height: 44px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 14px;"
             >
+              <!-- RN1: nenhum fornecedor vem escolhido. O placeholder é a única
+                   opção sem valor, e enquanto ele estiver ativo a busca fica
+                   desabilitada (RN15). -->
+              <option value="" disabled>{t('chooseSupplierPlaceholder')}</option>
               {#each allManufacturers() as m (m.id)}
                 <option value={m.id}>{m.name}</option>
               {/each}
@@ -847,8 +859,8 @@
         <button
           class="pressable t1h-acc"
           onclick={buscarEquivalencia}
-          disabled={stage === 'calculando'}
-          style="display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 56px; border: 1px solid var(--color-accent); border-radius: 8px; background: var(--color-accent); color: var(--color-accent-100); font-family: inherit; font-size: 16px; font-weight: 500; cursor: pointer;"
+          disabled={stage === 'calculando' || buscaBloqueada}
+          style="display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 56px; border: 1px solid var(--color-accent); border-radius: 8px; background: var(--color-accent); color: var(--color-accent-100); font-family: inherit; font-size: 16px; font-weight: 500; cursor: {buscaBloqueada ? 'not-allowed' : 'pointer'}; opacity: {buscaBloqueada ? 0.5 : 1};"
         >
           {#if stage === 'calculando'}
             <Spinner size={18} label={t('calculating')} />
