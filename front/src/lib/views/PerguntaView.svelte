@@ -318,7 +318,13 @@
 
     try {
       // RG-10 item 1 — pote pronto vence, a menos que o pintor peça a mistura.
-      if (!forceMix) {
+      // Só no universo "misturar marcas": `findSimilar` varre o catálogo
+      // inteiro e ignora o universo escolhido, então em "uma marca" ou "meu
+      // estoque" ele respondia com pote de OUTRA marca e a mistura pedida
+      // nunca aparecia (D-012). Nesses universos quem decide pote x mistura é
+      // a própria rota da receita: ela devolve `method: "single"` quando uma
+      // tinta só resolve, dentro do universo.
+      if (!forceMix && universo.tipo === 'mix') {
         // Pede 2: o primeiro resultado da busca por cor é a PRÓPRIA tinta de
         // origem (ΔE 0), e responder "use a tinta que você já escolheu" não é
         // equivalência (D-011). Alvo livre (hex) não tem origem a excluir.
