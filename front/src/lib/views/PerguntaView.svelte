@@ -214,6 +214,27 @@
     stage = 'nao-achei';
   }
 
+  // A logo é o caminho de volta à página principal. Em T1 já estamos nela, então
+  // "voltar" é limpar: descarta alvo, resposta e busca, e volta ao estado
+  // inicial com a grade de amostras. Fecha a camada da resposta antes, senão o
+  // back do Android encontraria uma camada órfã (CA17).
+  function irParaInicio() {
+    closeRespostaLayer?.();
+    closeRespostaLayer = null;
+    suggestOpen = false;
+    query = '';
+    sourcePaint = null;
+    freeTarget = null;
+    forceMix = false;
+    manualDrops = null;
+    readyPot = null;
+    formula = null;
+    otherBrands = [];
+    outrasMarcasDe = null;
+    universo = { tipo: 'mix' };
+    stage = 'vazio';
+  }
+
   function resetForNewTarget() {
     suggestOpen = false;
     query = '';
@@ -609,10 +630,15 @@
   <div
     style="display: flex; align-items: center; flex-wrap: wrap; row-gap: 10px; column-gap: 18px; min-height: 76px; flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid var(--color-line);"
   >
-    <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+    <button
+      class="pressable"
+      onclick={irParaInicio}
+      aria-label={t('homeAria')}
+      style="display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-height: 44px; padding: 0 6px; border: none; background: transparent; color: inherit; font-family: inherit; cursor: pointer;"
+    >
       <BrandMark size={30} />
       <span style="font-size: clamp(16px, 1.7cqi, 19px); font-weight: 500; letter-spacing: -0.02em;">Mescla</span>
-    </div>
+    </button>
 
     <div style="position: relative; flex: 1 1 420px; min-width: 0; order: 3;">
       <div

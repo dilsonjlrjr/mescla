@@ -35,7 +35,16 @@
     <i class="ph ph-arrow-left" style="font-size: 19px;"></i>{t('question')}
   </button>
 
-  <BrandMark size={26} />
+  <!-- A logo também volta pra T1: nas telas secundárias "página principal" é a
+       própria T1, sem mexer no estado dela. -->
+  <button
+    class="pressable"
+    onclick={() => switchTab('pergunta')}
+    aria-label={t('homeAria')}
+    style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; border: none; background: transparent; cursor: pointer;"
+  >
+    <BrandMark size={26} />
+  </button>
 
   {#if kicker || title}
     <div style="display: flex; flex-direction: column; min-width: 0;">

@@ -115,7 +115,7 @@ export const dict = {
     deleteTabBtn: 'Excluir figura', deleteTabConfirm: 'Excluir a figura “{name}” e suas regiões?',
     tabProgressShort: '{a}/{b}', usedInTabsLabel: 'Usada em {tabs}',
     universeLabel: 'Universo de busca', universoMix: 'Misturar marcas', universoBrand: 'Usar outro fornecedor',
-    chooseBrandAria: 'Escolher fornecedor', chooseSupplierPlaceholder: 'Escolha o fornecedor', searchEquivalenceBtn: 'Buscar equivalência',
+    chooseBrandAria: 'Escolher fornecedor', chooseSupplierPlaceholder: 'Escolha o fornecedor', homeAria: 'Ir para a página principal', searchEquivalenceBtn: 'Buscar equivalência',
     targetVolumeLabel: 'Volume alvo', voltarBtn: 'Voltar', sheetTitle: 'Ficha da tinta',
     tapToCalc: 'Toque em “Buscar equivalência” para ver a resposta.',
     saveDisabledCrossBrand: 'Fórmulas com mais de uma marca ainda não salvam — restrinja a uma marca para salvar.'
@@ -231,7 +231,7 @@ export const dict = {
     deleteTabBtn: 'Delete figure', deleteTabConfirm: 'Delete figure "{name}" and its regions?',
     tabProgressShort: '{a}/{b}', usedInTabsLabel: 'Used in {tabs}',
     universeLabel: 'Search universe', universoMix: 'Mix brands', universoBrand: 'Use another supplier',
-    chooseBrandAria: 'Choose supplier', chooseSupplierPlaceholder: 'Choose the supplier', searchEquivalenceBtn: 'Find equivalence',
+    chooseBrandAria: 'Choose supplier', chooseSupplierPlaceholder: 'Choose the supplier', homeAria: 'Go to the main page', searchEquivalenceBtn: 'Find equivalence',
     targetVolumeLabel: 'Target volume', voltarBtn: 'Back', sheetTitle: 'Paint sheet',
     tapToCalc: 'Tap "Find equivalence" to see the answer.',
     saveDisabledCrossBrand: 'Cross-brand formulas cannot be saved yet — restrict to one brand to save.'
@@ -347,7 +347,7 @@ export const dict = {
     deleteTabBtn: 'Eliminar figura', deleteTabConfirm: '¿Eliminar la figura “{name}” y sus regiones?',
     tabProgressShort: '{a}/{b}', usedInTabsLabel: 'Usada en {tabs}',
     universeLabel: 'Universo de búsqueda', universoMix: 'Mezclar marcas', universoBrand: 'Usar otro proveedor',
-    chooseBrandAria: 'Elegir proveedor', chooseSupplierPlaceholder: 'Elige el proveedor', searchEquivalenceBtn: 'Buscar equivalencia',
+    chooseBrandAria: 'Elegir proveedor', chooseSupplierPlaceholder: 'Elige el proveedor', homeAria: 'Ir a la página principal', searchEquivalenceBtn: 'Buscar equivalencia',
     targetVolumeLabel: 'Volumen objetivo', voltarBtn: 'Volver', sheetTitle: 'Ficha de la pintura',
     tapToCalc: 'Toca «Buscar equivalencia» para ver la respuesta.',
     saveDisabledCrossBrand: 'Las fórmulas con más de una marca aún no se guardan — limita a una marca para guardar.'
@@ -463,7 +463,7 @@ export const dict = {
     deleteTabBtn: 'Supprimer la figure', deleteTabConfirm: 'Supprimer la figure « {name} » et ses zones ?',
     tabProgressShort: '{a}/{b}', usedInTabsLabel: 'Utilisée dans {tabs}',
     universeLabel: 'Univers de recherche', universoMix: 'Mélanger les marques', universoBrand: 'Utiliser un autre fournisseur',
-    chooseBrandAria: 'Choisir le fournisseur', chooseSupplierPlaceholder: 'Choisissez le fournisseur', searchEquivalenceBtn: 'Chercher une équivalence',
+    chooseBrandAria: 'Choisir le fournisseur', chooseSupplierPlaceholder: 'Choisissez le fournisseur', homeAria: 'Aller à la page principale', searchEquivalenceBtn: 'Chercher une équivalence',
     targetVolumeLabel: 'Volume cible', voltarBtn: 'Retour', sheetTitle: 'Fiche de la peinture',
     tapToCalc: 'Touchez « Chercher une équivalence » pour voir la réponse.',
     saveDisabledCrossBrand: 'Les formules à plusieurs marques ne sont pas encore enregistrables — limitez à une marque pour enregistrer.'
