@@ -88,6 +88,8 @@ export interface StockPaint {
   b: number;
   volume: string;
   notes: string;
+  /** Id da tinta do catálogo de onde esta nasceu (só no front; a API ignora). */
+  catalogId?: number;
 }
 
 export interface StockRowError {

@@ -25,9 +25,10 @@
   // D-001 (fidelidade ao protótipo):
   //   - O protótipo funde a antiga lista "tenho" + catálogo virtualizado numa
   //     única lista de linhas (toggle tenho/não-tenho à esquerda, "Editar" à
-  //     direita). "Editar" numa linha que ainda não é minha abre o mesmo modal
-  //     de cadastro pré-preenchido com os dados do catálogo — capacidade nova,
-  //     sem regressão (antes essas linhas só tinham o toggle).
+  //     direita). "Editar" numa linha que ainda não é minha edita a própria
+  //     linha: salvar grava no estoque uma cópia ligada ao catálogo por
+  //     `catalogId`, e ela toma o lugar da linha do catálogo (D-013). Linha do
+  //     estoque ganha "Excluir", sempre atrás da confirmação do tema.
   //   - O filtro "só as que eu tenho" (onlyMine) é novo nesta tela — mesmo
   //     rótulo/mecanismo já usado em T1.
   //   - O detalhe de tinta com atalho "gerar mistura equivalente"
@@ -93,6 +94,16 @@
   }
   let stockKeys = $derived(new Set(stock.paints.filter(p => p.code !== '').map(p => stockKeyOf(p.manufacturer, p.code))));
 
+  // Tinta do estoque que nasceu de uma linha do catálogo guarda `catalogId`
+  // (D-013): editar código ou fabricante não traz a linha original de volta
+  // como duplicata. Estoque gravado antes do campo ainda casa por
+  // código+fabricante.
+  let catalogIdByKey = $derived(new Map(allPaints().filter(p => p.code !== '').map(p => [stockKeyOf(p.manufacturer, p.code), p.id])));
+  function catalogOriginOf(sp: StockPaint): number | undefined {
+    return sp.catalogId ?? (sp.code !== '' ? catalogIdByKey.get(stockKeyOf(sp.manufacturer, sp.code)) : undefined);
+  }
+  let linkedCatalogIds = $derived(new Set(stock.paints.map(catalogOriginOf).filter((id): id is number => id != null)));
+
   // ── Aba Tintas ──
   let filteredCatalog = $derived.by(() => {
     const base = search.trim() ? searchPaints(search, { manufacturerId: mfrFilter ?? undefined, limit: 100000 }) : allPaints().filter(p => mfrFilter == null || p.manufacturerId === mfrFilter);
@@ -112,12 +123,12 @@
   );
 
   function toggleHave(p: Paint) {
-    const key = stockKeyOf(p.manufacturer, p.code);
-    if (stockKeys.has(key)) {
-      const sp = stock.paints.find(s => s.manufacturer === p.manufacturer && s.code === p.code);
-      if (sp) removeStockPaint(sp.id);
+    const sp = stock.paints.find(s => catalogOriginOf(s) === p.id);
+    if (sp) {
+      removeStockPaint(sp.id);
     } else {
       addStockPaint({
+        catalogId: p.id,
         manufacturerId: p.manufacturerId,
         manufacturer: p.manufacturer,
         name: p.name,
@@ -138,6 +149,7 @@
     hex: string;
     toggle: () => void;
     edit: () => void;
+    del?: () => void;
   }
 
   let mergedRows = $derived.by(() => {
@@ -147,12 +159,18 @@
       name: p.name,
       meta: `${p.code || '—'} · ${p.manufacturer}${p.volume ? ` · ${p.volume}` : ''}`,
       hex: rgbToHex(p.r, p.g, p.b),
-      toggle: () => removeStockPaint(p.id),
+      // Desmarcar tinta do catálogo só devolve a linha ao catálogo; tinta
+      // cadastrada à mão sumiria de vez, então passa pela confirmação.
+      toggle: () => {
+        if (catalogOriginOf(p) != null) removeStockPaint(p.id);
+        else askDeletePaint(p);
+      },
       edit: () => openEdit(p),
+      del: () => askDeletePaint(p),
     }));
     if (!onlyMine) {
       for (const p of filteredCatalog) {
-        if (stockKeys.has(stockKeyOf(p.manufacturer, p.code))) continue;
+        if (linkedCatalogIds.has(p.id) || stockKeys.has(stockKeyOf(p.manufacturer, p.code))) continue;
         rows.push({
           key: `c${p.id}`,
           have: false,
@@ -177,6 +195,9 @@
   // ── Modal cadastro/edição (tinta) ──
   let formOpen = $state(false);
   let editingId: number | null = $state(null);
+  // Linha do catálogo (ainda não minha) aberta em "Editar" — D-013.
+  let editingCatalogId: number | null = $state(null);
+  let editing = $derived(editingId !== null || editingCatalogId !== null);
   let fMfr: number | '' = $state('');
   let fName = $state('');
   let fCode = $state('');
@@ -291,6 +312,7 @@
 
   function openAdd() {
     editingId = null;
+    editingCatalogId = null;
     fMfr = allMfrs[0]?.id ?? '';
     fName = '';
     fCode = '';
@@ -302,6 +324,7 @@
 
   function openEdit(p: StockPaint) {
     editingId = p.id;
+    editingCatalogId = null;
     const m = allMfrs.find(x => x.name === p.manufacturer);
     fMfr = m?.id ?? '';
     fName = p.name;
@@ -314,6 +337,7 @@
 
   function openEditCatalog(p: Paint) {
     editingId = null;
+    editingCatalogId = p.id;
     fMfr = p.manufacturerId;
     fName = p.name;
     fCode = p.code;
@@ -348,10 +372,15 @@
       volume: fVolume.trim(),
       notes: '',
     };
-    if (editingId === null) {
-      addStockPaint(base);
+    if (editingId !== null) {
+      // A origem sai do registro ANTES da troca: código e fabricante podem
+      // mudar agora e o casamento por chave se perderia.
+      const prev = stock.paints.find(x => x.id === editingId);
+      updateStockPaint({ ...base, id: editingId, catalogId: prev ? catalogOriginOf(prev) : undefined });
+    } else if (editingCatalogId !== null) {
+      addStockPaint({ ...base, catalogId: editingCatalogId });
     } else {
-      updateStockPaint({ ...base, id: editingId });
+      addStockPaint(base);
     }
     saving = false;
     formOpen = false;
@@ -362,10 +391,9 @@
   let confirmPaintDel: StockPaint | null = $state(null);
   let confirmMakerDel: { id: number; name: string } | null = $state(null);
 
-  function askDeletePaint() {
-    if (editingId == null) return;
-    const p = stock.paints.find(x => x.id === editingId);
-    if (p) confirmPaintDel = p;
+  function askDeletePaint(p?: StockPaint) {
+    const alvo = p ?? (editingId != null ? stock.paints.find(x => x.id === editingId) : undefined);
+    if (alvo) confirmPaintDel = alvo;
   }
   function doDeletePaint() {
     if (!confirmPaintDel) return;
@@ -530,6 +558,11 @@
                       <span style="font-size: 13px; color: var(--color-neutral-500);">{r.meta}</span>
                     </span>
                     <button class="t4-hover-ghost" onclick={r.edit} style="height: 48px; padding: 0 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('edit')}</button>
+                    {#if r.del}
+                      <button class="t4-hover-ghost" onclick={r.del} aria-label={t('delPaintA')} title={t('delPaintA')} style="display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer; flex-shrink: 0;">
+                        <i class="ph ph-trash" style="font-size: 18px;"></i>
+                      </button>
+                    {/if}
                   </div>
                 {/snippet}
               </VirtualList>
@@ -572,7 +605,7 @@
   <!-- Modal cadastro/edição de tinta -->
   <div class="t4-modal" style="{modalKind !== 'paint' ? 'display: none; ' : ''}position: relative; width: min(560px, 100%); max-height: 100%; overflow-y: auto; padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
     <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 20px;">
-      <span style="flex: 1; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: var(--color-text);">{editingId === null ? t('newPaint') : t('editPaint')}</span>
+      <span style="flex: 1; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: var(--color-text);">{editing ? t('editPaint') : t('newPaint')}</span>
       <button class="t4-hover-ghost" onclick={closeModal} aria-label={t('ariaClose')} style="display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer;">
         <i class="ph ph-x" style="font-size: 20px;"></i>
       </button>
@@ -680,9 +713,9 @@
       </button>
 
       <div style="display: flex; gap: 10px; margin-top: 6px;">
-        <button class="t4-hover-accent" onclick={saveForm} disabled={saving} style="flex: 1; height: 58px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 16px; font-weight: 500; cursor: pointer;">{editingId === null ? t('addPaintBtn') : t('saveChanges')}</button>
+        <button class="t4-hover-accent" onclick={saveForm} disabled={saving} style="flex: 1; height: 58px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 16px; font-weight: 500; cursor: pointer;">{editing ? t('saveChanges') : t('addPaintBtn')}</button>
         {#if editingId !== null}
-          <button class="t4-hover-ghost" onclick={askDeletePaint} style="height: 58px; padding: 0 18px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('delPaintA')}</button>
+          <button class="t4-hover-ghost" onclick={() => askDeletePaint()} style="height: 58px; padding: 0 18px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('delPaintA')}</button>
         {/if}
       </div>
       <p style="margin: 2px 0 0; font-size: 13px; color: var(--color-neutral-500); text-wrap: pretty;">{t('formNote')}</p>
@@ -706,9 +739,9 @@
   </div>
 
   <!-- Confirmação exclusão de tinta -->
-  <div class="t4-modal" style="{modalKind !== 'confirmPaint' ? 'display: none; ' : ''}position: relative; width: min(440px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
+  <div class="t4-modal" role="alertdialog" aria-modal="true" style="{modalKind !== 'confirmPaint' ? 'display: none; ' : ''}position: relative; width: min(440px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
     <p style="margin: 0; font-size: clamp(16px, 1.8cqi, 21px); font-weight: 500; letter-spacing: -0.01em; color: var(--color-text); text-wrap: pretty;">{t('delPaintT', { name: confirmPaintDel?.name ?? '' })}</p>
-    <p style="margin: 10px 0 0; font-size: 15px; color: var(--color-neutral-400); text-wrap: pretty;">{t('delPaintB')}</p>
+    <p style="margin: 10px 0 0; font-size: 15px; color: var(--color-neutral-400); text-wrap: pretty;">{confirmPaintDel && catalogOriginOf(confirmPaintDel) != null ? t('delPaintBCat') : t('delPaintB')}</p>
     <div style="display: flex; gap: 10px; margin-top: 22px;">
       <button class="t4-hover-ghost" onclick={closeModal} style="flex: 1; height: 56px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{t('cancel')}</button>
       <button class="t4-hover-accent" onclick={doDeletePaint} style="flex: 1; height: 56px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{t('delPaintA')}</button>
