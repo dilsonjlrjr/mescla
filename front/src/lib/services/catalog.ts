@@ -15,6 +15,8 @@ export interface Paint {
   r: number;
   g: number;
   b: number;
+  /** Tipo de tinta (rf-15); 0 = sem tipo. */
+  paintTypeId: number;
 }
 
 export interface Manufacturer {
@@ -45,6 +47,7 @@ interface PaintResponse {
   name: string;
   code: string;
   productLine: string;
+  paintTypeId?: number;
   r: number;
   g: number;
   b: number;
@@ -79,11 +82,13 @@ function indexEntry(p: Paint, compact: string): string {
 export function loadCatalog(): Promise<void> {
   if (!loadPromise) {
     loadPromise = (async () => {
-      const [mfrs, paintRows] = await Promise.all([
+      const [mfrs, paintRows, types] = await Promise.all([
         apiGet<ManufacturerResponse[]>('/manufacturers'),
         apiGet<PaintResponse[]>('/paints'),
+        apiGet<PaintType[]>('/paint-types').catch(() => [] as PaintType[]),
       ]);
       manufacturers = mfrs.map(toManufacturer);
+      paintTypes = types;
       paints = paintRows.map(p => ({
         id: p.id,
         manufacturerId: p.manufacturerId,
@@ -91,6 +96,7 @@ export function loadCatalog(): Promise<void> {
         name: p.name,
         code: p.code,
         line: p.productLine,
+        paintTypeId: p.paintTypeId ?? 0,
         r: p.r,
         g: p.g,
         b: p.b,
@@ -150,6 +156,46 @@ export async function updateManufacturer(id: number, name: string): Promise<Manu
 
 export async function deleteManufacturer(id: number): Promise<void> {
   await apiDelete<{ id: number }>(`/manufacturers/${id}`);
+}
+
+// ── Tipos de tinta (rf-15) ──
+
+export interface PaintType {
+  id: number;
+  name: string;
+  /** Tintas do catálogo com este tipo — prende a exclusão. */
+  paintCount: number;
+}
+
+export const MAX_PAINT_TYPE_NAME = 60;
+
+let paintTypes: PaintType[] = [];
+let paintTypeSeq = 0;
+
+export function allPaintTypes(): PaintType[] {
+  return paintTypes;
+}
+
+/** Recarrega os tipos; resposta superada por outra mais nova é descartada. */
+export async function reloadPaintTypes(): Promise<PaintType[]> {
+  const seq = ++paintTypeSeq;
+  const rows = await apiGet<PaintType[]>('/paint-types');
+  if (seq !== paintTypeSeq) return paintTypes;
+  paintTypes = rows;
+  catalogRev.n++;
+  return paintTypes;
+}
+
+export function createPaintType(name: string): Promise<PaintType> {
+  return apiPost<PaintType>('/paint-types', { name });
+}
+
+export function updatePaintType(id: number, name: string): Promise<PaintType> {
+  return apiPut<PaintType>(`/paint-types/${id}`, { name });
+}
+
+export async function deletePaintType(id: number): Promise<void> {
+  await apiDelete<{ id: number }>(`/paint-types/${id}`);
 }
 
 const LEGACY_MFRS_KEY = 'mescla.customMfrs.v1';

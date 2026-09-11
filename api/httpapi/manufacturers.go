@@ -37,7 +37,7 @@ func handleAddManufacturer(svc *service.PaintService) fasthttp.RequestHandler {
 // handleUpdateManufacturer atende PUT /manufacturers/{id} {"name":"..."}.
 func handleUpdateManufacturer(svc *service.PaintService) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		id, ok := manufacturerID(ctx)
+		id, ok := positiveID(ctx)
 		if !ok {
 			return
 		}
@@ -58,7 +58,7 @@ func handleUpdateManufacturer(svc *service.PaintService) fasthttp.RequestHandler
 // fabricante com tinta ou em uso responde 409 (RG-18).
 func handleDeleteManufacturer(svc *service.PaintService) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		id, ok := manufacturerID(ctx)
+		id, ok := positiveID(ctx)
 		if !ok {
 			return
 		}
@@ -70,7 +70,7 @@ func handleDeleteManufacturer(svc *service.PaintService) fasthttp.RequestHandler
 	}
 }
 
-func manufacturerID(ctx *fasthttp.RequestCtx) (int64, bool) {
+func positiveID(ctx *fasthttp.RequestCtx) (int64, bool) {
 	id, ok := pathInt64(ctx, "id")
 	if !ok {
 		return 0, false
@@ -83,7 +83,7 @@ func manufacturerID(ctx *fasthttp.RequestCtx) (int64, bool) {
 }
 
 func writeManufacturerError(ctx *fasthttp.RequestCtx, err error) {
-	var nameErr *service.ManufacturerNameError
+	var nameErr *service.NameError
 	var paintsErr *service.ManufacturerHasPaintsError
 	switch {
 	case errors.As(err, &nameErr):

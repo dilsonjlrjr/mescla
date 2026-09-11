@@ -45,6 +45,12 @@ vi.mock('../src/lib/services/catalog', () => ({
   updateManufacturer: () => Promise.reject(new Error('não usado')),
   deleteManufacturer: () => Promise.reject(new Error('não usado')),
   MAX_MANUFACTURER_NAME: 80,
+  allPaintTypes: () => [],
+  reloadPaintTypes: () => Promise.resolve([]),
+  createPaintType: () => Promise.reject(new Error('não usado')),
+  updatePaintType: () => Promise.reject(new Error('não usado')),
+  deletePaintType: () => Promise.reject(new Error('não usado')),
+  MAX_PAINT_TYPE_NAME: 60,
 }));
 
 const RECIPE = {

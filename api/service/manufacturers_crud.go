@@ -22,10 +22,10 @@ var (
 	ErrManufacturerInUse     = errors.New("fabricante em uso por receita ou recurso")
 )
 
-// ManufacturerNameError recusa o nome pela RN1; Msg é a frase mostrada ao usuário.
-type ManufacturerNameError struct{ Msg string }
+// NameError recusa o nome pela RN1; Msg é a frase mostrada ao usuário.
+type NameError struct{ Msg string }
 
-func (e *ManufacturerNameError) Error() string { return e.Msg }
+func (e *NameError) Error() string { return e.Msg }
 
 // ManufacturerHasPaintsError recusa a exclusão: tinta do catálogo ou do
 // estoque do servidor prende o fabricante.
@@ -35,10 +35,10 @@ func (e *ManufacturerHasPaintsError) Error() string {
 	return fmt.Sprintf("O fabricante tem %d tintas no catálogo e %d no estoque e não pode ser excluído.", e.Catalog, e.Stock)
 }
 
-// cleanManufacturerName tira os caracteres de formatação invisíveis (U+200B,
+// cleanName tira os caracteres de formatação invisíveis (U+200B,
 // U+FEFF...) que TrimSpace não remove — sem isso nasce um segundo fabricante
 // com nome visualmente idêntico — e depois apara.
-func cleanManufacturerName(name string) string {
+func cleanName(name string) string {
 	return strings.TrimSpace(strings.Map(func(r rune) rune {
 		if unicode.Is(unicode.Cf, r) {
 			return -1
@@ -48,12 +48,12 @@ func cleanManufacturerName(name string) string {
 }
 
 func normalizeManufacturerName(name string) (string, error) {
-	name = cleanManufacturerName(name)
+	name = cleanName(name)
 	if name == "" {
-		return "", &ManufacturerNameError{Msg: "Informe o nome do fabricante."}
+		return "", &NameError{Msg: "Informe o nome do fabricante."}
 	}
 	if utf8.RuneCountInString(name) > maxManufacturerNameRunes {
-		return "", &ManufacturerNameError{Msg: fmt.Sprintf("O nome pode ter no máximo %d caracteres.", maxManufacturerNameRunes)}
+		return "", &NameError{Msg: fmt.Sprintf("O nome pode ter no máximo %d caracteres.", maxManufacturerNameRunes)}
 	}
 	return name, nil
 }
@@ -72,7 +72,7 @@ func (s *PaintService) manufacturerNameTaken(name string, selfID int64) (bool, e
 		if err := rows.Scan(&id, &existing); err != nil {
 			return false, err
 		}
-		if id != selfID && strings.EqualFold(cleanManufacturerName(existing), name) {
+		if id != selfID && strings.EqualFold(cleanName(existing), name) {
 			return true, nil
 		}
 	}

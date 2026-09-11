@@ -54,10 +54,10 @@ func mustAddManufacturer(t *testing.T, s *PaintService, name string) Manufacture
 func TestAddManufacturerValidatesName(t *testing.T) {
 	s := newManufacturersTestService(t)
 
-	var nameErr *ManufacturerNameError
+	var nameErr *NameError
 	for _, bad := range []string{"", "   ", strings.Repeat("á", 81)} {
 		if _, err := s.AddManufacturer(bad); !errors.As(err, &nameErr) {
-			t.Fatalf("nome %q: esperava ManufacturerNameError, veio %v", bad, err)
+			t.Fatalf("nome %q: esperava NameError, veio %v", bad, err)
 		}
 	}
 	if _, err := s.AddManufacturer("vallejo"); !errors.Is(err, ErrManufacturerDuplicate) {

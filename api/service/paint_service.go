@@ -103,6 +103,9 @@ func openPaintService(dbPath string) (*PaintService, error) {
 	if err := ensureSavedRecipesSchema(db); err != nil {
 		return nil, fmt.Errorf("preparando receitas salvas: %w", err)
 	}
+	if err := ensurePaintTypeDefaults(db); err != nil {
+		return nil, fmt.Errorf("preparando tipos de tinta: %w", err)
+	}
 
 	return &PaintService{
 		db:  db,
@@ -133,6 +136,7 @@ type PaintDTO struct {
 	ImageURL       string `json:"imageUrl"`
 	FinishType     string `json:"finishType"`
 	PaintType      string `json:"paintType"`
+	PaintTypeID    int64  `json:"paintTypeId"`
 	Coverage       string `json:"coverage"`
 	Opacity        string `json:"opacity"`
 	Volume         string `json:"volume"`
@@ -306,7 +310,7 @@ func (s *PaintService) GetAllPaints() ([]PaintDTO, error) {
 			   COALESCE(pc.rgb_r, 0), COALESCE(pc.rgb_g, 0), COALESCE(pc.rgb_b, 0),
 			   COALESCE(pc.swatch_path, ''),
 			   COALESCE(p.thumbnail_path, ''), COALESCE(p.image_path, ''),
-			   COALESCE(ft.name, ''), COALESCE(pt.name, ''),
+			   COALESCE(ft.name, ''), COALESCE(pt.name, ''), COALESCE(p.paint_type_id, 0),
 			   COALESCE(ct.name, ''), COALESCE(ot.name, ''),
 			   COALESCE(p.volume_ml || 'ml', '')
 		FROM paints p
@@ -334,7 +338,7 @@ func (s *PaintService) GetAllPaints() ([]PaintDTO, error) {
 			&p.R, &p.G, &p.B,
 			&p.SwatchPath,
 			&p.Thumbnail, &p.ImageURL,
-			&p.FinishType, &p.PaintType,
+			&p.FinishType, &p.PaintType, &p.PaintTypeID,
 			&p.Coverage, &p.Opacity,
 			&p.Volume,
 		); err != nil {
@@ -365,7 +369,7 @@ func (s *PaintService) SearchPaints(query string) ([]PaintDTO, error) {
 			   COALESCE(pc.rgb_r, 0), COALESCE(pc.rgb_g, 0), COALESCE(pc.rgb_b, 0),
 			   COALESCE(pc.swatch_path, ''),
 			   COALESCE(p.thumbnail_path, ''), COALESCE(p.image_path, ''),
-			   COALESCE(ft.name, ''), COALESCE(pt.name, ''),
+			   COALESCE(ft.name, ''), COALESCE(pt.name, ''), COALESCE(p.paint_type_id, 0),
 			   COALESCE(ct.name, ''), COALESCE(ot.name, ''),
 			   COALESCE(p.volume_ml || 'ml', '')
 		FROM paints p
@@ -403,7 +407,7 @@ func (s *PaintService) SearchPaints(query string) ([]PaintDTO, error) {
 			&p.R, &p.G, &p.B,
 			&p.SwatchPath,
 			&p.Thumbnail, &p.ImageURL,
-			&p.FinishType, &p.PaintType,
+			&p.FinishType, &p.PaintType, &p.PaintTypeID,
 			&p.Coverage, &p.Opacity,
 			&p.Volume,
 		); err != nil {
@@ -421,7 +425,7 @@ func (s *PaintService) GetPaintByID(id int64) (PaintDTO, error) {
 			   COALESCE(pc.rgb_r, 0), COALESCE(pc.rgb_g, 0), COALESCE(pc.rgb_b, 0),
 			   COALESCE(pc.swatch_path, ''),
 			   COALESCE(p.thumbnail_path, ''), COALESCE(p.image_path, ''),
-			   COALESCE(ft.name, ''), COALESCE(pt.name, ''),
+			   COALESCE(ft.name, ''), COALESCE(pt.name, ''), COALESCE(p.paint_type_id, 0),
 			   COALESCE(ct.name, ''), COALESCE(ot.name, ''),
 			   COALESCE(p.volume_ml || 'ml', '')
 		FROM paints p
@@ -441,7 +445,7 @@ func (s *PaintService) GetPaintByID(id int64) (PaintDTO, error) {
 		&p.R, &p.G, &p.B,
 		&p.SwatchPath,
 		&p.Thumbnail, &p.ImageURL,
-		&p.FinishType, &p.PaintType,
+		&p.FinishType, &p.PaintType, &p.PaintTypeID,
 		&p.Coverage, &p.Opacity,
 		&p.Volume,
 	)

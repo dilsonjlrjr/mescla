@@ -46,11 +46,13 @@
   import {
     allManufacturers, allPaints, hexOf, searchPaints, type Paint, type Manufacturer,
     reloadManufacturers, createManufacturer, updateManufacturer, deleteManufacturer,
-    migrateLegacyManufacturers, MAX_MANUFACTURER_NAME,
+    migrateLegacyManufacturers, MAX_MANUFACTURER_NAME, paintById,
+    allPaintTypes, reloadPaintTypes, createPaintType, updatePaintType, deletePaintType,
+    MAX_PAINT_TYPE_NAME, type PaintType,
   } from '../services/catalog';
   import {
     stock, sortedStock, addStockPaint, updateStockPaint, removeStockPaint,
-    relinkStockManufacturers, localStockCountFor,
+    relinkStockManufacturers, localStockCountFor, fillStockPaintTypes, localStockCountForType,
   } from '../services/stock.svelte';
   import { catalogRev } from '../services/catalogRev.svelte';
   import type { StockPaint } from '../services/engine';
@@ -59,7 +61,7 @@
   import { toast } from '../toast.svelte';
 
 
-  type Tab = 'tintas' | 'fabricantes';
+  type Tab = 'tintas' | 'fabricantes' | 'tipos';
   let tab: Tab = $state('tintas');
 
   let search = $state('');
@@ -81,6 +83,8 @@
       const pending = await migrateLegacyManufacturers();
       if (pending > 0) toast(t('errMakerMigrate'), 'error');
       await refreshMakers();
+      await refreshPTypes();
+      backfillStockPaintTypes();
     })();
   });
 
@@ -170,7 +174,7 @@
       key: `s${p.id}`,
       have: true,
       name: p.name,
-      meta: `${p.code || '—'} · ${p.manufacturer}${p.volume ? ` · ${p.volume}` : ''}`,
+      meta: `${p.code || '—'} · ${p.manufacturer}${typeSuffix(p.paintTypeId)}${p.volume ? ` · ${p.volume}` : ''}`,
       hex: rgbToHex(p.r, p.g, p.b),
       // Desmarcar tinta do catálogo só devolve a linha ao catálogo; tinta
       // cadastrada à mão sumiria de vez, então passa pela confirmação.
@@ -188,7 +192,7 @@
           key: `c${p.id}`,
           have: false,
           name: p.name,
-          meta: `${p.code} · ${p.manufacturer}`,
+          meta: `${p.code} · ${p.manufacturer}${typeSuffix(p.paintTypeId)}`,
           hex: hexOf(p),
           toggle: () => toggleHave(p),
           edit: () => openEditCatalog(p),
@@ -212,6 +216,7 @@
   let editingCatalogId: number | null = $state(null);
   let editing = $derived(editingId !== null || editingCatalogId !== null);
   let fMfr: number | '' = $state('');
+  let fPType: number | '' = $state('');
   let fName = $state('');
   let fCode = $state('');
   let fHex = $state('#8a8a8a');
@@ -327,6 +332,7 @@
     editingId = null;
     editingCatalogId = null;
     fMfr = allMfrs[0]?.id ?? '';
+    fPType = defaultPTypeId() ?? '';
     fName = '';
     fCode = '';
     fHex = '#8a8a8a';
@@ -340,6 +346,7 @@
     editingCatalogId = null;
     const m = allMfrs.find(x => x.name === p.manufacturer);
     fMfr = m?.id ?? '';
+    fPType = p.paintTypeId ?? '';
     fName = p.name;
     fCode = p.code;
     fHex = rgbToHex(p.r, p.g, p.b);
@@ -352,6 +359,7 @@
     editingId = null;
     editingCatalogId = p.id;
     fMfr = p.manufacturerId;
+    fPType = p.paintTypeId || '';
     fName = p.name;
     fCode = p.code;
     fHex = rgbToHex(p.r, p.g, p.b);
@@ -379,6 +387,7 @@
     const base = {
       manufacturerId: Number(fMfr),
       manufacturer: mfr?.name ?? '',
+      paintTypeId: fPType === '' ? undefined : Number(fPType),
       name: fName.trim(),
       code: fCode.trim(),
       r, g, b,
@@ -541,19 +550,153 @@
     return [...fromCatalog, ...fromStock].map(p => `rgb(${p.r}, ${p.g}, ${p.b})`);
   }
 
-  // ── Modal único (overlay do protótipo cobre um dos 4 conteúdos) ──
-  let modalKind = $derived.by((): 'confirmPaint' | 'confirmMaker' | 'paint' | 'maker' | null => {
+  // ── Tipos de tinta (rf-15) ──
+  let allPTypes: PaintType[] = $derived.by(() => {
+    void catalogRev.n;
+    return [...allPaintTypes()];
+  });
+  let ptypeNameById = $derived(new Map(allPTypes.map(pt => [pt.id, pt.name])));
+  function typeSuffix(id: number | undefined): string {
+    const name = id ? ptypeNameById.get(id) : undefined;
+    return name ? ` · ${name}` : '';
+  }
+  function acrilicaId(): number | undefined {
+    return allPTypes.find(pt => pt.name.toLowerCase() === 'acrílica')?.id;
+  }
+  function defaultPTypeId(): number | undefined {
+    return acrilicaId() ?? allPTypes[0]?.id;
+  }
+
+  // O estoque anterior ao campo não tem tipo: a cópia de uma tinta do catálogo
+  // herda o tipo dela, e o resto é Acrílica.
+  function backfillStockPaintTypes() {
+    const acrilica = acrilicaId();
+    fillStockPaintTypes(p => (p.catalogId != null ? paintById(p.catalogId)?.paintTypeId || undefined : undefined) ?? acrilica);
+  }
+
+  let ptypeSearch = $state('');
+  let filteredPTypes = $derived.by(() => {
+    const q = foldText(ptypeSearch.trim());
+    return q ? allPTypes.filter(pt => foldText(pt.name).includes(q)) : allPTypes;
+  });
+
+  async function refreshPTypes() {
+    try {
+      await reloadPaintTypes();
+    } catch {
+      // Sem rede, a lista em memória continua valendo.
+    }
+  }
+
+  let ptypeFormOpen = $state(false);
+  let editingPTypeId: number | null = $state(null);
+  let ptypeNameInput = $state('');
+  let savingPType = $state(false);
+
+  function openNewPType() {
+    editingPTypeId = null;
+    ptypeNameInput = '';
+    ptypeFormOpen = true;
+  }
+  function openEditPType(pt: PaintType) {
+    editingPTypeId = pt.id;
+    ptypeNameInput = pt.name;
+    ptypeFormOpen = true;
+  }
+
+  function ptypeNameProblem(name: string): 'errPTypeNameRequired' | 'errPTypeNameTooLong' | null {
+    if (!name) return 'errPTypeNameRequired';
+    if ([...name].length > MAX_PAINT_TYPE_NAME) return 'errPTypeNameTooLong';
+    return null;
+  }
+
+  async function savePType() {
+    if (savingPType) return;
+    const name = ptypeNameInput.trim();
+    const problem = ptypeNameProblem(name);
+    if (problem) {
+      toast(t(problem), 'error');
+      return;
+    }
+    savingPType = true;
+    try {
+      if (editingPTypeId === null) {
+        await createPaintType(name);
+      } else {
+        await updatePaintType(editingPTypeId, name);
+        toast(t('saveChanges'));
+      }
+      ptypeFormOpen = false;
+      await refreshPTypes();
+    } catch (e) {
+      const status = statusOf(e);
+      if (status === 409) {
+        toast(t('errPTypeDup'), 'error');
+      } else if (status === 400) {
+        toast(t(ptypeNameProblem(name) ?? 'errPTypeNameRequired'), 'error');
+      } else if (status === 404) {
+        ptypeFormOpen = false;
+        toast(t('errPTypeGone'), 'error');
+        await refreshPTypes();
+      } else {
+        toast(t('errMakerNet'), 'error');
+      }
+    } finally {
+      savingPType = false;
+    }
+  }
+
+  // Tipo usado por alguma tinta não sai: o modal só explica e não chama a rota.
+  let confirmPTypeDel: PaintType | null = $state(null);
+  let deletingPType = $state(false);
+  let ptypeDelCounts = $derived.by(() => {
+    const pt = confirmPTypeDel;
+    return pt ? { catalog: pt.paintCount, stock: localStockCountForType(pt.id) } : { catalog: 0, stock: 0 };
+  });
+  let ptypeDelBlocked = $derived(ptypeDelCounts.catalog > 0 || ptypeDelCounts.stock > 0);
+
+  function askDeletePType(pt: PaintType) {
+    confirmPTypeDel = pt;
+  }
+  async function doDeletePType() {
+    if (!confirmPTypeDel || ptypeDelBlocked || deletingPType) return;
+    const { id } = confirmPTypeDel;
+    deletingPType = true;
+    try {
+      await deletePaintType(id);
+      confirmPTypeDel = null;
+      await refreshPTypes();
+    } catch (e) {
+      const status = statusOf(e);
+      if (status === 404 || status === 409) {
+        confirmPTypeDel = null;
+        toast(t(status === 404 ? 'errPTypeGone' : 'errPTypeBusy'), 'error');
+        await refreshPTypes();
+      } else {
+        toast(t('errMakerNet'), 'error');
+      }
+    } finally {
+      deletingPType = false;
+    }
+  }
+
+  // ── Modal único (overlay do protótipo cobre um dos conteúdos) ──
+  let modalKind = $derived.by((): 'confirmPaint' | 'confirmMaker' | 'confirmPType' | 'paint' | 'maker' | 'ptype' | null => {
     if (confirmPaintDel) return 'confirmPaint';
     if (confirmMakerDel) return 'confirmMaker';
+    if (confirmPTypeDel) return 'confirmPType';
     if (formOpen) return 'paint';
     if (makerFormOpen) return 'maker';
+    if (ptypeFormOpen) return 'ptype';
     return null;
   });
   function closeModal() {
     if (confirmPaintDel) { confirmPaintDel = null; return; }
     if (confirmMakerDel) { confirmMakerDel = null; return; }
+    if (confirmPTypeDel) { confirmPTypeDel = null; return; }
     if (formOpen) { formOpen = false; return; }
     if (makerFormOpen) { makerFormOpen = false; return; }
+    if (ptypeFormOpen) { ptypeFormOpen = false; return; }
   }
 </script>
 
@@ -571,16 +714,20 @@
           onclick={() => (tab = 'fabricantes')}
           style="height: 50px; padding: 0 20px; border: none; border-left: 1px solid var(--color-neutral-800); background: {tab === 'fabricantes' ? 'var(--color-accent-900)' : 'transparent'}; color: {tab === 'fabricantes' ? 'var(--color-accent-200)' : 'var(--color-neutral-400)'}; font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer; white-space: nowrap;"
         >{t('makers')}</button>
+        <button
+          onclick={() => (tab = 'tipos')}
+          style="height: 50px; padding: 0 20px; border: none; border-left: 1px solid var(--color-neutral-800); background: {tab === 'tipos' ? 'var(--color-accent-900)' : 'transparent'}; color: {tab === 'tipos' ? 'var(--color-accent-200)' : 'var(--color-neutral-400)'}; font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer; white-space: nowrap;"
+        >{t('paintTypes')}</button>
       </div>
     {/snippet}
     {#snippet actions()}
       <span style="font-size: 14px; color: var(--color-neutral-500); white-space: nowrap;">{headerCount}</span>
       <button
         class="t4-hover-accent"
-        onclick={() => (tab === 'tintas' ? openAdd() : openNewMaker())}
+        onclick={() => (tab === 'tintas' ? openAdd() : tab === 'fabricantes' ? openNewMaker() : openNewPType())}
         style="display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 18px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
       >
-        <i class="ph ph-plus" style="font-size: 18px;"></i>{tab === 'tintas' ? t('addPaintBtn') : t('addMakerBtn')}
+        <i class="ph ph-plus" style="font-size: 18px;"></i>{tab === 'tintas' ? t('addPaintBtn') : tab === 'fabricantes' ? t('addMakerBtn') : t('addPTypeBtn')}
       </button>
     {/snippet}
   </Header>
@@ -670,7 +817,7 @@
             </div>
           {/if}
         </div>
-      {:else}
+      {:else if tab === 'fabricantes'}
         <div style="display: flex; flex-direction: column;">
           <div style="display: flex; align-items: center; gap: 10px; height: 50px; padding: 0 14px; margin-bottom: 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field);">
             <i class="ph ph-magnifying-glass" style="font-size: 18px; color: var(--color-neutral-500);"></i>
@@ -708,6 +855,36 @@
           {/each}
           {#if filteredMakers.length === 0}
             <p style="margin: 24px 4px; font-size: 15px; color: var(--color-neutral-500);">{t('noMakerFound')}</p>
+          {/if}
+        </div>
+      {:else}
+        <div style="display: flex; flex-direction: column;">
+          <div style="display: flex; align-items: center; gap: 10px; height: 50px; padding: 0 14px; margin-bottom: 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field);">
+            <i class="ph ph-magnifying-glass" style="font-size: 18px; color: var(--color-neutral-500);"></i>
+            <input
+              type="search"
+              bind:value={ptypeSearch}
+              placeholder={t('phFindPType')}
+              aria-label={t('phFindPType')}
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+              style="flex: 1; min-width: 0; height: 46px; background: transparent; border: none; outline: none; color: var(--color-text); font-family: inherit; font-size: 15px;"
+            />
+          </div>
+          {#each filteredPTypes as pt (pt.id)}
+            <div style="display: flex; align-items: center; gap: 16px; min-height: 68px; padding: 12px 4px; border-bottom: 1px solid var(--color-line);">
+              <span style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0;">
+                <span style="font-size: 17px; font-weight: 500; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{pt.name}</span>
+                <span style="font-size: 13px; color: var(--color-neutral-500);">{t('pTypeMeta', { n: pt.paintCount, m: localStockCountForType(pt.id) })}</span>
+              </span>
+              <button class="t4-hover-ghost" onclick={() => openEditPType(pt)} style="height: 48px; padding: 0 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('edit')}</button>
+              <button class="t4-hover-ghost" onclick={() => askDeletePType(pt)} style="height: 48px; padding: 0 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('del')}</button>
+            </div>
+          {/each}
+          {#if filteredPTypes.length === 0}
+            <p style="margin: 24px 4px; font-size: 15px; color: var(--color-neutral-500);">{t('noPTypeFound')}</p>
           {/if}
         </div>
       {/if}
@@ -765,6 +942,20 @@
               onclick={() => (fMfr = m.id)}
               style="height: 44px; padding: 0 14px; border: 1px solid {fMfr === m.id ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 999px; background: {fMfr === m.id ? 'var(--color-accent)' : 'var(--color-surface)'}; color: {fMfr === m.id ? 'var(--color-accent-100)' : 'var(--color-neutral-300)'}; font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;"
             >{m.name}</button>
+          {/each}
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fPType')}</span>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+          {#each allPTypes as pt (pt.id)}
+            <button
+              type="button"
+              class="t4-hover-border"
+              onclick={() => (fPType = pt.id)}
+              style="height: 44px; padding: 0 14px; border: 1px solid {fPType === pt.id ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 999px; background: {fPType === pt.id ? 'var(--color-accent)' : 'var(--color-surface)'}; color: {fPType === pt.id ? 'var(--color-accent-100)' : 'var(--color-neutral-300)'}; font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;"
+            >{pt.name}</button>
           {/each}
         </div>
       </div>
@@ -879,6 +1070,35 @@
       <button class="t4-hover-ghost" onclick={closeModal} style="flex: 1; height: 56px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{makerDelBlocked ? t('closeBtn') : t('cancel')}</button>
       {#if !makerDelBlocked}
         <button class="t4-hover-accent" onclick={doDeleteMaker} disabled={deletingMaker} style="flex: 1; height: 56px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{t('delMakerA')}</button>
+      {/if}
+    </div>
+  </div>
+
+  <!-- Modal tipo de tinta (novo/editar) -->
+  <div class="t4-modal" style="{modalKind !== 'ptype' ? 'display: none; ' : ''}position: relative; width: min(460px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
+    <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 18px;">
+      <span style="flex: 1; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: var(--color-text);">{editingPTypeId === null ? t('newPTypeT') : t('editPTypeT')}</span>
+      <button class="t4-hover-ghost" onclick={closeModal} aria-label={t('ariaClose')} style="display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer;">
+        <i class="ph ph-x" style="font-size: 20px;"></i>
+      </button>
+    </div>
+    <label style="display: flex; flex-direction: column; gap: 6px;">
+      <span style="font-size: 13px; color: var(--color-neutral-500);">{t('pTypeName')}</span>
+      <input type="text" bind:value={ptypeNameInput} maxlength={MAX_PAINT_TYPE_NAME} placeholder="Wash" style="height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;" />
+    </label>
+    <button class="t4-hover-accent" onclick={savePType} disabled={savingPType} style="width: 100%; height: 58px; margin-top: 18px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 16px; font-weight: 500; cursor: pointer;">{editingPTypeId === null ? t('addPTypeBtn') : t('saveChanges')}</button>
+  </div>
+
+  <!-- Confirmação exclusão de tipo de tinta: tipo em uso não sai -->
+  <div class="t4-modal" role="alertdialog" aria-modal="true" style="{modalKind !== 'confirmPType' ? 'display: none; ' : ''}position: relative; width: min(440px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
+    <p style="margin: 0; font-size: clamp(16px, 1.8cqi, 21px); font-weight: 500; letter-spacing: -0.01em; color: var(--color-text); text-wrap: pretty;">{ptypeDelBlocked ? t('delPTypeBlockedT', { name: confirmPTypeDel?.name ?? '' }) : t('delPTypeT', { name: confirmPTypeDel?.name ?? '' })}</p>
+    <p style="margin: 10px 0 0; font-size: 15px; color: var(--color-neutral-400); text-wrap: pretty;">
+      {ptypeDelBlocked ? t('delPTypeBlockedB', { n: ptypeDelCounts.catalog, m: ptypeDelCounts.stock }) : t('delPTypeB0')}
+    </p>
+    <div style="display: flex; gap: 10px; margin-top: 22px;">
+      <button class="t4-hover-ghost" onclick={closeModal} style="flex: 1; height: 56px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{ptypeDelBlocked ? t('closeBtn') : t('cancel')}</button>
+      {#if !ptypeDelBlocked}
+        <button class="t4-hover-accent" onclick={doDeletePType} disabled={deletingPType} style="flex: 1; height: 56px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{t('delPTypeA')}</button>
       {/if}
     </div>
   </div>

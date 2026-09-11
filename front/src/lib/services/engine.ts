@@ -90,6 +90,8 @@ export interface StockPaint {
   notes: string;
   /** Id da tinta do catálogo de onde esta nasceu (só no front; a API ignora). */
   catalogId?: number;
+  /** Tipo de tinta (rf-15). Estoque anterior ao campo recebe o tipo na abertura de T4. */
+  paintTypeId?: number;
 }
 
 export interface StockRowError {

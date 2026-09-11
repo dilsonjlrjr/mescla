@@ -117,6 +117,25 @@ export function localStockCountFor(mfr: { id: number; name: string }): number {
   return stock.paints.filter(p => p.manufacturerId === mfr.id || p.manufacturer.toLowerCase() === name).length;
 }
 
+/** Dá tipo de tinta a quem ainda não tem (rf-15) e persiste se algo mudou. */
+export function fillStockPaintTypes(typeFor: (p: StockPaint) => number | undefined) {
+  let changed = false;
+  for (const p of stock.paints) {
+    if (p.paintTypeId) continue;
+    const id = typeFor(p);
+    if (id) {
+      p.paintTypeId = id;
+      changed = true;
+    }
+  }
+  if (changed) persist();
+}
+
+/** Tintas do estoque local deste aparelho com o tipo — prende a exclusão. */
+export function localStockCountForType(typeId: number): number {
+  return stock.paints.filter(p => p.paintTypeId === typeId).length;
+}
+
 /** Insere um lote (importação CSV já validada). Devolve quantas entraram. */
 export function addStockPaints(paints: Omit<StockPaint, 'id'>[]): number {
   for (const p of paints) {
