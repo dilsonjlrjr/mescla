@@ -1,6 +1,8 @@
 <script lang="ts">
   // Autocomplete de tinta (Tintômetro): input raio 8 + dropdown papel com
   // hairline; busca por nome, código ou marca no catálogo já carregado.
+  import { paintMatches } from '../ui';
+
   interface PaintOption {
     id: number;
     name: string;
@@ -25,16 +27,7 @@
 
   let results = $derived(
     query.trim()
-      ? paints
-          .filter(p => {
-            const q = query.toLowerCase();
-            return (
-              p.name.toLowerCase().includes(q) ||
-              p.manufacturer.toLowerCase().includes(q) ||
-              (p.code ?? '').toLowerCase().includes(q)
-            );
-          })
-          .slice(0, 6)
+      ? paints.filter(p => paintMatches(p, query)).slice(0, 6)
       : []
   );
 

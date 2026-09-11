@@ -47,6 +47,26 @@ export function hexOf(r: number, g: number, b: number): string {
   return `#${h(r)}${h(g)}${h(b)}`;
 }
 
+/** Código do pote comparável: sem caixa nem pontuação ("XF-2" → "xf2"). */
+export function compactCode(code: string): string {
+  return code.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/** Busca de tinta por nome, marca ou código. O código casa sem pontuação:
+ *  "70951" acha "70.951". */
+export function paintMatches(p: { name: string; manufacturer: string; code?: string }, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const code = p.code ?? '';
+  const qc = compactCode(q);
+  return (
+    p.name.toLowerCase().includes(q) ||
+    p.manufacturer.toLowerCase().includes(q) ||
+    code.toLowerCase().includes(q) ||
+    (qc !== '' && compactCode(code).includes(qc))
+  );
+}
+
 /** Matiz 0..360 pra ordenação de catálogo; acromáticos vão pro fim. */
 export function hueOf(r: number, g: number, b: number): number {
   const rn = r / 255, gn = g / 255, bn = b / 255;

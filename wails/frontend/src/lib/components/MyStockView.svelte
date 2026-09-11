@@ -7,7 +7,7 @@
   import Icon from './Icon.svelte';
   import { toast } from '../toast.svelte';
   import { recipesWithIngredient } from '../recipes.svelte';
-  import { hexOf } from '../ui';
+  import { hexOf, paintMatches } from '../ui';
   import { t } from '../i18n.svelte';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
   import type { UserPaintDTO, CSVImportResultDTO, ManufacturerDTO, PaintDTO } from '../../../bindings/paint-match-ai/models';
@@ -168,13 +168,7 @@
   let filtered = $derived(
     paints.filter(p => {
       if (selectedBrands.length > 0 && !selectedBrands.includes(p.manufacturer)) return false;
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
-      return (
-        p.name.toLowerCase().includes(q) ||
-        p.code.toLowerCase().includes(q) ||
-        p.manufacturer.toLowerCase().includes(q)
-      );
+      return paintMatches(p, searchQuery);
     })
   );
 

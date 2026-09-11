@@ -339,6 +339,19 @@ func (s *PaintService) GetAllPaints() ([]PaintDTO, error) {
 	return result, rows.Err()
 }
 
+// compactCode reduz o código do pote a letras e dígitos minúsculos: "70.951"
+// vira "70951", "XF-2" vira "xf2". O SQL de SearchPaints faz o mesmo em p.code
+// tirando só '.', '-' e ' ', a única pontuação que o catálogo usa em código.
+func compactCode(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 func (s *PaintService) SearchPaints(query string) ([]PaintDTO, error) {
 	sqlQuery := `
 		SELECT p.id, p.name, COALESCE(p.code, ''), p.manufacturer_id, m.name,
@@ -358,11 +371,18 @@ func (s *PaintService) SearchPaints(query string) ([]PaintDTO, error) {
 		LEFT JOIN coverage_types ct ON ct.id = p.coverage_type_id
 		LEFT JOIN opacity_types ot ON ot.id = p.opacity_type_id
 		WHERE p.name LIKE ? OR p.code LIKE ? OR m.name LIKE ?
-		ORDER BY m.name, p.name
+		   OR REPLACE(REPLACE(REPLACE(LOWER(p.code), '.', ''), '-', ''), ' ', '') LIKE ?
+		ORDER BY (? <> '' AND REPLACE(REPLACE(REPLACE(LOWER(p.code), '.', ''), '-', ''), ' ', '') = ?) DESC,
+			m.name, p.name
 		LIMIT 50
 	`
 	like := "%" + query + "%"
-	rows, err := s.db.Query(sqlQuery, like, like, like)
+	c := compactCode(query)
+	codeLike := like
+	if c != "" {
+		codeLike = "%" + c + "%"
+	}
+	rows, err := s.db.Query(sqlQuery, like, like, like, codeLike, c, c)
 	if err != nil {
 		return nil, err
 	}

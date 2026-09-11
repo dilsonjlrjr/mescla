@@ -26,6 +26,7 @@
     rgbToLab, deltaE2000, mixDropsLinear, computeSuggestedDrops, dropsToMl,
     verdictKey, consequenceKey, isUnreachable, hexOfRgb, rgbOfHex, type RGB,
   } from '../color';
+  import { compactCode, paintMatches } from '../ui';
 
   type View =
     | 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare'
@@ -99,7 +100,7 @@
   let suggestions = $derived.by(() => {
     const q = query.trim().toLowerCase();
     const pool = q
-      ? allPaints.filter(p => p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q) || p.manufacturer.toLowerCase().includes(q))
+      ? allPaints.filter(p => paintMatches(p, q))
       : allPaints;
     return pool.slice(0, 8);
   });
@@ -108,8 +109,8 @@
 
   // ── Resolver o alvo a partir do texto digitado (US-01) ──
   function findByCode(q: string): PaintDTO | undefined {
-    const qq = q.toLowerCase();
-    return allPaints.find(p => p.code.trim().toLowerCase() === qq);
+    const qq = compactCode(q);
+    return qq ? allPaints.find(p => compactCode(p.code) === qq) : undefined;
   }
   function findByNameExact(q: string): PaintDTO | undefined {
     const qq = q.toLowerCase();
@@ -117,7 +118,8 @@
   }
   function findByNamePartial(q: string): PaintDTO | undefined {
     const qq = q.toLowerCase();
-    return allPaints.find(p => p.name.toLowerCase().includes(qq) || p.code.toLowerCase().includes(qq));
+    const qc = compactCode(q);
+    return allPaints.find(p => p.name.toLowerCase().includes(qq) || p.code.toLowerCase().includes(qq) || (qc !== '' && compactCode(p.code).includes(qc)));
   }
 
   function setTargetFromPaint(p: PaintDTO, raw: string) {

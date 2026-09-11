@@ -6,7 +6,7 @@
   import PaintCard from './PaintCard.svelte';
   import PaintBottle from './PaintBottle.svelte';
   import { toast } from '../toast.svelte';
-  import { hueOf, hexOf, contrastOn } from '../ui';
+  import { hueOf, hexOf, contrastOn, paintMatches } from '../ui';
   import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
 
   type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock';
@@ -72,12 +72,7 @@
   let filtered = $derived.by(() => {
     let result = paints;
     if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        p.code.toLowerCase().includes(q) ||
-        p.manufacturer.toLowerCase().includes(q)
-      );
+      result = result.filter(p => paintMatches(p, searchQuery));
     }
     if (selectedBrands.length > 0) {
       result = result.filter(p => selectedBrands.includes(p.manufacturer));
