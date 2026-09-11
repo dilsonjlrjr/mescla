@@ -9,6 +9,17 @@
     <meta name="theme-color" content="#161826" />
     <title>Mescla</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- iOS/iPadOS: Safari não usa os ícones do manifest ao "Adicionar à Tela
+         de Início"; ele procura apple-touch-icon (180x180, PNG opaco, sem
+         alfa). Sem esta linha o iPad usa uma captura da página como ícone. -->
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <!-- Abre sem a barra do Safari (standalone) e nomeia o atalho na tela. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Mescla" />
+    <!-- "black" e não "black-translucent": o app só trata safe-area-inset-bottom
+         (app.css), então o conteúdo não pode correr sob a barra de status. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <!-- Fontes self-hosted via @fontsource (importadas em main.ts) — PWA offline-first -->
   </head>
   <body>
