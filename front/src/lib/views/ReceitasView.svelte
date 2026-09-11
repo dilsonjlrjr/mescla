@@ -13,6 +13,7 @@
   import Spinner from '../components/Spinner.svelte';
   import { recipes, removeRecipe, updateRecipeManufacturer, type Recipe } from '../services/recipes.svelte';
   import { allManufacturers, paintById } from '../services/catalog';
+  import { catalogRev } from '../services/catalogRev.svelte';
   import { suggestEquivalentRecipe, recipeForColorInBrand, bestBrandsFor, type EquivalentRecipe, type BrandBest } from '../services/engine';
   import { verdictKeys, deltaIsGood } from '../ui';
   import { switchTab } from '../nav.svelte';
@@ -116,10 +117,17 @@
     return r.name;
   }
 
+  // Fabricantes mudam em T4 com esta tela montada (rf-14): a lista se refaz
+  // a cada recarga do catálogo.
+  let mfrs = $derived.by(() => {
+    void catalogRev.n;
+    return allManufacturers();
+  });
+
   function cardMeta(r: Recipe): string {
     const res = resolved[r.id];
     if (res && res !== 'error') return res.targetManufacturer;
-    if (res === 'error') return t('naoAlcanca', { brand: allManufacturers().find(m => m.id === r.manufacturerId)?.name ?? '' });
+    if (res === 'error') return t('naoAlcanca', { brand: mfrs.find(m => m.id === r.manufacturerId)?.name ?? '' });
     return t('calculating');
   }
 
@@ -172,7 +180,7 @@
       {#if selected}
         <p style="margin: 0; font-size: 12px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-neutral-500);">{t('reproduceIn')}</p>
         <div style="display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 22px;">
-          {#each allManufacturers() as m (m.id)}
+          {#each mfrs as m (m.id)}
             <button
               class="t3-pill"
               class:active={selected.manufacturerId === m.id}
@@ -191,7 +199,7 @@
         {#if recipeResolved}
           {recipeResolved.ingredients.length <= 1 ? t('recPote', { brand: recipeResolved.targetManufacturer }) : t('recMix', { brand: recipeResolved.targetManufacturer, n: recipeResolved.ingredients.length })}
         {:else if recipeIsError}
-          {t('recNone', { brand: allManufacturers().find(m => m.id === selected?.manufacturerId)?.name ?? '' })}
+          {t('recNone', { brand: mfrs.find(m => m.id === selected?.manufacturerId)?.name ?? '' })}
         {:else if selected}
           <span style="display: inline-flex; align-items: center; gap: 12px;">
             <Spinner size={24} label={t('calculating')} />{t('calculating')}

@@ -84,6 +84,39 @@ export function removeStockPaint(id: number) {
   }
 }
 
+/** Liga o estoque local aos fabricantes do servidor (rf-14, RN5): pelo id
+ *  quando ele existe no servidor, senão pelo nome sem distinguir caixa. A
+ *  tinta ligada recebe o id e o nome atuais, então o rename feito em qualquer
+ *  aparelho chega aqui na próxima recarga. */
+export function relinkStockManufacturers(mfrs: { id: number; name: string }[]) {
+  const nameById = new Map(mfrs.map(m => [m.id, m.name]));
+  const byName = new Map(mfrs.map(m => [m.name.toLowerCase(), m]));
+  let changed = false;
+  for (const p of stock.paints) {
+    const current = nameById.get(p.manufacturerId);
+    if (current !== undefined) {
+      if (p.manufacturer !== current) {
+        p.manufacturer = current;
+        changed = true;
+      }
+      continue;
+    }
+    const match = byName.get(p.manufacturer.toLowerCase());
+    if (match) {
+      p.manufacturerId = match.id;
+      p.manufacturer = match.name;
+      changed = true;
+    }
+  }
+  if (changed) persist();
+}
+
+/** Tintas do estoque local deste aparelho ligadas ao fabricante (RN3/RN5). */
+export function localStockCountFor(mfr: { id: number; name: string }): number {
+  const name = mfr.name.toLowerCase();
+  return stock.paints.filter(p => p.manufacturerId === mfr.id || p.manufacturer.toLowerCase() === name).length;
+}
+
 /** Insere um lote (importação CSV já validada). Devolve quantas entraram. */
 export function addStockPaints(paints: Omit<StockPaint, 'id'>[]): number {
   for (const p of paints) {

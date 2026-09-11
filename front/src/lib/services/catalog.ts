@@ -2,7 +2,8 @@
 // vivo do servidor, via api/httpapi) e responde listagem/busca/filtro em TS.
 // A matemática de cor e as receitas também vêm da API agora; ver engine.ts.
 
-import { apiGet } from './api';
+import { apiDelete, apiGet, apiPost, apiPut } from './api';
+import { catalogRev } from './catalogRev.svelte';
 
 export interface Paint {
   id: number;
@@ -20,12 +21,21 @@ export interface Manufacturer {
   id: number;
   name: string;
   paintCount: number;
+  /** Tintas do estoque do servidor — junto com paintCount, prende a exclusão. */
+  userPaintCount: number;
 }
 
 interface ManufacturerResponse {
   id: number;
   name: string;
   paintCount: number;
+  userPaintCount?: number;
+}
+
+export const MAX_MANUFACTURER_NAME = 80;
+
+function toManufacturer(m: ManufacturerResponse): Manufacturer {
+  return { id: m.id, name: m.name, paintCount: m.paintCount, userPaintCount: m.userPaintCount ?? 0 };
 }
 
 interface PaintResponse {
@@ -62,6 +72,10 @@ function compactCode(s: string): string {
   return normalize(s).replace(/[^a-z0-9]/g, '');
 }
 
+function indexEntry(p: Paint, compact: string): string {
+  return normalize(`${p.name} ${p.code} ${compact} ${p.manufacturer}`);
+}
+
 export function loadCatalog(): Promise<void> {
   if (!loadPromise) {
     loadPromise = (async () => {
@@ -69,7 +83,7 @@ export function loadCatalog(): Promise<void> {
         apiGet<ManufacturerResponse[]>('/manufacturers'),
         apiGet<PaintResponse[]>('/paints'),
       ]);
-      manufacturers = mfrs;
+      manufacturers = mfrs.map(toManufacturer);
       paints = paintRows.map(p => ({
         id: p.id,
         manufacturerId: p.manufacturerId,
@@ -83,7 +97,7 @@ export function loadCatalog(): Promise<void> {
       }));
       byId = new Map(paints.map(p => [p.id, p]));
       codeIndex = paints.map(p => compactCode(p.code));
-      searchIndex = paints.map((p, i) => normalize(`${p.name} ${p.code} ${codeIndex[i]} ${p.manufacturer}`));
+      searchIndex = paints.map((p, i) => indexEntry(p, codeIndex[i]));
     })();
   }
   return loadPromise;
@@ -99,6 +113,98 @@ export function allManufacturers(): Manufacturer[] {
 
 export function paintById(id: number): Paint | undefined {
   return byId.get(id);
+}
+
+// ── Fabricantes no servidor (rf-14) ──
+
+let reloadSeq = 0;
+
+/** Recarrega os fabricantes (RN7) e acerta o nome do fabricante nas tintas em
+ *  memória: o rename chega à lista de tintas, aos filtros e à busca. */
+export async function reloadManufacturers(): Promise<Manufacturer[]> {
+  // Só a recarga mais recente vale: uma resposta atrasada (o GET da abertura
+  // de T4 chegando depois do GET pós-PUT) desfaria o rename.
+  const seq = ++reloadSeq;
+  const rows = await apiGet<ManufacturerResponse[]>('/manufacturers');
+  if (seq !== reloadSeq) return manufacturers;
+  manufacturers = rows.map(toManufacturer);
+  const nameById = new Map(manufacturers.map(m => [m.id, m.name]));
+  for (let i = 0; i < paints.length; i++) {
+    const name = nameById.get(paints[i].manufacturerId);
+    if (name !== undefined && name !== paints[i].manufacturer) {
+      paints[i].manufacturer = name;
+      searchIndex[i] = indexEntry(paints[i], codeIndex[i]);
+    }
+  }
+  catalogRev.n++;
+  return manufacturers;
+}
+
+export async function createManufacturer(name: string): Promise<Manufacturer> {
+  return toManufacturer(await apiPost<ManufacturerResponse>('/manufacturers', { name }));
+}
+
+export async function updateManufacturer(id: number, name: string): Promise<Manufacturer> {
+  return toManufacturer(await apiPut<ManufacturerResponse>(`/manufacturers/${id}`, { name }));
+}
+
+export async function deleteManufacturer(id: number): Promise<void> {
+  await apiDelete<{ id: number }>(`/manufacturers/${id}`);
+}
+
+const LEGACY_MFRS_KEY = 'mescla.customMfrs.v1';
+
+/** Sobe a lista local de fabricantes, anterior ao servidor (RN6). Nome que o
+ *  servidor já tem casa com ele; nome inválido é descartado; só falha de rede
+ *  ou 5xx fica na chave para a próxima abertura. Devolve quantos ficaram. */
+export async function migrateLegacyManufacturers(): Promise<number> {
+  let raw: string | null;
+  try {
+    raw = localStorage.getItem(LEGACY_MFRS_KEY);
+  } catch {
+    return 0;
+  }
+  if (raw == null) return 0;
+
+  let legacy: unknown = [];
+  try {
+    legacy = JSON.parse(raw);
+  } catch {
+    // chave corrompida: não há o que subir
+  }
+  const names = new Map<string, string>();
+  for (const m of Array.isArray(legacy) ? legacy : []) {
+    const name = typeof m?.name === 'string' ? m.name.trim() : '';
+    if (name && [...name].length <= MAX_MANUFACTURER_NAME && !names.has(name.toLowerCase())) {
+      names.set(name.toLowerCase(), name);
+    }
+  }
+
+  let known: Set<string>;
+  try {
+    known = new Set((await reloadManufacturers()).map(m => m.name.toLowerCase()));
+  } catch {
+    return names.size;
+  }
+  const pending: { name: string }[] = [];
+  for (const [key, name] of names) {
+    if (known.has(key)) continue;
+    try {
+      await apiPost('/manufacturers', { name });
+      known.add(key);
+    } catch (e) {
+      // 409: outro cadastro chegou antes e casa pelo nome; 400: descartado.
+      const status = (e as { status?: number } | null)?.status ?? 0;
+      if (status === 0 || status >= 500) pending.push({ name });
+    }
+  }
+  try {
+    if (pending.length > 0) localStorage.setItem(LEGACY_MFRS_KEY, JSON.stringify(pending));
+    else localStorage.removeItem(LEGACY_MFRS_KEY);
+  } catch {
+    /* storage indisponível */
+  }
+  return pending.length;
 }
 
 export interface SearchOptions {

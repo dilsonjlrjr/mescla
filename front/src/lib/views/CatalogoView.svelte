@@ -4,10 +4,9 @@
   // protótipo Nocturne (tests/fixtures/mockup/t4-tintas.html — D-001, Epic D).
   //
   // PENDÊNCIA DECLARADA (spec rf-04, seção Dependências #3 / risco R1
-  // herdado de docs/mesclaai-userstory.md): esta apuração NÃO localizou rota
-  // de escrita (POST/PATCH/DELETE) para tinta/fabricante em api/httpapi. O
-  // catálogo servido (GET /manufacturers, GET /paints) é só-leitura aqui.
-  // Por isso:
+  // herdado de docs/mesclaai-userstory.md): não existe rota de escrita para
+  // tinta em api/httpapi. O catálogo de tintas servido (GET /paints) é
+  // só-leitura aqui. Por isso:
   //   - "Cadastrar/Editar/Excluir tinta" grava em services/stock.svelte.ts
   //     (localStorage, MESMO mecanismo já usado por T1 "Só o que eu tenho" e
   //     pela prioridade de estoque) — cadastro real no catálogo do servidor
@@ -15,12 +14,11 @@
   //   - O toggle "tenho/não tenho" numa linha da lista escreve em
   //     stock.svelte.ts (por código+fabricante — RG-17), nunca no paint do
   //     servidor.
-  //   - "Novo/Excluir fabricante" opera sobre uma lista LOCAL de fabricantes
-  //     customizados (localStorage) somada à lista do servidor — excluir um
-  //     fabricante do SERVIDOR não é possível sem a rota; "Excluir" aqui
-  //     remove as tintas do ESTOQUE local daquele fabricante (confirmação
-  //     declara exatamente esse efeito, RG-18/CA11).
-  // Não foi inventada nenhuma rota HTTP nova.
+  //   - Fabricantes vivem no servidor (rf-14): buscar, cadastrar, alterar e
+  //     excluir usam /manufacturers. Só sai fabricante sem nenhuma tinta —
+  //     catálogo, estoque do servidor ou estoque deste aparelho (RG-18
+  //     reescrita em 2026-09-11) — e nada é apagado em cascata. A lista local
+  //     antiga (mescla.customMfrs.v1) sobe uma vez ao abrir T4.
   //
   // D-001 (fidelidade ao protótipo):
   //   - O protótipo funde a antiga lista "tenho" + catálogo virtualizado numa
@@ -44,29 +42,22 @@
   import Header from '../components/Header.svelte';
   import PaintBottle from '../components/PaintBottle.svelte';
   import VirtualList from '../components/VirtualList.svelte';
-  import { allManufacturers, allPaints, hexOf, searchPaints, type Paint } from '../services/catalog';
-  import { stock, sortedStock, addStockPaint, updateStockPaint, removeStockPaint } from '../services/stock.svelte';
+  import { onMount } from 'svelte';
+  import {
+    allManufacturers, allPaints, hexOf, searchPaints, type Paint, type Manufacturer,
+    reloadManufacturers, createManufacturer, updateManufacturer, deleteManufacturer,
+    migrateLegacyManufacturers, MAX_MANUFACTURER_NAME,
+  } from '../services/catalog';
+  import {
+    stock, sortedStock, addStockPaint, updateStockPaint, removeStockPaint,
+    relinkStockManufacturers, localStockCountFor,
+  } from '../services/stock.svelte';
+  import { catalogRev } from '../services/catalogRev.svelte';
   import type { StockPaint } from '../services/engine';
   import { appState } from '../appState.svelte';
   import { t } from '../i18n.svelte';
   import { toast } from '../toast.svelte';
 
-  // ── Fabricantes customizados (locais — ver nota no topo do arquivo) ──
-  interface CustomMfr { id: number; name: string }
-  const CUSTOM_KEY = 'mescla.customMfrs.v1';
-  function loadCustom(): CustomMfr[] {
-    try {
-      const raw = localStorage.getItem(CUSTOM_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  }
-  let customMfrs: CustomMfr[] = $state(loadCustom());
-  let customSeq = $state(-1);
-  function persistCustom() {
-    try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(customMfrs)); } catch { /* indisponível */ }
-  }
 
   type Tab = 'tintas' | 'fabricantes';
   let tab: Tab = $state('tintas');
@@ -83,11 +74,29 @@
     }
   });
 
-  let allMfrs = $derived([...allManufacturers().map(m => ({ id: m.id, name: m.name, custom: false })), ...customMfrs.map(m => ({ id: m.id, name: m.name, custom: true }))]);
+  // Ao abrir T4: a lista local antiga sobe uma vez, a lista vem do servidor e o
+  // estoque local é religado pelo id (rf-14, RN5/RN6).
+  onMount(() => {
+    void (async () => {
+      const pending = await migrateLegacyManufacturers();
+      if (pending > 0) toast(t('errMakerMigrate'), 'error');
+      await refreshMakers();
+    })();
+  });
 
-  function stockCountFor(mfrName: string): number {
-    return stock.paints.filter(p => p.manufacturer === mfrName).length;
+  let allMfrs: Manufacturer[] = $derived.by(() => {
+    void catalogRev.n;
+    return [...allManufacturers()];
+  });
+
+  let makerSearch = $state('');
+  function foldText(s: string): string {
+    return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   }
+  let filteredMakers = $derived.by(() => {
+    const q = foldText(makerSearch.trim());
+    return q ? allMfrs.filter(m => foldText(m.name).includes(q)) : allMfrs;
+  });
 
   function stockKeyOf(manufacturer: string, code: string): string {
     return `${manufacturer}|${code}`;
@@ -98,7 +107,10 @@
   // (D-013): editar código ou fabricante não traz a linha original de volta
   // como duplicata. Estoque gravado antes do campo ainda casa por
   // código+fabricante.
-  let catalogIdByKey = $derived(new Map(allPaints().filter(p => p.code !== '').map(p => [stockKeyOf(p.manufacturer, p.code), p.id])));
+  let catalogIdByKey = $derived.by(() => {
+    void catalogRev.n;
+    return new Map(allPaints().filter(p => p.code !== '').map(p => [stockKeyOf(p.manufacturer, p.code), p.id]));
+  });
   function catalogOriginOf(sp: StockPaint): number | undefined {
     return sp.catalogId ?? (sp.code !== '' ? catalogIdByKey.get(stockKeyOf(sp.manufacturer, sp.code)) : undefined);
   }
@@ -106,6 +118,7 @@
 
   // ── Aba Tintas ──
   let filteredCatalog = $derived.by(() => {
+    void catalogRev.n;
     const base = search.trim() ? searchPaints(search, { manufacturerId: mfrFilter ?? undefined, limit: 100000 }) : allPaints().filter(p => mfrFilter == null || p.manufacturerId === mfrFilter);
     return base;
   });
@@ -389,7 +402,7 @@
 
   // ── Confirmação de exclusão (RG-18/CAN1) ──
   let confirmPaintDel: StockPaint | null = $state(null);
-  let confirmMakerDel: { id: number; name: string } | null = $state(null);
+  let confirmMakerDel: Manufacturer | null = $state(null);
 
   function askDeletePaint(p?: StockPaint) {
     const alvo = p ?? (editingId != null ? stock.paints.find(x => x.id === editingId) : undefined);
@@ -402,30 +415,117 @@
     formOpen = false;
   }
 
-  function askDeleteMaker(id: number, name: string) {
-    confirmMakerDel = { id, name };
-  }
-  function doDeleteMaker() {
-    if (!confirmMakerDel) return;
-    const { id, name } = confirmMakerDel;
-    for (const p of [...stock.paints].filter(sp => sp.manufacturer === name)) removeStockPaint(p.id);
-    customMfrs = customMfrs.filter(m => m.id !== id);
-    persistCustom();
-    confirmMakerDel = null;
+  // ── Excluir fabricante (RG-18 reescrita, rf-14 RN3) ──
+  // Tinta prende o fabricante: com qualquer contagem > 0 o modal só explica e
+  // não chama a rota. Catálogo e estoque aparecem separados, sem somar — a
+  // cópia local de uma tinta do catálogo não conta duas vezes.
+  let deletingMaker = $state(false);
+  let makerDelCounts = $derived.by(() => {
+    const m = confirmMakerDel;
+    return m ? { catalog: m.paintCount, stock: m.userPaintCount + localStockCountFor(m) } : { catalog: 0, stock: 0 };
+  });
+  let makerDelBlocked = $derived(makerDelCounts.catalog > 0 || makerDelCounts.stock > 0);
+
+  function statusOf(e: unknown): number {
+    return (e as { status?: number } | null)?.status ?? 0;
   }
 
-  // ── Novo fabricante (local) ──
+  async function refreshMakers() {
+    try {
+      await reloadManufacturers();
+    } catch {
+      // Sem rede, a lista em memória continua valendo.
+    }
+    relinkStockManufacturers(allManufacturers());
+  }
+
+  function askDeleteMaker(m: Manufacturer) {
+    confirmMakerDel = m;
+  }
+  async function doDeleteMaker() {
+    if (!confirmMakerDel || makerDelBlocked || deletingMaker) return;
+    const { id } = confirmMakerDel;
+    deletingMaker = true;
+    try {
+      await deleteManufacturer(id);
+      confirmMakerDel = null;
+      if (mfrFilter === id) mfrFilter = null;
+      await refreshMakers();
+    } catch (e) {
+      const status = statusOf(e);
+      if (status === 404 || status === 409) {
+        confirmMakerDel = null;
+        toast(t(status === 404 ? 'errMakerGone' : 'errMakerBusy'), 'error');
+        await refreshMakers();
+      } else {
+        toast(t('errMakerNet'), 'error');
+      }
+    } finally {
+      deletingMaker = false;
+    }
+  }
+
+  // ── Cadastrar / alterar fabricante (um modal só) ──
   let makerFormOpen = $state(false);
-  let newMakerName = $state('');
-  function saveNewMaker() {
-    if (!newMakerName.trim()) return;
-    const id = customSeq--;
-    customMfrs = [...customMfrs, { id, name: newMakerName.trim() }];
-    persistCustom();
-    newMakerName = '';
-    makerFormOpen = false;
-    mfrFilter = id;
-    tab = 'tintas';
+  let editingMakerId: number | null = $state(null);
+  let makerNameInput = $state('');
+  let savingMaker = $state(false);
+
+  function openNewMaker() {
+    editingMakerId = null;
+    makerNameInput = '';
+    makerFormOpen = true;
+  }
+  function openEditMaker(m: Manufacturer) {
+    editingMakerId = m.id;
+    makerNameInput = m.name;
+    makerFormOpen = true;
+  }
+
+  function makerNameProblem(name: string): 'errMakerNameRequired' | 'errMakerNameTooLong' | null {
+    if (!name) return 'errMakerNameRequired';
+    if ([...name].length > MAX_MANUFACTURER_NAME) return 'errMakerNameTooLong';
+    return null;
+  }
+
+  async function saveMaker() {
+    if (savingMaker) return;
+    const name = makerNameInput.trim();
+    const problem = makerNameProblem(name);
+    if (problem) {
+      toast(t(problem), 'error');
+      return;
+    }
+    savingMaker = true;
+    try {
+      if (editingMakerId === null) {
+        const created = await createManufacturer(name);
+        makerFormOpen = false;
+        await refreshMakers();
+        mfrFilter = created.id;
+        tab = 'tintas';
+      } else {
+        await updateManufacturer(editingMakerId, name);
+        makerFormOpen = false;
+        await refreshMakers();
+        toast(t('saveChanges'));
+      }
+    } catch (e) {
+      const status = statusOf(e);
+      if (status === 409) {
+        toast(t('errMakerDup'), 'error');
+      } else if (status === 400) {
+        toast(t(makerNameProblem(name) ?? 'errMakerNameRequired'), 'error');
+      } else if (status === 404) {
+        makerFormOpen = false;
+        toast(t('errMakerGone'), 'error');
+        await refreshMakers();
+      } else {
+        toast(t('errMakerNet'), 'error');
+      }
+    } finally {
+      savingMaker = false;
+    }
   }
 
   function seePaints(mfrId: number) {
@@ -433,10 +533,11 @@
     tab = 'tintas';
   }
 
-  function swatchesFor(mfrName: string, isCustom: boolean): string[] {
-    const fromCatalog = isCustom ? [] : allPaints().filter(p => p.manufacturer === mfrName).slice(0, 5);
+  function swatchesFor(m: Manufacturer): string[] {
+    const fromCatalog = m.paintCount > 0 ? allPaints().filter(p => p.manufacturerId === m.id).slice(0, 5) : [];
     const need = 5 - fromCatalog.length;
-    const fromStock = need > 0 ? stock.paints.filter(p => p.manufacturer === mfrName).slice(0, need) : [];
+    const name = m.name.toLowerCase();
+    const fromStock = need > 0 ? stock.paints.filter(p => p.manufacturerId === m.id || p.manufacturer.toLowerCase() === name).slice(0, need) : [];
     return [...fromCatalog, ...fromStock].map(p => `rgb(${p.r}, ${p.g}, ${p.b})`);
   }
 
@@ -476,7 +577,7 @@
       <span style="font-size: 14px; color: var(--color-neutral-500); white-space: nowrap;">{headerCount}</span>
       <button
         class="t4-hover-accent"
-        onclick={() => (tab === 'tintas' ? openAdd() : (makerFormOpen = true))}
+        onclick={() => (tab === 'tintas' ? openAdd() : openNewMaker())}
         style="display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 18px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
       >
         <i class="ph ph-plus" style="font-size: 18px;"></i>{tab === 'tintas' ? t('addPaintBtn') : t('addMakerBtn')}
@@ -571,12 +672,26 @@
         </div>
       {:else}
         <div style="display: flex; flex-direction: column;">
-          {#each allMfrs as m (m.id)}
-            {@const catalogCount = m.custom ? 0 : (allManufacturers().find(x => x.id === m.id)?.paintCount ?? 0)}
-            {@const haveCount = stockCountFor(m.name)}
+          <div style="display: flex; align-items: center; gap: 10px; height: 50px; padding: 0 14px; margin-bottom: 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field);">
+            <i class="ph ph-magnifying-glass" style="font-size: 18px; color: var(--color-neutral-500);"></i>
+            <input
+              type="search"
+              bind:value={makerSearch}
+              placeholder={t('phFindMaker')}
+              aria-label={t('phFindMaker')}
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+              style="flex: 1; min-width: 0; height: 46px; background: transparent; border: none; outline: none; color: var(--color-text); font-family: inherit; font-size: 15px;"
+            />
+          </div>
+          {#each filteredMakers as m (m.id)}
+            {@const catalogCount = m.paintCount}
+            {@const haveCount = localStockCountFor(m)}
             <div style="display: flex; align-items: center; gap: 16px; min-height: 76px; padding: 12px 4px; border-bottom: 1px solid var(--color-line);">
               <span style="display: flex; gap: 3px; flex-shrink: 0;">
-                {#each swatchesFor(m.name, m.custom) as hex, i (i)}
+                {#each swatchesFor(m) as hex, i (i)}
                   <span style="width: 18px; height: 40px; border-radius: 2px; background: {hex};"></span>
                 {/each}
               </span>
@@ -587,9 +702,13 @@
                 </span>
               </span>
               <button class="t4-hover-ghost" onclick={() => seePaints(m.id)} style="height: 48px; padding: 0 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('seePaints')}</button>
-              <button class="t4-hover-ghost" onclick={() => askDeleteMaker(m.id, m.name)} style="height: 48px; padding: 0 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('del')}</button>
+              <button class="t4-hover-ghost" onclick={() => openEditMaker(m)} style="height: 48px; padding: 0 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('edit')}</button>
+              <button class="t4-hover-ghost" onclick={() => askDeleteMaker(m)} style="height: 48px; padding: 0 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('del')}</button>
             </div>
           {/each}
+          {#if filteredMakers.length === 0}
+            <p style="margin: 24px 4px; font-size: 15px; color: var(--color-neutral-500);">{t('noMakerFound')}</p>
+          {/if}
         </div>
       {/if}
     </div>
@@ -725,17 +844,19 @@
   <!-- Modal novo fabricante -->
   <div class="t4-modal" style="{modalKind !== 'maker' ? 'display: none; ' : ''}position: relative; width: min(460px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
     <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 18px;">
-      <span style="flex: 1; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: var(--color-text);">{t('newMakerT')}</span>
+      <span style="flex: 1; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: var(--color-text);">{editingMakerId === null ? t('newMakerT') : t('editMakerT')}</span>
       <button class="t4-hover-ghost" onclick={closeModal} aria-label={t('ariaClose')} style="display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer;">
         <i class="ph ph-x" style="font-size: 20px;"></i>
       </button>
     </div>
     <label style="display: flex; flex-direction: column; gap: 6px;">
       <span style="font-size: 13px; color: var(--color-neutral-500);">{t('makerName')}</span>
-      <input type="text" bind:value={newMakerName} placeholder="Scale75" style="height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;" />
+      <input type="text" bind:value={makerNameInput} maxlength={MAX_MANUFACTURER_NAME} placeholder="Scale75" style="height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;" />
     </label>
-    <button class="t4-hover-accent" onclick={saveNewMaker} style="width: 100%; height: 58px; margin-top: 18px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 16px; font-weight: 500; cursor: pointer;">{t('addMakerBtn')}</button>
-    <p style="margin: 12px 0 0; font-size: 13px; color: var(--color-neutral-500); text-wrap: pretty;">{t('addMakerNote')}</p>
+    <button class="t4-hover-accent" onclick={saveMaker} disabled={savingMaker} style="width: 100%; height: 58px; margin-top: 18px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 16px; font-weight: 500; cursor: pointer;">{editingMakerId === null ? t('addMakerBtn') : t('saveChanges')}</button>
+    {#if editingMakerId === null}
+      <p style="margin: 12px 0 0; font-size: 13px; color: var(--color-neutral-500); text-wrap: pretty;">{t('addMakerNote')}</p>
+    {/if}
   </div>
 
   <!-- Confirmação exclusão de tinta -->
@@ -749,14 +870,16 @@
   </div>
 
   <!-- Confirmação exclusão de fabricante (RG-18/CA11): declara quantas tintas somem -->
-  <div class="t4-modal" style="{modalKind !== 'confirmMaker' ? 'display: none; ' : ''}position: relative; width: min(440px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
-    <p style="margin: 0; font-size: clamp(16px, 1.8cqi, 21px); font-weight: 500; letter-spacing: -0.01em; color: var(--color-text); text-wrap: pretty;">{t('delMakerT', { name: confirmMakerDel?.name ?? '' })}</p>
+  <div class="t4-modal" role="alertdialog" aria-modal="true" style="{modalKind !== 'confirmMaker' ? 'display: none; ' : ''}position: relative; width: min(440px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
+    <p style="margin: 0; font-size: clamp(16px, 1.8cqi, 21px); font-weight: 500; letter-spacing: -0.01em; color: var(--color-text); text-wrap: pretty;">{makerDelBlocked ? t('delMakerBlockedT', { name: confirmMakerDel?.name ?? '' }) : t('delMakerT', { name: confirmMakerDel?.name ?? '' })}</p>
     <p style="margin: 10px 0 0; font-size: 15px; color: var(--color-neutral-400); text-wrap: pretty;">
-      {stockCountFor(confirmMakerDel?.name ?? '') > 0 ? t('delMakerB', { n: stockCountFor(confirmMakerDel?.name ?? '') }) : t('delMakerB0')}
+      {makerDelBlocked ? t('delMakerBlockedB', { n: makerDelCounts.catalog, m: makerDelCounts.stock }) : t('delMakerB0')}
     </p>
     <div style="display: flex; gap: 10px; margin-top: 22px;">
-      <button class="t4-hover-ghost" onclick={closeModal} style="flex: 1; height: 56px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{t('cancel')}</button>
-      <button class="t4-hover-accent" onclick={doDeleteMaker} style="flex: 1; height: 56px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{t('delMakerA')}</button>
+      <button class="t4-hover-ghost" onclick={closeModal} style="flex: 1; height: 56px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{makerDelBlocked ? t('closeBtn') : t('cancel')}</button>
+      {#if !makerDelBlocked}
+        <button class="t4-hover-accent" onclick={doDeleteMaker} disabled={deletingMaker} style="flex: 1; height: 56px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{t('delMakerA')}</button>
+      {/if}
     </div>
   </div>
 </div>

@@ -19,6 +19,7 @@ func NewRouter(svc *service.PaintService) *router.Router {
 	r.GET("/stats", handleStats(svc))
 	r.GET("/manufacturers", handleManufacturers(svc))
 	r.POST("/manufacturers", handleAddManufacturer(svc))
+	r.PUT("/manufacturers/{id}", handleUpdateManufacturer(svc))
 	r.DELETE("/manufacturers/{id}", handleDeleteManufacturer(svc))
 	r.GET("/paints", handlePaints(svc))
 	r.GET("/paints/{id}", handlePaintByID(svc))

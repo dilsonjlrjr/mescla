@@ -27,8 +27,8 @@ const PAINTS = [
   { id: 3, manufacturerId: 2, manufacturer: 'Citadel', name: 'Mephiston', code: 'C1', line: 'Base', r: 150, g: 30, b: 30 },
 ];
 const MFRS = [
-  { id: 1, name: 'Vallejo', paintCount: 2 },
-  { id: 2, name: 'Citadel', paintCount: 1 },
+  { id: 1, name: 'Vallejo', paintCount: 2, userPaintCount: 0 },
+  { id: 2, name: 'Citadel', paintCount: 1, userPaintCount: 0 },
 ];
 
 vi.mock('../src/lib/services/catalog', () => ({
@@ -39,6 +39,12 @@ vi.mock('../src/lib/services/catalog', () => ({
   searchPaints: () => PAINTS,
   hexOf: (p: { r: number; g: number; b: number }) =>
     `#${[p.r, p.g, p.b].map(n => n.toString(16).padStart(2, '0')).join('').toUpperCase()}`,
+  reloadManufacturers: () => Promise.resolve(MFRS),
+  migrateLegacyManufacturers: () => Promise.resolve(0),
+  createManufacturer: () => Promise.reject(new Error('não usado')),
+  updateManufacturer: () => Promise.reject(new Error('não usado')),
+  deleteManufacturer: () => Promise.reject(new Error('não usado')),
+  MAX_MANUFACTURER_NAME: 80,
 }));
 
 const RECIPE = {

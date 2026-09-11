@@ -79,7 +79,9 @@ func openPaintService(dbPath string) (*PaintService, error) {
 	if strings.Contains(dsn, "?") {
 		sep = "&"
 	}
-	dsn += sep + "_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)"
+	// busy_timeout: escrita concorrente espera o lock em vez de falhar na hora
+	// (dois cadastros simultâneos do mesmo fabricante dão 200 e 409, não 500).
+	dsn += sep + "_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
 
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
@@ -250,6 +252,9 @@ type ManufacturerDTO struct {
 	Website    string `json:"website"`
 	LogoPath   string `json:"logoPath"`
 	PaintCount int    `json:"paintCount"`
+	// UserPaintCount conta as tintas do estoque do servidor: junto com
+	// PaintCount, é o que impede excluir o fabricante (RG-18, rf-14).
+	UserPaintCount int `json:"userPaintCount"`
 }
 
 type StatsDTO struct {
@@ -270,13 +275,14 @@ func (s *PaintService) GetStats() (StatsDTO, error) {
 	return stats, nil
 }
 
+const manufacturerSelect = `
+	SELECT m.id, m.name, COALESCE(m.country, ''), COALESCE(m.website, ''), COALESCE(m.logo_path, ''),
+	       (SELECT COUNT(*) FROM paints p WHERE p.manufacturer_id = m.id),
+	       (SELECT COUNT(*) FROM user_paints u WHERE u.manufacturer_id = m.id)
+	FROM manufacturers m`
+
 func (s *PaintService) GetManufacturers() ([]ManufacturerDTO, error) {
-	rows, err := s.db.Query(`
-		SELECT m.id, m.name, COALESCE(m.country, ''), COALESCE(m.website, ''), COALESCE(m.logo_path, ''),
-		       (SELECT COUNT(*) FROM paints p WHERE p.manufacturer_id = m.id)
-		FROM manufacturers m
-		ORDER BY m.name
-	`)
+	rows, err := s.db.Query(manufacturerSelect + ` ORDER BY m.name`)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +291,7 @@ func (s *PaintService) GetManufacturers() ([]ManufacturerDTO, error) {
 	var result []ManufacturerDTO
 	for rows.Next() {
 		var m ManufacturerDTO
-		if err := rows.Scan(&m.ID, &m.Name, &m.Country, &m.Website, &m.LogoPath, &m.PaintCount); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.Country, &m.Website, &m.LogoPath, &m.PaintCount, &m.UserPaintCount); err != nil {
 			return nil, err
 		}
 		result = append(result, m)

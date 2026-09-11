@@ -90,6 +90,7 @@
   import BrandMark from '../components/BrandMark.svelte';
   import LangSwitch from '../components/LangSwitch.svelte';
   import { allManufacturers, allPaints, paintById, searchPaints, hexOf, type Paint } from '../services/catalog';
+  import { catalogRev } from '../services/catalogRev.svelte';
   import {
     findSimilar, suggestEquivalentRecipe, suggestRecipeForColor, recipeForColorInBrand, suggestFromStock,
     bestBrandsFor, ehUniversoVazio,
@@ -585,8 +586,15 @@
     toggleShelf(mfrId);
   }
 
+  // Fabricantes mudam em T4 com esta tela montada (rf-14): a lista se refaz
+  // a cada recarga do catálogo.
+  let mfrs = $derived.by(() => {
+    void catalogRev.n;
+    return allManufacturers();
+  });
+
   let universoBrandName = $derived(
-    universo.tipo === 'marca' ? (allManufacturers().find(m => m.id === universo.manufacturerId)?.name ?? '') : '',
+    universo.tipo === 'marca' ? (mfrs.find(m => m.id === universo.manufacturerId)?.name ?? '') : '',
   );
 
   let poolVazioTitle = $derived.by(() => {
@@ -875,7 +883,7 @@
                    opção sem valor, e enquanto ele estiver ativo a busca fica
                    desabilitada (RN15). -->
               <option value="" disabled>{t('chooseSupplierPlaceholder')}</option>
-              {#each allManufacturers() as m (m.id)}
+              {#each mfrs as m (m.id)}
                 <option value={m.id}>{m.name}</option>
               {/each}
             </select>
