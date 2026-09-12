@@ -155,7 +155,11 @@
   // por isso lê `rows`/`value` com untrack (não deve reagir a cada tecla digitada).
   $effect(() => {
     if (!open) return;
-    searchEl?.focus();
+    // `preventScroll`: o campo vive num popover `position: fixed`, e o foco sem
+    // essa opção faz o navegador rolar o ancestral rolável pra "revelar" o campo.
+    // Essa rolagem disparava o efeito de baixo e fechava a lista no mesmo quadro
+    // em que ela abria — a lista parecia travada (D-016).
+    searchEl?.focus({ preventScroll: true });
     untrack(() => {
       const idx = rows.findIndex((r) => r.id === value);
       if (idx < 0) return;
@@ -177,14 +181,22 @@
     return () => document.removeEventListener('pointerdown', onPointerDown, true);
   });
 
-  // Lista fixa na tela não acompanha a rolagem de quem está atrás dela: rolar a
-  // página ou o corpo do modal fecha, em vez de deixar a lista solta do campo.
+  // Lista fixa na tela não acompanha sozinha a rolagem de quem está atrás dela.
+  // Rolar ou redimensionar REPOSICIONA a lista no campo; só fecha quando o campo
+  // sai da janela. Fechar direto travava a lista no iPad, onde o teclado que sobe
+  // dispara `resize` assim que a busca recebe foco (D-016).
   $effect(() => {
     if (!open) return;
     function onMove(e: Event) {
-      // Rolar a própria lista de opções não fecha nada.
+      // Rolar a própria lista de opções não mexe em nada.
       if (e.target instanceof Node && listEl?.contains(e.target)) return;
-      closePopover(false);
+      if (!triggerEl) return;
+      const rect = triggerEl.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) {
+        closePopover(false);
+        return;
+      }
+      decidePosition();
     }
     window.addEventListener('scroll', onMove, true);
     window.addEventListener('resize', onMove);
