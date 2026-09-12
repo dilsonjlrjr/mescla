@@ -92,6 +92,8 @@ export interface StockPaint {
   catalogId?: number;
   /** Tipo de tinta (rf-15). Estoque anterior ao campo recebe o tipo na abertura de T4. */
   paintTypeId?: number;
+  /** Quantos potes iguais o pintor tem. Estoque anterior ao campo vira 1 na abertura de T4. */
+  quantity?: number;
 }
 
 export interface StockRowError {

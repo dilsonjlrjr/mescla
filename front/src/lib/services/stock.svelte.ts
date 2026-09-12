@@ -61,8 +61,14 @@ export function stockBrands(): string[] {
   return [...new Set(stock.paints.map(p => p.manufacturer))].sort();
 }
 
+// Quantidade sempre inteira e >= 1: ausente, não finita ou < 1 vira 1.
+function normalizeQuantity(n: unknown): number {
+  const q = Math.floor(Number(n));
+  return Number.isFinite(q) ? Math.max(1, q) : 1;
+}
+
 export function addStockPaint(p: Omit<StockPaint, 'id'>): StockPaint {
-  const paint: StockPaint = { ...p, id: nextId() };
+  const paint: StockPaint = { ...p, id: nextId(), quantity: normalizeQuantity(p.quantity) };
   stock.paints.push(paint);
   persist();
   return paint;
@@ -71,7 +77,7 @@ export function addStockPaint(p: Omit<StockPaint, 'id'>): StockPaint {
 export function updateStockPaint(p: StockPaint) {
   const i = stock.paints.findIndex(x => x.id === p.id);
   if (i !== -1) {
-    stock.paints[i] = p;
+    stock.paints[i] = { ...p, quantity: normalizeQuantity(p.quantity) };
     persist();
   }
 }
@@ -139,8 +145,24 @@ export function localStockCountForType(typeId: number): number {
 /** Insere um lote (importação CSV já validada). Devolve quantas entraram. */
 export function addStockPaints(paints: Omit<StockPaint, 'id'>[]): number {
   for (const p of paints) {
-    stock.paints.push({ ...p, id: nextId() });
+    stock.paints.push({ ...p, id: nextId(), quantity: normalizeQuantity(p.quantity) });
   }
   persist();
   return paints.length;
+}
+
+/** Dá quantidade 1 a quem foi cadastrado antes do campo e persiste se algo mudou. */
+export function fillStockQuantities() {
+  let changed = false;
+  for (const p of stock.paints) {
+    if (Number.isInteger(p.quantity) && (p.quantity as number) >= 1) continue;
+    p.quantity = 1;
+    changed = true;
+  }
+  if (changed) persist();
+}
+
+/** Soma dos potes do estoque local (conta a quantidade, não a linha). */
+export function totalPots(): number {
+  return stock.paints.reduce((sum, p) => sum + normalizeQuantity(p.quantity), 0);
 }

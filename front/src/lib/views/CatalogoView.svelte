@@ -42,7 +42,8 @@
   import Header from '../components/Header.svelte';
   import PaintBottle from '../components/PaintBottle.svelte';
   import VirtualList from '../components/VirtualList.svelte';
-  import { onMount } from 'svelte';
+  import Combobox from '../components/Combobox.svelte';
+  import { onMount, tick } from 'svelte';
   import {
     allManufacturers, allPaints, hexOf, searchPaints, type Paint, type Manufacturer,
     reloadManufacturers, createManufacturer, updateManufacturer, deleteManufacturer,
@@ -53,6 +54,7 @@
   import {
     stock, sortedStock, addStockPaint, updateStockPaint, removeStockPaint,
     relinkStockManufacturers, localStockCountFor, fillStockPaintTypes, localStockCountForType,
+    fillStockQuantities,
   } from '../services/stock.svelte';
   import { catalogRev } from '../services/catalogRev.svelte';
   import type { StockPaint } from '../services/engine';
@@ -66,6 +68,7 @@
 
   let search = $state('');
   let mfrFilter: number | null = $state(null);
+  let ptypeFilter: number | null = $state(null);
   let onlyMine = $state(false);
 
   $effect(() => {
@@ -85,6 +88,7 @@
       await refreshMakers();
       await refreshPTypes();
       backfillStockPaintTypes();
+      fillStockQuantities();
     })();
   });
 
@@ -92,6 +96,14 @@
     void catalogRev.n;
     return [...allManufacturers()];
   });
+
+  // allPTypes/ptypeNameById declarados aqui (não lá embaixo, com o resto de
+  // rf-15) porque listNote já precisa do nome do tipo filtrado.
+  let allPTypes: PaintType[] = $derived.by(() => {
+    void catalogRev.n;
+    return [...allPaintTypes()];
+  });
+  let ptypeNameById = $derived(new Map(allPTypes.map(pt => [pt.id, pt.name])));
 
   let makerSearch = $state('');
   function foldText(s: string): string {
@@ -124,7 +136,7 @@
   let filteredCatalog = $derived.by(() => {
     void catalogRev.n;
     const base = search.trim() ? searchPaints(search, { manufacturerId: mfrFilter ?? undefined, limit: 100000 }) : allPaints().filter(p => mfrFilter == null || p.manufacturerId === mfrFilter);
-    return base;
+    return base.filter(p => ptypeFilter == null || p.paintTypeId === ptypeFilter);
   });
 
   let filteredStock = $derived(
@@ -133,6 +145,7 @@
         const mfrName = allMfrs.find(m => m.id === mfrFilter)?.name;
         if (p.manufacturer !== mfrName) return false;
       }
+      if (ptypeFilter != null && p.paintTypeId !== ptypeFilter) return false;
       if (!search.trim()) return true;
       const q = search.toLowerCase();
       return p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q) || p.manufacturer.toLowerCase().includes(q);
@@ -174,7 +187,7 @@
       key: `s${p.id}`,
       have: true,
       name: p.name,
-      meta: `${p.code || '—'} · ${p.manufacturer}${typeSuffix(p.paintTypeId)}${p.volume ? ` · ${p.volume}` : ''}`,
+      meta: `${p.code || '—'} · ${p.manufacturer}${typeSuffix(p.paintTypeId)}${p.volume ? ` · ${p.volume}` : ''}${(p.quantity ?? 1) > 1 ? ` · ${t('qtyPots', { n: p.quantity ?? 1 })}` : ''}`,
       hex: rgbToHex(p.r, p.g, p.b),
       // Desmarcar tinta do catálogo só devolve a linha ao catálogo; tinta
       // cadastrada à mão sumiria de vez, então passa pela confirmação.
@@ -204,7 +217,8 @@
 
   let listNote = $derived(
     (onlyMine ? t('listNoteMine') : t('listNoteAll')) +
-      (mfrFilter != null ? t('inMaker', { brand: allMfrs.find(m => m.id === mfrFilter)?.name ?? '' }) : t('inAll', { n: allMfrs.length }))
+      (mfrFilter != null ? t('inMaker', { brand: allMfrs.find(m => m.id === mfrFilter)?.name ?? '' }) : t('inAll', { n: allMfrs.length })) +
+      (ptypeFilter != null ? ` · ${ptypeNameById.get(ptypeFilter)}` : '')
   );
 
   let headerCount = $derived(t('estanteCount', { a: filteredStock.length, b: filteredCatalog.length, c: allMfrs.length }));
@@ -221,12 +235,23 @@
   let fCode = $state('');
   let fHex = $state('#8a8a8a');
   let fVolume = $state('');
+  let fQty = $state(1);
   // Toggle visual "Tenho este pote agora" (fiel ao mockup) — o estoque local
   // não tem coluna `have` própria: estar na lista já É "tenho" (RG-17). Sem
   // essa coluna, desmarcar aqui não muda o que saveForm() grava; é limitação
   // declarada, não comportamento fingido.
   let fHave = $state(true);
   let saving = $state(false);
+  // O modal fica sempre montado (alterna só `display`) e o corpo rolável guarda
+  // a posição de rolagem entre aberturas — sem isto, reabrir o formulário
+  // continuaria de onde a última edição parou.
+  let formBodyEl: HTMLDivElement | null = $state(null);
+  async function resetFormScroll() {
+    await tick(); // espera o `display` sair de `none` (scrollTop não pega em elemento escondido)
+    requestAnimationFrame(() => {
+      if (formBodyEl) formBodyEl.scrollTop = 0;
+    });
+  }
 
   function hexToRgb(hex: string): { r: number; g: number; b: number } {
     const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
@@ -331,14 +356,16 @@
   function openAdd() {
     editingId = null;
     editingCatalogId = null;
-    fMfr = allMfrs[0]?.id ?? '';
+    fMfr = mfrFilter ?? '';
     fPType = defaultPTypeId() ?? '';
     fName = '';
     fCode = '';
     fHex = '#8a8a8a';
     fVolume = '';
+    fQty = 1;
     fHave = true;
     formOpen = true;
+    void resetFormScroll();
   }
 
   function openEdit(p: StockPaint) {
@@ -351,8 +378,10 @@
     fCode = p.code;
     fHex = rgbToHex(p.r, p.g, p.b);
     fVolume = p.volume;
+    fQty = p.quantity ?? 1;
     fHave = true;
     formOpen = true;
+    void resetFormScroll();
   }
 
   function openEditCatalog(p: Paint) {
@@ -364,8 +393,10 @@
     fCode = p.code;
     fHex = rgbToHex(p.r, p.g, p.b);
     fVolume = '';
+    fQty = 1;
     fHave = true;
     formOpen = true;
+    void resetFormScroll();
   }
 
   function saveForm() {
@@ -381,6 +412,10 @@
       toast(t('errMakerRequired'), 'error');
       return;
     }
+    if (!Number.isInteger(Number(fQty)) || Number(fQty) < 1) {
+      toast(t('errQtyInvalid'), 'error');
+      return;
+    }
     saving = true;
     const { r, g, b } = hexToRgb(fHex);
     const mfr = allMfrs.find(m => m.id === Number(fMfr));
@@ -392,6 +427,7 @@
       code: fCode.trim(),
       r, g, b,
       volume: fVolume.trim(),
+      quantity: Number(fQty),
       notes: '',
     };
     if (editingId !== null) {
@@ -550,12 +586,7 @@
     return [...fromCatalog, ...fromStock].map(p => `rgb(${p.r}, ${p.g}, ${p.b})`);
   }
 
-  // ── Tipos de tinta (rf-15) ──
-  let allPTypes: PaintType[] = $derived.by(() => {
-    void catalogRev.n;
-    return [...allPaintTypes()];
-  });
-  let ptypeNameById = $derived(new Map(allPTypes.map(pt => [pt.id, pt.name])));
+  // ── Tipos de tinta (rf-15) ── (allPTypes/ptypeNameById ficam lá em cima, perto de allMfrs)
   function typeSuffix(id: number | undefined): string {
     const name = id ? ptypeNameById.get(id) : undefined;
     return name ? ` · ${name}` : '';
@@ -665,6 +696,7 @@
     try {
       await deletePaintType(id);
       confirmPTypeDel = null;
+      if (ptypeFilter === id) ptypeFilter = null;
       await refreshPTypes();
     } catch (e) {
       const status = statusOf(e);
@@ -760,19 +792,33 @@
             </button>
           </div>
 
-          <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px;">
-            <button
-              class="t4-hover-border"
-              onclick={() => (mfrFilter = null)}
-              style="height: 44px; padding: 0 14px; border: 1px solid {mfrFilter === null ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 999px; background: {mfrFilter === null ? 'var(--color-accent)' : 'var(--color-surface)'}; color: {mfrFilter === null ? 'var(--color-accent-100)' : 'var(--color-neutral-300)'}; font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;"
-            >{t('allMakers')}</button>
-            {#each allMfrs as m (m.id)}
-              <button
-                class="t4-hover-border"
-                onclick={() => (mfrFilter = m.id)}
-                style="height: 44px; padding: 0 14px; border: 1px solid {mfrFilter === m.id ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 999px; background: {mfrFilter === m.id ? 'var(--color-accent)' : 'var(--color-surface)'}; color: {mfrFilter === m.id ? 'var(--color-accent-100)' : 'var(--color-neutral-300)'}; font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;"
-              >{m.name}</button>
-            {/each}
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
+            <div style="flex: 1; min-width: 200px;">
+              <Combobox
+                options={allMfrs}
+                value={mfrFilter}
+                onchange={(id) => (mfrFilter = id)}
+                placeholder={t('allMakers')}
+                clearLabel={t('allMakers')}
+                searchPlaceholder={t('phFindMaker')}
+                emptyText={t('noMakerFound')}
+                ariaLabel={t('fMaker')}
+                moreText={(n) => t('comboMore', { n })}
+              />
+            </div>
+            <div style="flex: 1; min-width: 200px;">
+              <Combobox
+                options={allPTypes}
+                value={ptypeFilter}
+                onchange={(id) => (ptypeFilter = id)}
+                placeholder={t('allPTypesFilter')}
+                clearLabel={t('allPTypesFilter')}
+                searchPlaceholder={t('phFindPType')}
+                emptyText={t('noPTypeFound')}
+                ariaLabel={t('fPType')}
+                moreText={(n) => t('comboMore', { n })}
+              />
+            </div>
           </div>
 
           <p style="margin: 0 0 8px; font-size: 13px; color: var(--color-neutral-500);">{listNote}</p>
@@ -898,120 +944,129 @@
 <div class="t4-scrim" style="position: absolute; inset: 0; z-index: 70; display: {modalKind ? 'flex' : 'none'}; align-items: center; justify-content: center; padding: 40px;">
   <div role="presentation" onclick={closeModal} style="position: absolute; inset: 0; background: rgba(9, 10, 16, 0.7);"></div>
 
-  <!-- Modal cadastro/edição de tinta -->
-  <div class="t4-modal" style="{modalKind !== 'paint' ? 'display: none; ' : ''}position: relative; width: min(560px, 100%); max-height: 100%; overflow-y: auto; padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
-    <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 20px;">
+  <!-- Modal cadastro/edição de tinta: topo e rodapé fixos, só o corpo rola —
+       card sem padding próprio, cada faixa cuida do seu. -->
+  <div class="t4-modal" style="{modalKind !== 'paint' ? 'display: none; ' : ''}position: relative; width: min(560px, 100%); max-height: 100%; display: flex; flex-direction: column; overflow: hidden; padding: 0; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
+    <div style="flex-shrink: 0; display: flex; align-items: center; gap: 14px; padding: 20px 24px 16px; border-bottom: 1px solid var(--color-line);">
       <span style="flex: 1; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: var(--color-text);">{editing ? t('editPaint') : t('newPaint')}</span>
       <button class="t4-hover-ghost" onclick={closeModal} aria-label={t('ariaClose')} style="display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer;">
         <i class="ph ph-x" style="font-size: 20px;"></i>
       </button>
     </div>
 
-    <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px;">
-      <PaintBottle r={fRgb.r} g={fRgb.g} b={fRgb.b} width={52} height={87} label={fName || t('fName')} />
-      <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
-        <span style="font-size: clamp(15px, 1.6cqi, 19px); font-weight: 500; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{fName || t('fName')}</span>
-        <span style="font-size: 13px; color: var(--color-neutral-500);">{formPreviewMeta}</span>
-      </span>
+    <div bind:this={formBodyEl} style="flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px;">
+      <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px;">
+        <PaintBottle r={fRgb.r} g={fRgb.g} b={fRgb.b} width={52} height={87} label={fName || t('fName')} />
+        <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+          <span style="font-size: clamp(15px, 1.6cqi, 19px); font-weight: 500; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{fName || t('fName')}</span>
+          <span style="font-size: 13px; color: var(--color-neutral-500);">{formPreviewMeta}</span>
+        </span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <label style="display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fName')}</span>
+          <input type="text" bind:value={fName} placeholder="Mephiston Red" style="height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;" />
+        </label>
+
+        <div style="display: flex; gap: 12px;">
+          <label style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0;">
+            <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fCode')}</span>
+            <input type="text" bind:value={fCode} placeholder="70.951" style="height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;" />
+          </label>
+          <label style="display: flex; flex-direction: column; gap: 6px; width: 130px; flex-shrink: 0;">
+            <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fLeft')}</span>
+            <input type="text" inputmode="decimal" bind:value={fVolume} placeholder="17" style="height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;" />
+          </label>
+          <label style="display: flex; flex-direction: column; gap: 6px; width: 110px; flex-shrink: 0;">
+            <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fQty')}</span>
+            <input type="number" inputmode="numeric" min="1" step="1" bind:value={fQty} style="height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;" />
+          </label>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fMaker')}</span>
+          <Combobox
+            options={allMfrs}
+            value={fMfr === '' ? null : fMfr}
+            onchange={(id) => (fMfr = id ?? '')}
+            placeholder={t('pickMaker')}
+            searchPlaceholder={t('phFindMaker')}
+            emptyText={t('noMakerFound')}
+            ariaLabel={t('fMaker')}
+            moreText={(n) => t('comboMore', { n })}
+          />
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fPType')}</span>
+          <Combobox
+            options={allPTypes}
+            value={fPType === '' ? null : fPType}
+            onchange={(id) => (fPType = id ?? '')}
+            placeholder={t('pickPType')}
+            searchPlaceholder={t('phFindPType')}
+            emptyText={t('noPTypeFound')}
+            ariaLabel={t('fPType')}
+            moreText={(n) => t('comboMore', { n })}
+          />
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fColor')}</span>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <input
+              type="color"
+              class="t4-swatch-picker"
+              value={pickerHex}
+              oninput={onPickColor}
+              aria-label={t('fColorPick')}
+              title={t('fColorPick')}
+              style="width: 50px; height: 50px; border-radius: 8px; border: 1px solid var(--color-neutral-800); background: rgb({fRgb.r}, {fRgb.g}, {fRgb.b}); flex-shrink: 0; cursor: pointer;"
+            />
+            <input
+              type="text"
+              bind:value={fHex}
+              maxlength="7"
+              placeholder="#9A1115"
+              aria-label={t('fColor')}
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+              style="flex: 1; min-width: 0; height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;"
+            />
+            <!-- "Ler do pote" (câmera, US-20/E9): captura local no navegador — a foto
+                 nunca sai do aparelho e nenhuma rota nova foi criada. -->
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              bind:this={potInputEl}
+              onchange={onPotFile}
+              tabindex="-1"
+              aria-hidden="true"
+              style="position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;"
+            />
+            <button
+              type="button"
+              class="t4-hover-accent"
+              onclick={openPotCamera}
+              disabled={readingPot}
+              style="display: inline-flex; align-items: center; gap: 8px; height: 50px; padding: 0 14px; border: 1px solid var(--color-accent-700); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
+            >
+              <i class="ph ph-camera" style="font-size: 18px;"></i>{t('readPot')}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div style="display: flex; flex-direction: column; gap: 14px;">
-      <label style="display: flex; flex-direction: column; gap: 6px;">
-        <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fName')}</span>
-        <input type="text" bind:value={fName} placeholder="Mephiston Red" style="height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;" />
-      </label>
-
-      <div style="display: flex; gap: 12px;">
-        <label style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0;">
-          <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fCode')}</span>
-          <input type="text" bind:value={fCode} placeholder="70.951" style="height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;" />
-        </label>
-        <label style="display: flex; flex-direction: column; gap: 6px; width: 130px; flex-shrink: 0;">
-          <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fLeft')}</span>
-          <input type="text" inputmode="decimal" bind:value={fVolume} placeholder="17" style="height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;" />
-        </label>
-      </div>
-
-      <div style="display: flex; flex-direction: column; gap: 8px;">
-        <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fMaker')}</span>
-        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-          {#each allMfrs as m (m.id)}
-            <button
-              type="button"
-              class="t4-hover-border"
-              onclick={() => (fMfr = m.id)}
-              style="height: 44px; padding: 0 14px; border: 1px solid {fMfr === m.id ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 999px; background: {fMfr === m.id ? 'var(--color-accent)' : 'var(--color-surface)'}; color: {fMfr === m.id ? 'var(--color-accent-100)' : 'var(--color-neutral-300)'}; font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;"
-            >{m.name}</button>
-          {/each}
-        </div>
-      </div>
-
-      <div style="display: flex; flex-direction: column; gap: 8px;">
-        <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fPType')}</span>
-        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-          {#each allPTypes as pt (pt.id)}
-            <button
-              type="button"
-              class="t4-hover-border"
-              onclick={() => (fPType = pt.id)}
-              style="height: 44px; padding: 0 14px; border: 1px solid {fPType === pt.id ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 999px; background: {fPType === pt.id ? 'var(--color-accent)' : 'var(--color-surface)'}; color: {fPType === pt.id ? 'var(--color-accent-100)' : 'var(--color-neutral-300)'}; font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;"
-            >{pt.name}</button>
-          {/each}
-        </div>
-      </div>
-
-      <div style="display: flex; flex-direction: column; gap: 8px;">
-        <span style="font-size: 13px; color: var(--color-neutral-500);">{t('fColor')}</span>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <input
-            type="color"
-            class="t4-swatch-picker"
-            value={pickerHex}
-            oninput={onPickColor}
-            aria-label={t('fColorPick')}
-            title={t('fColorPick')}
-            style="width: 50px; height: 50px; border-radius: 8px; border: 1px solid var(--color-neutral-800); background: rgb({fRgb.r}, {fRgb.g}, {fRgb.b}); flex-shrink: 0; cursor: pointer;"
-          />
-          <input
-            type="text"
-            bind:value={fHex}
-            maxlength="7"
-            placeholder="#9A1115"
-            aria-label={t('fColor')}
-            autocomplete="off"
-            autocapitalize="off"
-            spellcheck="false"
-            style="flex: 1; min-width: 0; height: 50px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-family: inherit; font-size: 15px; outline: none;"
-          />
-          <!-- "Ler do pote" (câmera, US-20/E9): captura local no navegador — a foto
-               nunca sai do aparelho e nenhuma rota nova foi criada. -->
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            bind:this={potInputEl}
-            onchange={onPotFile}
-            tabindex="-1"
-            aria-hidden="true"
-            style="position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;"
-          />
-          <button
-            type="button"
-            class="t4-hover-accent"
-            onclick={openPotCamera}
-            disabled={readingPot}
-            style="display: inline-flex; align-items: center; gap: 8px; height: 50px; padding: 0 14px; border: 1px solid var(--color-accent-700); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
-          >
-            <i class="ph ph-camera" style="font-size: 18px;"></i>{t('readPot')}
-          </button>
-        </div>
-      </div>
-
+    <div style="flex-shrink: 0; padding: 16px 24px 20px; border-top: 1px solid var(--color-line); background: var(--color-modal);">
       <button
         type="button"
         onclick={() => (fHave = !fHave)}
         aria-pressed={fHave}
-        style="display: flex; align-items: center; gap: 12px; height: 60px; padding: 0 14px; border: 1px solid {fHave ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 8px; background: {fHave ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'transparent'}; color: var(--color-text); font-family: inherit; font-size: 15px; text-align: left; cursor: pointer;"
+        style="display: flex; align-items: center; gap: 12px; width: 100%; height: 60px; padding: 0 14px; border: 1px solid {fHave ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 8px; background: {fHave ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'transparent'}; color: var(--color-text); font-family: inherit; font-size: 15px; text-align: left; cursor: pointer;"
       >
         <span style="display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid {fHave ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 4px; flex-shrink: 0;">
           <i class="ph-bold ph-check" style="font-size: 15px; color: {fHave ? 'var(--color-accent)' : 'transparent'};"></i>
@@ -1028,7 +1083,7 @@
           <button class="t4-hover-ghost" onclick={() => askDeletePaint()} style="height: 58px; padding: 0 18px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('delPaintA')}</button>
         {/if}
       </div>
-      <p style="margin: 2px 0 0; font-size: 13px; color: var(--color-neutral-500); text-wrap: pretty;">{t('formNote')}</p>
+      <p style="margin: 10px 0 0; font-size: 13px; color: var(--color-neutral-500); text-wrap: pretty;">{t('formNote')}</p>
     </div>
   </div>
 
@@ -1134,9 +1189,6 @@
   }
 
   /* `style-hover="..."` do protótipo — reproduzido aqui por classe (rule 7). */
-  .t4-hover-border:hover {
-    border-color: var(--color-accent-700);
-  }
   .t4-hover-ghost:hover {
     border-color: var(--color-accent-700);
     color: var(--color-accent-400);
