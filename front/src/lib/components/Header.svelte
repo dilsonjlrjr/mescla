@@ -20,19 +20,25 @@
     actions?: Snippet;
     /** T4 usa 14px entre os itens; T2/T3, 16px */
     gap?: number;
+    /** rf-16: botão de voltar próprio (o editor de T2 volta para a lista de
+     *  projetos). Ausente, volta para T1 com o rótulo "Pergunta". */
+    back?: { label: string; onclick: () => void };
+    /** rf-16: substitui o título em texto (o editor de T2 põe o campo de
+     *  renomear aqui). */
+    titleSlot?: Snippet;
   }
 
-  let { kicker, title, lead, actions, gap = 16 }: Props = $props();
+  let { kicker, title, lead, actions, gap = 16, back, titleSlot }: Props = $props();
 </script>
 
 <div
   style="display: flex; align-items: center; flex-wrap: wrap; row-gap: 8px; gap: {gap}px; min-height: 76px; flex-shrink: 0; padding: 10px 20px; border-bottom: 1px solid var(--color-line);"
 >
   <button
-    onclick={() => switchTab('pergunta')}
+    onclick={() => (back ? back.onclick() : switchTab('pergunta'))}
     style="display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;"
   >
-    <i class="ph ph-arrow-left" style="font-size: 19px;"></i>{t('question')}
+    <i class="ph ph-arrow-left" style="font-size: 19px;"></i>{back ? back.label : t('question')}
   </button>
 
   <!-- A logo também volta pra T1: nas telas secundárias "página principal" é a
@@ -46,16 +52,20 @@
     <BrandMark size={26} />
   </button>
 
-  {#if kicker || title}
+  {#if kicker || title || titleSlot}
     <div style="display: flex; flex-direction: column; min-width: 0;">
       <span
         style="font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-neutral-500);"
         >{kicker}</span
       >
-      <span
-        style="font-size: clamp(16px, 1.8cqi, 21px); font-weight: 500; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
-        >{title}</span
-      >
+      {#if titleSlot}
+        {@render titleSlot()}
+      {:else}
+        <span
+          style="font-size: clamp(16px, 1.8cqi, 21px); font-weight: 500; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+          >{title}</span
+        >
+      {/if}
     </div>
   {/if}
 

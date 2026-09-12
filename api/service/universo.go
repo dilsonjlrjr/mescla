@@ -6,6 +6,7 @@ import (
 	"paint-match-ai/api/domain/color"
 	"paint-match-ai/api/domain/equivalence"
 	"paint-match-ai/api/domain/mix"
+	"paint-match-ai/api/domain/stock"
 )
 
 // Universo de busca de cor (rf-11).
@@ -168,6 +169,15 @@ func (s *PaintService) ResolverCorNoUniverso(r, g, b uint8, fabricanteID int64, 
 		s.db.QueryRow("SELECT name FROM manufacturers WHERE id = ?", fabricanteID).Scan(&nomeFabricante)
 	}
 
+	return s.resolverCorEmPool(r, g, b, pool, nomeFabricante, foraDoUniverso, maxIngredients), nil
+}
+
+// resolverCorEmPool é a cauda comum a ResolverCorNoUniverso (universo do
+// servidor, rf-11) e ResolverCorComEstoqueDoAparelho (universo mandado pelo
+// cliente no corpo, rf-16 T2, POST /recipes/by-color): Lab → SuggestBestSubset
+// → DTO. Extraída para os dois caminhos ficarem byte a byte iguais depois de
+// o pool estar pronto — só a montagem do pool muda entre eles.
+func (s *PaintService) resolverCorEmPool(r, g, b uint8, pool []mix.PaintInput, nomeFabricante string, foraDoUniverso bool, maxIngredients int) EquivalentRecipeDTO {
 	l, a, bLab := color.RGBToLab(r, g, b)
 	receita := mix.SuggestBestSubset([3]float64{l, a, bLab}, pool, 1, maxIngredients)
 
@@ -197,7 +207,68 @@ func (s *PaintService) ResolverCorNoUniverso(r, g, b uint8, fabricanteID int64, 
 		ForaDoUniverso: foraDoUniverso,
 		CrossBrand:     crossBrand,
 		Manufacturers:  manufacturers,
-	}, nil
+	}
+}
+
+// DeviceStockItemInput é um item do estoque do aparelho recebido no corpo de
+// POST /recipes/by-color (rf-16 T2, RN14). O PWA lê de mescla.stock.v1
+// (localStorage) — o servidor nunca guarda esse estoque, só calcula com ele.
+type DeviceStockItemInput struct {
+	ID             int64
+	ManufacturerID int64
+	Manufacturer   string
+	Name           string
+	Code           string
+	R, G, B        int
+}
+
+// ResolverCorComEstoqueDoAparelho é o caminho novo do rf-16 T2: o universo
+// vem do estoque que o cliente manda no corpo, não de user_paints (que só o
+// Wails preenche — causa do item 1.6, T2 lia a fonte errada). itensEstoque já
+// chega filtrado pelo handler HTTP (cor 0–255, textos dentro do limite —
+// item fora disso é descartado, nunca recusa o pedido inteiro).
+//
+// Com targetManufacturerID > 0 a interseção é por ManufacturerID (RN15,
+// nunca por nome, igual ao rf-14 RN5). Estoque vazio, ou pool vazio sem
+// fabricante, respondem "Seu estoque neste aparelho está vazio"; interseção
+// vazia responde "Você não tem tintas «marca» neste aparelho".
+func (s *PaintService) ResolverCorComEstoqueDoAparelho(r, g, b uint8, targetManufacturerID int64, foraDoUniverso bool, maxIngredients int, itensEstoque []DeviceStockItemInput) (EquivalentRecipeDTO, error) {
+	var nomeFabricante string
+	if targetManufacturerID > 0 {
+		if err := s.db.QueryRow("SELECT name FROM manufacturers WHERE id = ?", targetManufacturerID).
+			Scan(&nomeFabricante); err != nil {
+			return EquivalentRecipeDTO{}, fmt.Errorf("fabricante não encontrado")
+		}
+	}
+
+	if len(itensEstoque) == 0 {
+		return EquivalentRecipeDTO{}, ErrUniversoVazio{Motivo: "Seu estoque neste aparelho está vazio"}
+	}
+
+	pool := itensEstoque
+	if targetManufacturerID > 0 {
+		filtrado := make([]DeviceStockItemInput, 0, len(itensEstoque))
+		for _, it := range itensEstoque {
+			if it.ManufacturerID == targetManufacturerID {
+				filtrado = append(filtrado, it)
+			}
+		}
+		pool = filtrado
+		if len(pool) == 0 {
+			return EquivalentRecipeDTO{}, ErrUniversoVazio{Motivo: "Você não tem tintas " + nomeFabricante + " neste aparelho"}
+		}
+	}
+
+	paints := make([]stock.Paint, 0, len(pool))
+	for _, it := range pool {
+		paints = append(paints, stock.Paint{
+			ID: it.ID, Name: it.Name, Code: it.Code,
+			R: uint8(it.R), G: uint8(it.G), B: uint8(it.B),
+			ManufacturerID: it.ManufacturerID, Manufacturer: it.Manufacturer,
+		})
+	}
+
+	return s.resolverCorEmPool(r, g, b, stock.ToMixInputs(paints), nomeFabricante, foraDoUniverso, maxIngredients), nil
 }
 
 // MelhorDeltaENoUniverso devolve só o ΔE00 alcançável numa combinação, sem

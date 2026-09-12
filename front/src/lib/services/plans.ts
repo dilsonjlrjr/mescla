@@ -29,6 +29,44 @@ export interface RegiaoDTO {
   painted: 0 | 1;
   /** rf-11 RN7: veio de fora do universo pedido (com autorização do usuário). */
   foraDoUniverso?: 0 | 1;
+  /** rf-16 RN19: 1 = a região usa o próprio fornecedor/estoque; 0 (ou
+   *  ausente, cliente antigo) = segue o projeto. */
+  regionOverride?: 0 | 1;
+  regionManufacturerId?: number | null;
+  regionUseStockOnly?: 0 | 1;
+  /** rf-16 RN24: a mistura calculada, gravada junto do plano. */
+  resultR?: number | null;
+  resultG?: number | null;
+  resultB?: number | null;
+  /** `''` = sem mistura salva (RN27). */
+  faixa?: string;
+  method?: string;
+  ingredients?: IngredienteDTO[];
+}
+
+/** rf-16: um pote da mistura salva. `paintId` negativo é tinta do estoque
+ *  do aparelho; o servidor grava nulo e devolve 0. */
+export interface IngredienteDTO {
+  paintId: number;
+  manufacturerId: number;
+  manufacturer: string;
+  name: string;
+  code: string;
+  r: number;
+  g: number;
+  b: number;
+  percentage: number;
+}
+
+/** rf-16 RN2: um card da lista de projetos (`GET /plans`). */
+export interface ResumoPlanoDTO {
+  id: number;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  regionCount: number;
+  tabCount: number;
+  paintedCount: number;
 }
 
 export interface AbaDTO {
@@ -73,6 +111,16 @@ const MAX_ABAS = 10;
 const MAX_REGIONS = 50;
 const MAX_REGION_NAME = 100;
 const MAX_NOTE = 2000;
+
+/** rf-16 RN11: maior arquivo de foto que ainda cabe no teto de 2 MB depois de
+ *  virar data URL — base64 aumenta em um terço, e o prefixo mais longo da
+ *  lista branca (`data:image/jpeg;base64,`) tem 23 bytes. 1.572.846 bytes. */
+export function tetoArquivoImagem(): number {
+  const prefixoMaisLongo = Math.max(...IMAGE_DATA_URL_PREFIXES.map(p => p.length));
+  return Math.floor((MAX_IMAGE_BYTES - prefixoMaisLongo) / 4) * 3;
+}
+
+export const TIPOS_IMAGEM_ACEITOS = ['image/png', 'image/jpeg'];
 
 function logOriginalErrorOnlyInDev(context: string, original: unknown): void {
   if (import.meta.env.DEV) {
@@ -171,6 +219,42 @@ export async function carregarPlano(id: number): Promise<PlanoDTO> {
   }
 
   return res.json() as Promise<PlanoDTO>;
+}
+
+/** rf-16 RN1: lista de projetos. Nunca traz foto nem região. */
+export async function listarPlanos(): Promise<ResumoPlanoDTO[]> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/plans`);
+  } catch (err) {
+    logOriginalErrorOnlyInDev('listarPlanos: GET /plans falhou (rede)', err);
+    throw new PlanoError('falha');
+  }
+  if (!res.ok) {
+    logOriginalErrorOnlyInDev('listarPlanos: GET /plans respondeu erro', `HTTP ${res.status}`);
+    throw new PlanoError('falha');
+  }
+  const lista = (await res.json()) as ResumoPlanoDTO[] | null;
+  return Array.isArray(lista) ? lista : [];
+}
+
+/** rf-16 RN6: excluir da lista. 404 conta como sucesso — o projeto já não
+ *  existe, e o card deve sumir do mesmo jeito. */
+export async function excluirPlano(id: number): Promise<void> {
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new PlanoError('falha');
+  }
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/plans/${id}`, { method: 'DELETE' });
+  } catch (err) {
+    logOriginalErrorOnlyInDev('excluirPlano: DELETE /plans falhou (rede)', err);
+    throw new PlanoError('falha');
+  }
+  if (!res.ok && res.status !== 404) {
+    logOriginalErrorOnlyInDev('excluirPlano: DELETE /plans respondeu erro', `HTTP ${res.status}`);
+    throw new PlanoError('falha');
+  }
 }
 
 /** RN12: extrai o nome do arquivo de `Content-Disposition` — RFC 5987

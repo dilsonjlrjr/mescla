@@ -3,6 +3,7 @@
   // tela quando a lista cresce). Gatilho + popover com busca, pensado pra toque
   // (iPad) e teclado.
   import { untrack } from 'svelte';
+  import { norm } from '../texto';
 
   interface ComboOption {
     id: number;
@@ -69,10 +70,6 @@
     };
   }
 
-  // Mesma normalização usada no catálogo (sem maiúscula, sem acento).
-  function norm(s: string): string {
-    return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  }
 
   let selected = $derived(options.find((o) => o.id === value) ?? null);
 

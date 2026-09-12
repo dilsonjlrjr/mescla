@@ -10,9 +10,18 @@
 import { render, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PlannerView from '../src/lib/views/PlannerView.svelte';
+import { flushSync } from 'svelte';
 import { t, dict } from '../src/lib/i18n.svelte';
 import { toasts } from '../src/lib/toast.svelte';
 import { nav } from '../src/lib/nav.svelte';
+
+/** rf-16: T2 entra pela lista de projetos — o editor abre por "Novo projeto". */
+function renderEditor() {
+  const utils = render(PlannerView);
+  (utils.getByText(t('newProjectBtn')) as HTMLElement).click();
+  flushSync();
+  return utils;
+}
 
 const MFRS = [
   { id: 1, name: 'Vallejo', paintCount: 2 },
@@ -139,7 +148,7 @@ afterEach(() => {
 
 describe('rf-09 — tira de abas (T2/PlannerView)', () => {
   it('CA1 — plano novo abre com uma aba "Figura 1" ativa', async () => {
-    const { getAllByRole } = render(PlannerView);
+    const { getAllByRole } = renderEditor();
     await waitFor(() => {
       const tabs = getAllByRole('tab');
       expect(tabs).toHaveLength(1);
@@ -149,7 +158,7 @@ describe('rf-09 — tira de abas (T2/PlannerView)', () => {
   });
 
   it('CA2 — criar aba entra ao lado, vazia, e vira a ativa', async () => {
-    const { getAllByRole, getByLabelText } = render(PlannerView);
+    const { getAllByRole, getByLabelText } = renderEditor();
     getByLabelText(t('addTabBtn')).click();
     await waitFor(() => {
       const tabs = getAllByRole('tab');
@@ -163,7 +172,7 @@ describe('rf-09 — tira de abas (T2/PlannerView)', () => {
 
   it('CA3 — alternar A→B→A preserva as regiões de cada aba e a seleção não vaza', async () => {
     stubCanvasAndImage();
-    const { container, getAllByRole, getByLabelText } = render(PlannerView);
+    const { container, getAllByRole, getByLabelText } = renderEditor();
 
     const canvasA = await loadPhoto(container);
     clickCanvas(canvasA, 150, 150);
@@ -174,7 +183,7 @@ describe('rf-09 — tira de abas (T2/PlannerView)', () => {
     await waitFor(() => expect(container.querySelectorAll('.t2-region-card')).toHaveLength(3));
 
     // Seleciona explicitamente a 2ª região de A.
-    (container.querySelectorAll('.t2-region-card')[1] as HTMLElement).click();
+    (container.querySelectorAll('.t2-region-card .t2-region-head')[1] as HTMLElement).click();
     await waitFor(() => {
       expect(container.querySelectorAll('.t2-region-card')[1].getAttribute('style'))
         .toContain('var(--color-accent-700)');
@@ -200,7 +209,7 @@ describe('rf-09 — tira de abas (T2/PlannerView)', () => {
   });
 
   it('CA4 — renomear a aba persiste no estado (sobrevive à troca de aba)', async () => {
-    const { container, getAllByLabelText, getAllByRole, getByLabelText } = render(PlannerView);
+    const { container, getAllByLabelText, getAllByRole, getByLabelText } = renderEditor();
 
     getAllByLabelText(t('renameTabLabel'))[0].click();
     const input = await waitFor(() => {
@@ -225,7 +234,7 @@ describe('rf-09 — tira de abas (T2/PlannerView)', () => {
   });
 
   it('CA7 — excluir a única aba é negado com "O plano precisa de pelo menos uma figura"', async () => {
-    const { getAllByLabelText, getAllByRole } = render(PlannerView);
+    const { getAllByLabelText, getAllByRole } = renderEditor();
     getAllByLabelText(t('deleteTabBtn'))[0].click();
     await waitFor(() => {
       expect(toasts.some(x => x.message === t('errTabDeleteLast') && x.kind === 'error')).toBe(true);
@@ -235,7 +244,7 @@ describe('rf-09 — tira de abas (T2/PlannerView)', () => {
 
   it('CA10/CA11/CA12 — tinta repetida some, misturas diferentes ficam separadas, região sem tinta some', async () => {
     stubCanvasAndImage();
-    const { container, getAllByRole, getByLabelText } = render(PlannerView);
+    const { container, getAllByRole, getByLabelText } = renderEditor();
 
     // Aba 1 (Figura 1): Khorne Red (Citadel) numa região, e uma região sem tinta parecida.
     const canvas1 = await loadPhoto(container);
@@ -292,7 +301,7 @@ describe('rf-09 — tira de abas (T2/PlannerView)', () => {
 
   it('CA13 — o progresso do cabeçalho soma todas as abas; cada aba mostra o seu', async () => {
     stubCanvasAndImage();
-    const { container, getAllByRole, getByLabelText } = render(PlannerView);
+    const { container, getAllByRole, getByLabelText } = renderEditor();
 
     const canvas1 = await loadPhoto(container);
     clickCanvas(canvas1, 150, 150);
@@ -319,7 +328,7 @@ describe('rf-09 — tira de abas (T2/PlannerView)', () => {
 
   it('CA14 — o checklist "tenho" continua marcado depois de trocar de aba', async () => {
     stubCanvasAndImage();
-    const { container, getByLabelText } = render(PlannerView);
+    const { container, getByLabelText } = renderEditor();
 
     const canvas1 = await loadPhoto(container);
     engineQueue.push(recipe());
@@ -344,7 +353,7 @@ describe('rf-09 — tira de abas (T2/PlannerView)', () => {
 
   it('CA21 — trocar de aba não grava rascunho', async () => {
     nav.tab = 'plano';
-    const { getAllByRole, getByLabelText } = render(PlannerView);
+    const { getAllByRole, getByLabelText } = renderEditor();
     // Deixa a hidratação (sem rascunho/plano ativo salvo) terminar antes de mexer.
     await new Promise(resolve => setTimeout(resolve, 0));
 
@@ -366,7 +375,7 @@ describe('rf-09 — tira de abas (T2/PlannerView)', () => {
 
   it('CA22 — criar e excluir aba gravam rascunho depois da pausa de 1500 ms', async () => {
     nav.tab = 'plano';
-    const { getAllByLabelText, getByLabelText } = render(PlannerView);
+    const { getAllByLabelText, getByLabelText } = renderEditor();
     await new Promise(resolve => setTimeout(resolve, 0));
 
     vi.useFakeTimers();
@@ -390,7 +399,7 @@ describe('rf-09 — tira de abas (T2/PlannerView)', () => {
   });
 
   it('CA28 — role="tablist"/"tab" por aba, aria-selected na ativa, tabpanel com aria-labelledby válido', async () => {
-    const { container, getAllByRole, getByLabelText } = render(PlannerView);
+    const { container, getAllByRole, getByLabelText } = renderEditor();
     getByLabelText(t('addTabBtn')).click();
 
     await waitFor(() => {
@@ -411,7 +420,7 @@ describe('rf-09 — tira de abas (T2/PlannerView)', () => {
   });
 
   it('CA29 — seta direita move o foco para a próxima aba', async () => {
-    const { getAllByRole, getByLabelText } = render(PlannerView);
+    const { getAllByRole, getByLabelText } = renderEditor();
     getByLabelText(t('addTabBtn')).click();
     await waitFor(() => expect(getAllByRole('tab')).toHaveLength(2));
 

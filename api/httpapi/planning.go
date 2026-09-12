@@ -13,9 +13,13 @@ import (
 	"paint-match-ai/api/service"
 )
 
+// handleListPlans atende GET /plans com o resumo da lista de projetos
+// (rf-16 T2): nunca imagem nem regiões completas. Chama ListPlanSummaries,
+// não ListPlans — este último fica intacto porque o binding Wails
+// (project/wails) é gerado contra a assinatura dele.
 func handleListPlans(svc *service.PaintService) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		plans, err := svc.ListPlans()
+		plans, err := svc.ListPlanSummaries()
 		if err != nil {
 			writeError(ctx, fasthttp.StatusInternalServerError, err.Error())
 			return

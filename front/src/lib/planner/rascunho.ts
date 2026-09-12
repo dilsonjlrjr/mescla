@@ -28,6 +28,54 @@ export interface RegiaoRascunho {
   painted: boolean;
   /** rf-11 RN7: veio de fora do universo pedido. */
   foraDoUniverso: boolean;
+  /** rf-16: ajuste da região e mistura salva. Ausentes num rascunho antigo:
+   *  a região segue o projeto e não tem mistura salva. */
+  regionOverride?: boolean;
+  regionManufacturerId?: number | null;
+  regionUseStockOnly?: boolean;
+  resultR?: number | null;
+  resultG?: number | null;
+  resultB?: number | null;
+  faixa?: string;
+  method?: string;
+  ingredients?: IngredienteRascunho[];
+}
+
+export interface IngredienteRascunho {
+  paintId: number;
+  manufacturerId: number;
+  manufacturer: string;
+  name: string;
+  code: string;
+  r: number;
+  g: number;
+  b: number;
+  percentage: number;
+}
+
+const FAIXAS_VALIDAS = ['otimo', 'aproximada', 'nao-encontrei'];
+
+function corOuNulo(v: unknown): number | null {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 255 ? v : null;
+}
+
+function normalizarIngrediente(bruto: unknown): IngredienteRascunho | null {
+  if (typeof bruto !== 'object' || bruto === null) return null;
+  const o = bruto as Record<string, unknown>;
+  const r = corOuNulo(o.r);
+  const g = corOuNulo(o.g);
+  const b = corOuNulo(o.b);
+  const pct = Number(o.percentage);
+  if (r === null || g === null || b === null || !Number.isFinite(pct) || pct < 0 || pct > 100) return null;
+  return {
+    paintId: Number.isInteger(o.paintId) ? (o.paintId as number) : 0,
+    manufacturerId: Number.isInteger(o.manufacturerId) ? (o.manufacturerId as number) : 0,
+    manufacturer: typeof o.manufacturer === 'string' ? o.manufacturer : '',
+    name: typeof o.name === 'string' ? o.name : '',
+    code: typeof o.code === 'string' ? o.code : '',
+    r, g, b,
+    percentage: pct,
+  };
 }
 
 export interface AbaRascunho {
@@ -58,6 +106,7 @@ export interface Rascunho {
 export type EstadoAutoSave = 'ligado' | 'sem-foto' | 'desligado';
 
 let timer: ReturnType<typeof setTimeout> | null = null;
+let pendente: Rascunho | null = null;
 let estado: EstadoAutoSave = 'ligado';
 
 function normalizarBooleano(valor: unknown): boolean {
@@ -88,6 +137,18 @@ function normalizarRegiao(r: unknown): RegiaoRascunho | null {
     deltaE: Number(o.deltaE) || 0,
     painted: normalizarBooleano(o.painted),
     foraDoUniverso: normalizarBooleano(o.foraDoUniverso),
+    regionOverride: normalizarBooleano(o.regionOverride),
+    regionManufacturerId: idValido(o.regionManufacturerId),
+    regionUseStockOnly: normalizarBooleano(o.regionUseStockOnly),
+    resultR: corOuNulo(o.resultR),
+    resultG: corOuNulo(o.resultG),
+    resultB: corOuNulo(o.resultB),
+    faixa: typeof o.faixa === 'string' && FAIXAS_VALIDAS.includes(o.faixa) ? o.faixa : '',
+    method: typeof o.method === 'string' ? o.method.slice(0, 60) : '',
+    ingredients: (Array.isArray(o.ingredients) ? o.ingredients : [])
+      .map(normalizarIngrediente)
+      .filter((i): i is IngredienteRascunho => i !== null)
+      .slice(0, 20),
   };
 }
 
@@ -254,13 +315,28 @@ function gravar(payload: Rascunho): void {
 export function agendarGravacao(payload: Rascunho): void {
   if (estado === 'desligado') return;
   if (timer !== null) clearTimeout(timer);
+  pendente = payload;
   timer = setTimeout(() => {
     timer = null;
+    pendente = null;
     gravar(payload);
   }, DEBOUNCE_MS);
 }
 
+/** rf-16 RN4: grava na hora o que está no debounce. Voltar do editor para a
+ *  lista lê o rascunho logo em seguida; sem isto, a última alteração ainda
+ *  estaria esperando o timer e o card "Alterações não salvas" não apareceria. */
+export function gravarPendente(): void {
+  if (timer === null || pendente === null) return;
+  clearTimeout(timer);
+  timer = null;
+  const payload = pendente;
+  pendente = null;
+  gravar(payload);
+}
+
 export function cancelarGravacao(): void {
+  pendente = null;
   if (timer !== null) {
     clearTimeout(timer);
     timer = null;

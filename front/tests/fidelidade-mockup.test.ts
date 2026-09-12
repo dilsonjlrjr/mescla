@@ -144,9 +144,9 @@ const TELAS: Marco[] = [
     marcos: [
       'min-height: 76px',
       'height: 52px',
-      'height: 6px',                                             // barra de progresso pintada
     ],
     marcosEmEstado: [
+      'height: 6px',                                             // barra de progresso pintada (rf-16: só no editor, depois da lista)
       'grid-template-columns: minmax(0, 1fr) minmax(0, 34%)',    // foto | painel
     ],
   },

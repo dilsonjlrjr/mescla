@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/valyala/fasthttp"
 
@@ -126,6 +128,117 @@ func handleRecipeByColor(svc *service.PaintService) fasthttp.RequestHandler {
 		if err != nil {
 			// Universo vazio não é erro de servidor (RN9): a tela mostra a
 			// mensagem e oferece as saídas do diálogo.
+			var vazio service.ErrUniversoVazio
+			if errors.As(err, &vazio) {
+				writeJSON(ctx, fasthttp.StatusOK, map[string]any{
+					"universoVazio": true,
+					"motivo":        vazio.Motivo,
+				})
+				return
+			}
+			writeError(ctx, fasthttp.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(ctx, fasthttp.StatusOK, recipe)
+	}
+}
+
+// maxDeviceStockItems é o teto de itens de estoque aceito em
+// POST /recipes/by-color (rf-16 T2, CAN4): acima disso o custo do motor
+// passaria do catálogo inteiro que o GET já aceita.
+const maxDeviceStockItems = 2000
+
+// colorComponentValid reporta se v cabe em 0–255 — usado na validação da cor
+// alvo e de cada item do estoque de POST /recipes/by-color. Duplicado do
+// homônimo em api/service/planning.go de propósito: são pacotes diferentes,
+// e a função é pequena demais para justificar um pacote exportado só para
+// isso.
+func colorComponentValid(v int) bool {
+	return v >= 0 && v <= 255
+}
+
+// recipeByColorStockItem é um item do estoque do aparelho (rf-16 T2, RN14) —
+// campos de cor em int, não uint8, para o decode nunca recusar o corpo
+// inteiro por um valor fora da faixa: a validação roda depois, em Go, e o
+// item inválido é só descartado (CAN5).
+type recipeByColorStockItem struct {
+	ID             int64  `json:"id"`
+	ManufacturerID int64  `json:"manufacturerId"`
+	Manufacturer   string `json:"manufacturer"`
+	Name           string `json:"name"`
+	Code           string `json:"code"`
+	R              int    `json:"r"`
+	G              int    `json:"g"`
+	B              int    `json:"b"`
+}
+
+// recipeByColorRequest é o corpo de POST /recipes/by-color (rf-16 T2, RN14):
+// o universo vem do estoque do aparelho mandado pelo cliente, não de
+// user_paints — é a correção do item 1.6 (T2 lia a fonte errada de estoque).
+type recipeByColorRequest struct {
+	R                    int                      `json:"r"`
+	G                    int                      `json:"g"`
+	B                    int                      `json:"b"`
+	TargetManufacturerID int64                    `json:"targetManufacturerId"`
+	ForaDoUniverso       bool                     `json:"foraDoUniverso"`
+	MaxIngredients       int                      `json:"maxIngredients"`
+	Stock                []recipeByColorStockItem `json:"stock"`
+}
+
+// handleRecipeByColorFromDeviceStock atende POST /recipes/by-color (rf-16
+// T2, RN14). Decodifica o corpo direto com encoding/json — nunca com
+// readJSON, que ecoaria o erro do decode (rf-16 CAN5) — e devolve a mesma
+// forma de EquivalentRecipeDTO do GET (rf-11), calculada contra o estoque do
+// corpo em vez do universo montado no servidor. GET /recipes/by-color
+// (handleRecipeByColor) fica intacto: mesma rota, método diferente.
+func handleRecipeByColorFromDeviceStock(svc *service.PaintService) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		var req recipeByColorRequest
+		if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
+			writeError(ctx, fasthttp.StatusBadRequest, "pedido inválido")
+			return
+		}
+
+		if len(req.Stock) > maxDeviceStockItems {
+			writeError(ctx, fasthttp.StatusBadRequest, "estoque grande demais para o cálculo")
+			return
+		}
+		if !colorComponentValid(req.R) || !colorComponentValid(req.G) || !colorComponentValid(req.B) {
+			writeError(ctx, fasthttp.StatusBadRequest, "cor inválida")
+			return
+		}
+		if req.MaxIngredients < 0 || req.MaxIngredients > 8 {
+			writeError(ctx, fasthttp.StatusBadRequest, "maxIngredients fora da faixa")
+			return
+		}
+		if req.TargetManufacturerID < 0 {
+			writeError(ctx, fasthttp.StatusBadRequest, "fabricante não encontrado")
+			return
+		}
+
+		itens := make([]service.DeviceStockItemInput, 0, len(req.Stock))
+		for _, it := range req.Stock {
+			// Item inválido é descartado, nunca recusa o pedido inteiro
+			// (CAN5) — nem o texto dele é ecoado na resposta.
+			if !colorComponentValid(it.R) || !colorComponentValid(it.G) || !colorComponentValid(it.B) {
+				continue
+			}
+			if utf8.RuneCountInString(it.Name) > 200 ||
+				utf8.RuneCountInString(it.Code) > 60 ||
+				utf8.RuneCountInString(it.Manufacturer) > 120 {
+				continue
+			}
+			itens = append(itens, service.DeviceStockItemInput{
+				ID: it.ID, ManufacturerID: it.ManufacturerID, Manufacturer: it.Manufacturer,
+				Name: it.Name, Code: it.Code, R: it.R, G: it.G, B: it.B,
+			})
+		}
+
+		recipe, err := svc.ResolverCorComEstoqueDoAparelho(
+			uint8(req.R), uint8(req.G), uint8(req.B),
+			req.TargetManufacturerID, req.ForaDoUniverso, req.MaxIngredients, itens,
+		)
+		if err != nil {
 			var vazio service.ErrUniversoVazio
 			if errors.As(err, &vazio) {
 				writeJSON(ctx, fasthttp.StatusOK, map[string]any{

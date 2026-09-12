@@ -11,7 +11,18 @@
 
 import { render, waitFor } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushSync } from 'svelte';
+import { t } from '../src/lib/i18n.svelte';
 import { fitView, toImage, toScreen, zoomAround, ZOOM_MAX, ZOOM_MIN } from '../src/lib/planner/viewport';
+
+/** rf-16: T2 entra pela lista de projetos — o editor abre por "Novo projeto". */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function renderEditor(PlannerView: any) {
+  const utils = render(PlannerView);
+  (utils.getByText(t('newProjectBtn')) as HTMLElement).click();
+  flushSync();
+  return utils;
+}
 
 const MFRS = [{ id: 1, name: 'Vallejo', paintCount: 2 }];
 
@@ -153,7 +164,7 @@ describe('D-002b — clique na foto', () => {
   it('dimensiona o canvas pela caixa, não pela resolução da foto', async () => {
     stubCanvasAndImage(1200, 800);
     const { default: PlannerView } = await import('../src/lib/views/PlannerView.svelte');
-    const { container } = render(PlannerView);
+    const { container } = renderEditor(PlannerView);
 
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File(['x'], 'peca.png', { type: 'image/png' });
@@ -176,7 +187,7 @@ describe('D-002b — clique na foto', () => {
   it('sai de "calculando" quando o solver responde', async () => {
     stubCanvasAndImage();
     const { default: PlannerView } = await import('../src/lib/views/PlannerView.svelte');
-    const { container, findAllByText, queryByText } = render(PlannerView);
+    const { container, findAllByText, queryByText } = renderEditor(PlannerView);
 
     // Carrega a foto pelo input de arquivo da tela.
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;

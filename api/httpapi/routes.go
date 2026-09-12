@@ -34,6 +34,9 @@ func NewRouter(svc *service.PaintService) *router.Router {
 	r.GET("/similar", handleFindSimilar(svc))
 	r.GET("/recipes/by-paint", handleRecipeByPaint(svc))
 	r.GET("/recipes/by-color", handleRecipeByColor(svc))
+	// rf-16 T2: mesmo caminho do GET, universo vindo do estoque do aparelho
+	// mandado no corpo — fasthttp/router aceita os dois métodos na mesma rota.
+	r.POST("/recipes/by-color", handleRecipeByColorFromDeviceStock(svc))
 	r.GET("/recipes/best-delta-e", handleBestDeltaE(svc))
 
 	// Receitas salvas (RF-04, tela Receitas) — guardam o alvo, nunca a

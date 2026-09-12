@@ -83,6 +83,60 @@ func ensurePlanningSchema(db *sql.DB) error {
 		return err
 	}
 
+	// rf-16 T2: ajuste por região e mistura salva — 8 colunas aditivas em
+	// painting_regions e a tabela nova painting_region_ingredients. Todo
+	// padrão preserva o comportamento de hoje (RN30): region_override=0
+	// (segue o projeto), sem mistura salva (faixa=''). Fica DEPOIS das
+	// migrações acima de propósito, pelo mesmo motivo do índice logo adiante
+	// — migratePlanningTabsIfNeeded pode recriar painting_regions inteira
+	// (DROP+RENAME) numa base bem antiga, e rodar isto antes perderia as
+	// colunas na tabela nova.
+	if err := addColumnIfMissing(db, "painting_regions", "region_override", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := addColumnIfMissing(db, "painting_regions", "region_manufacturer_id", "INTEGER"); err != nil {
+		return err
+	}
+	if err := addColumnIfMissing(db, "painting_regions", "region_use_stock_only", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := addColumnIfMissing(db, "painting_regions", "result_r", "INTEGER CHECK (result_r IS NULL OR (result_r >= 0 AND result_r <= 255))"); err != nil {
+		return err
+	}
+	if err := addColumnIfMissing(db, "painting_regions", "result_g", "INTEGER CHECK (result_g IS NULL OR (result_g >= 0 AND result_g <= 255))"); err != nil {
+		return err
+	}
+	if err := addColumnIfMissing(db, "painting_regions", "result_b", "INTEGER CHECK (result_b IS NULL OR (result_b >= 0 AND result_b <= 255))"); err != nil {
+		return err
+	}
+	if err := addColumnIfMissing(db, "painting_regions", "faixa", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := addColumnIfMissing(db, "painting_regions", "method", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS painting_region_ingredients (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			region_id INTEGER NOT NULL REFERENCES painting_regions(id) ON DELETE CASCADE,
+			sort_order INTEGER NOT NULL,
+			paint_id INTEGER,
+			manufacturer_id INTEGER,
+			manufacturer TEXT NOT NULL,
+			name TEXT NOT NULL,
+			code TEXT NOT NULL DEFAULT '',
+			r INTEGER NOT NULL,
+			g INTEGER NOT NULL,
+			b INTEGER NOT NULL,
+			percentage REAL NOT NULL
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_painting_region_ingredients_region ON painting_region_ingredients(region_id, sort_order);
+	`); err != nil {
+		return fmt.Errorf("criando painting_region_ingredients: %w", err)
+	}
+
 	// O índice fica DEPOIS da migração de propósito: numa base do formato
 	// antigo, painting_regions ainda tem plan_id quando o bloco de DDL acima
 	// roda — o CREATE TABLE IF NOT EXISTS é pulado e criar um índice sobre
@@ -394,6 +448,54 @@ type PaintingRegionDTO struct {
 	// base / estoque) que o usuário tinha pedido — só true com autorização
 	// explícita no diálogo de fallback (rf-11.escolherSaida).
 	ForaDoUniverso int `json:"foraDoUniverso"`
+
+	// Campos aditivos do rf-16 T2 — ajuste por região e mistura salva.
+	// RegionOverride=0 (padrão) é "segue o fabricante/estoque do projeto";
+	// um cliente antigo que omite estes campos manda o zero do int, que tem
+	// de significar exatamente isso (RN30/CAN10).
+	RegionOverride       int    `json:"regionOverride"`
+	RegionManufacturerID *int64 `json:"regionManufacturerId"`
+	RegionUseStockOnly   int    `json:"regionUseStockOnly"`
+	// ResultR/G/B e Faixa/Method são a mistura salva (RN27): "tem mistura
+	// salva" é faixa != "". Sem mistura salva, todos ficam no zero-value
+	// (nil/"").
+	ResultR *int   `json:"resultR"`
+	ResultG *int   `json:"resultG"`
+	ResultB *int   `json:"resultB"`
+	Faixa   string `json:"faixa"`
+	Method  string `json:"method"`
+	// Ingredients nunca é null na resposta (sempre array, mesmo vazio).
+	Ingredients []PaintingIngredientDTO `json:"ingredients"`
+}
+
+// PaintingIngredientDTO é uma tinta dentro da mistura salva de uma região
+// (rf-16 T2). Campos de cor em int (não uint8) de propósito: permite validar
+// a faixa 0–255 no servidor com mensagem em português, em vez de o decode
+// JSON recusar o corpo inteiro num erro genérico de overflow.
+type PaintingIngredientDTO struct {
+	PaintID        int64   `json:"paintId"`
+	ManufacturerID int64   `json:"manufacturerId"`
+	Manufacturer   string  `json:"manufacturer"`
+	Name           string  `json:"name"`
+	Code           string  `json:"code"`
+	R              int     `json:"r"`
+	G              int     `json:"g"`
+	B              int     `json:"b"`
+	Percentage     float64 `json:"percentage"`
+}
+
+// PaintingPlanSummaryDTO é o resumo devolvido por GET /plans (rf-16 T2): nem
+// imagem, nem regiões — só o que a lista de projetos precisa mostrar no
+// card. Nenhum campo tem omitempty: regionCount, tabCount e paintedCount
+// valem 0 legitimamente e têm de aparecer no JSON mesmo assim.
+type PaintingPlanSummaryDTO struct {
+	ID           int64  `json:"id"`
+	Name         string `json:"name"`
+	CreatedAt    string `json:"createdAt"`
+	UpdatedAt    string `json:"updatedAt"`
+	RegionCount  int    `json:"regionCount"`
+	TabCount     int    `json:"tabCount"`
+	PaintedCount int    `json:"paintedCount"`
 }
 
 const (
@@ -404,7 +506,22 @@ const (
 	maxNameChars       = 200
 	maxRegionNameChars = 100
 	maxNoteChars       = 2000
+
+	// rf-16 T2: mistura por região (ajuste e ingredientes salvos).
+	maxIngredientsPerRegion     = 20
+	maxIngredientNameChars      = 200
+	maxIngredientManufacturerCh = 120
+	maxIngredientCodeChars      = 60
+	maxRegionMethodChars        = 60
 )
+
+// colorComponentValid reporta se v cabe em 0–255 (RGB de 8 bits). Usado na
+// validação de ingredientes e da cor resultante da mistura (rf-16 T2) — os
+// campos chegam em int, não uint8, então o servidor tem de checar a faixa
+// em vez de confiar num overflow do decode JSON.
+func colorComponentValid(v int) bool {
+	return v >= 0 && v <= 255
+}
 
 // validateAndNormalizeTabs valida limites de entrada por aba (RN1, RN2, RN15)
 // e aplica as normalizações derivadas no servidor: nome vazio vira "Figura N"
@@ -437,12 +554,58 @@ func validateAndNormalizeTabs(tabs []PaintingTabDTO) ([]PaintingTabDTO, error) {
 		if len(t.ImageData) > maxImageDataBytes {
 			return nil, fmt.Errorf("%s: a foto passa de 2 MB — use uma imagem menor", name)
 		}
-		for _, r := range t.Regions {
+		for ri := range t.Regions {
+			r := &t.Regions[ri]
 			if len(r.RegionName) > maxRegionNameChars {
 				return nil, fmt.Errorf("%s: nome da região excede %d caracteres", name, maxRegionNameChars)
 			}
 			if len(r.Note) > maxNoteChars {
 				return nil, fmt.Errorf("%s: nota excede %d caracteres", name, maxNoteChars)
+			}
+
+			if len(r.Ingredients) > maxIngredientsPerRegion {
+				return nil, fmt.Errorf("%s: a mistura aceita no máximo %d tintas", name, maxIngredientsPerRegion)
+			}
+			for ii := range r.Ingredients {
+				ing := &r.Ingredients[ii]
+				if utf8.RuneCountInString(ing.Name) > maxIngredientNameChars ||
+					utf8.RuneCountInString(ing.Manufacturer) > maxIngredientManufacturerCh ||
+					utf8.RuneCountInString(ing.Code) > maxIngredientCodeChars {
+					return nil, fmt.Errorf("%s: tinta da mistura com texto longo demais", name)
+				}
+				if ing.Percentage < 0 || ing.Percentage > 100 {
+					return nil, fmt.Errorf("%s: porcentagem inválida na mistura", name)
+				}
+				if !colorComponentValid(ing.R) || !colorComponentValid(ing.G) || !colorComponentValid(ing.B) {
+					return nil, fmt.Errorf("%s: cor inválida na mistura", name)
+				}
+			}
+
+			if r.ResultR != nil && !colorComponentValid(*r.ResultR) {
+				return nil, fmt.Errorf("%s: cor inválida na mistura", name)
+			}
+			if r.ResultG != nil && !colorComponentValid(*r.ResultG) {
+				return nil, fmt.Errorf("%s: cor inválida na mistura", name)
+			}
+			if r.ResultB != nil && !colorComponentValid(*r.ResultB) {
+				return nil, fmt.Errorf("%s: cor inválida na mistura", name)
+			}
+
+			// Normalizações — nunca erro (achado 1/22 da conferência de F3).
+			switch r.Faixa {
+			case string(FaixaOtima), string(FaixaAproximada), string(FaixaNaoEncontrei), "":
+				// já é um valor válido
+			default:
+				r.Faixa = ""
+			}
+			if utf8.RuneCountInString(r.Method) > maxRegionMethodChars {
+				runes := []rune(r.Method)
+				r.Method = string(runes[:maxRegionMethodChars])
+			}
+			r.RegionOverride = normalizePainted(r.RegionOverride)
+			r.RegionUseStockOnly = normalizePainted(r.RegionUseStockOnly)
+			if r.RegionManufacturerID != nil && *r.RegionManufacturerID <= 0 {
+				r.RegionManufacturerID = nil
 			}
 		}
 
@@ -530,8 +693,19 @@ func (s *PaintService) SavePlan(plan PaintingPlanDTO) (PaintingPlanDTO, error) {
 				return PaintingPlanDTO{}, fmt.Errorf("plano não encontrado (id %d)", plan.ID)
 			}
 
-			// Replace-all: apaga regiões e abas antigas do plano (nessa ordem,
-			// sem depender de cascata) antes de reinserir tudo.
+			// Replace-all: apaga ingredientes, regiões e abas antigas do
+			// plano (nessa ordem, sem depender de cascata) antes de
+			// reinserir tudo (CAN9: ingrediente nunca fica órfão).
+			if _, err := tx.Exec(
+				`DELETE FROM painting_region_ingredients WHERE region_id IN (
+					SELECT pr.id FROM painting_regions pr
+					JOIN painting_tabs t ON t.id = pr.tab_id
+					WHERE t.plan_id = ?
+				)`,
+				plan.ID,
+			); err != nil {
+				return PaintingPlanDTO{}, fmt.Errorf("removendo ingredientes antigos: %w", err)
+			}
 			if _, err := tx.Exec(
 				"DELETE FROM painting_regions WHERE tab_id IN (SELECT id FROM painting_tabs WHERE plan_id = ?)",
 				plan.ID,
@@ -562,16 +736,35 @@ func (s *PaintService) SavePlan(plan PaintingPlanDTO) (PaintingPlanDTO, error) {
 			r.Painted = painted
 			foraDoUniverso := normalizePainted(r.ForaDoUniverso)
 			r.ForaDoUniverso = foraDoUniverso
-			_, err := tx.Exec(
+			regionRes, err := tx.Exec(
 				`INSERT INTO painting_regions
-				 (tab_id, x, y, r, g, b, hex, region_name, note, paint_id, paint_brand, paint_name, paint_code, delta_e, sort_order, painted, fora_do_universo)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				 (tab_id, x, y, r, g, b, hex, region_name, note, paint_id, paint_brand, paint_name, paint_code, delta_e, sort_order, painted, fora_do_universo,
+				  region_override, region_manufacturer_id, region_use_stock_only, result_r, result_g, result_b, faixa, method)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				tabID, r.X, r.Y, r.R, r.G, r.B, r.Hex, r.RegionName, r.Note,
 				nullableInt64(r.PaintID), r.PaintBrand, r.PaintName, r.PaintCode, r.DeltaE, ri, painted, foraDoUniverso,
+				r.RegionOverride, nullableInt64Ptr(r.RegionManufacturerID), r.RegionUseStockOnly,
+				nullableIntPtr(r.ResultR), nullableIntPtr(r.ResultG), nullableIntPtr(r.ResultB), r.Faixa, r.Method,
 			)
 			if err != nil {
 				return PaintingPlanDTO{}, fmt.Errorf("inserindo região %d da aba %q: %w", ri+1, t.Name, err)
 			}
+			regionID, _ := regionRes.LastInsertId()
+			r.ID = regionID
+
+			for ii, ing := range r.Ingredients {
+				_, err := tx.Exec(
+					`INSERT INTO painting_region_ingredients
+					 (region_id, sort_order, paint_id, manufacturer_id, manufacturer, name, code, r, g, b, percentage)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					regionID, ii, nullableID(ing.PaintID), nullableID(ing.ManufacturerID),
+					ing.Manufacturer, ing.Name, ing.Code, ing.R, ing.G, ing.B, ing.Percentage,
+				)
+				if err != nil {
+					return PaintingPlanDTO{}, fmt.Errorf("inserindo ingrediente %d da região %d da aba %q: %w", ii+1, ri+1, t.Name, err)
+				}
+			}
+
 			t.Regions[ri] = r
 		}
 		plan.Tabs[ti] = t
@@ -589,6 +782,35 @@ func nullableInt64(v int64) interface{} {
 		return nil
 	}
 	return v
+}
+
+// nullableID grava NULL para ids <= 0 — diferente de nullableInt64 (que só
+// trata o zero), porque o id de catálogo e o fabricante de um ingrediente
+// (rf-16 T2) podem chegar negativos: é assim que o cliente marca "tinta do
+// estoque local, sem id de catálogo" (rf-14).
+func nullableID(v int64) interface{} {
+	if v <= 0 {
+		return nil
+	}
+	return v
+}
+
+// nullableInt64Ptr converte um *int64 já normalizado (nil ou > 0) para o
+// valor que database/sql grava — usado em region_manufacturer_id.
+func nullableInt64Ptr(v *int64) interface{} {
+	if v == nil {
+		return nil
+	}
+	return *v
+}
+
+// nullableIntPtr converte um *int (resultR/G/B, rf-16 T2) para o valor que
+// database/sql grava.
+func nullableIntPtr(v *int) interface{} {
+	if v == nil {
+		return nil
+	}
+	return *v
 }
 
 // normalizePainted garante que painted grave só 0 ou 1: qualquer valor
@@ -628,6 +850,50 @@ func (s *PaintService) ListPlans() ([]PaintingPlanDTO, error) {
 	for rows.Next() {
 		var p PaintingPlanDTO
 		if err := rows.Scan(&p.ID, &p.Name, &p.CreatedAt, &p.UpdatedAt, &p.RegionCount); err != nil {
+			return nil, err
+		}
+		result = append(result, p)
+	}
+	return result, rows.Err()
+}
+
+// ListPlanSummaries lista os planos para a tela de lista de projetos (rf-16
+// T2): nome, contagens e datas, nunca imagem nem regiões completas.
+// Método novo, em vez de estender ListPlans, para não mudar a assinatura que
+// o binding Wails (project/wails) já gera contra PaintingPlanDTO — só o
+// handler HTTP (handleListPlans) passa a chamar este.
+func (s *PaintService) ListPlanSummaries() ([]PaintingPlanSummaryDTO, error) {
+	rows, err := s.db.Query(`
+		SELECT p.id, p.name, p.created_at, p.updated_at,
+		       COALESCE((
+		           SELECT COUNT(*)
+		           FROM painting_regions pr
+		           JOIN painting_tabs t ON t.id = pr.tab_id
+		           WHERE t.plan_id = p.id
+		       ), 0) AS region_count,
+		       COALESCE((
+		           SELECT COUNT(*)
+		           FROM painting_tabs t
+		           WHERE t.plan_id = p.id
+		       ), 0) AS tab_count,
+		       COALESCE((
+		           SELECT COUNT(*)
+		           FROM painting_regions pr
+		           JOIN painting_tabs t ON t.id = pr.tab_id
+		           WHERE t.plan_id = p.id AND pr.painted = 1
+		       ), 0) AS painted_count
+		FROM painting_plans p
+		ORDER BY p.updated_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]PaintingPlanSummaryDTO, 0)
+	for rows.Next() {
+		var p PaintingPlanSummaryDTO
+		if err := rows.Scan(&p.ID, &p.Name, &p.CreatedAt, &p.UpdatedAt, &p.RegionCount, &p.TabCount, &p.PaintedCount); err != nil {
 			return nil, err
 		}
 		result = append(result, p)
@@ -688,14 +954,18 @@ func (s *PaintService) LoadPlan(id int64) (PaintingPlanDTO, error) {
 	return plan, nil
 }
 
-// loadTabRegions carrega as regiões de uma aba, em sort_order.
+// loadTabRegions carrega as regiões de uma aba, em sort_order, com o ajuste e
+// a mistura salva (rf-16 T2) — e os ingredientes de todas elas numa query só
+// (evita N+1 por região).
 func (s *PaintService) loadTabRegions(tabID int64) ([]PaintingRegionDTO, error) {
 	rows, err := s.db.Query(`
 		SELECT id, x, y, r, g, b, hex,
 		       COALESCE(region_name, ''), COALESCE(note, ''),
 		       COALESCE(paint_id, 0), COALESCE(paint_brand, ''),
 		       COALESCE(paint_name, ''), COALESCE(paint_code, ''),
-		       COALESCE(delta_e, 0), COALESCE(painted, 0), COALESCE(fora_do_universo, 0)
+		       COALESCE(delta_e, 0), COALESCE(painted, 0), COALESCE(fora_do_universo, 0),
+		       COALESCE(region_override, 0), region_manufacturer_id, COALESCE(region_use_stock_only, 0),
+		       result_r, result_g, result_b, COALESCE(faixa, ''), COALESCE(method, '')
 		FROM painting_regions
 		WHERE tab_id = ?
 		ORDER BY sort_order
@@ -708,15 +978,93 @@ func (s *PaintService) loadTabRegions(tabID int64) ([]PaintingRegionDTO, error) 
 	regions := make([]PaintingRegionDTO, 0)
 	for rows.Next() {
 		var r PaintingRegionDTO
+		var regionManufacturerID sql.NullInt64
+		var resultR, resultG, resultB sql.NullInt64
 		if err := rows.Scan(&r.ID, &r.X, &r.Y, &r.R, &r.G, &r.B, &r.Hex,
 			&r.RegionName, &r.Note, &r.PaintID, &r.PaintBrand, &r.PaintName, &r.PaintCode, &r.DeltaE,
 			&r.Painted, &r.ForaDoUniverso,
+			&r.RegionOverride, &regionManufacturerID, &r.RegionUseStockOnly,
+			&resultR, &resultG, &resultB, &r.Faixa, &r.Method,
 		); err != nil {
 			return nil, err
 		}
+		if regionManufacturerID.Valid {
+			r.RegionManufacturerID = &regionManufacturerID.Int64
+		}
+		if resultR.Valid {
+			v := int(resultR.Int64)
+			r.ResultR = &v
+		}
+		if resultG.Valid {
+			v := int(resultG.Int64)
+			r.ResultG = &v
+		}
+		if resultB.Valid {
+			v := int(resultB.Int64)
+			r.ResultB = &v
+		}
+		r.Ingredients = make([]PaintingIngredientDTO, 0)
 		regions = append(regions, r)
 	}
-	return regions, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	regionIDs := make([]int64, len(regions))
+	for i, r := range regions {
+		regionIDs[i] = r.ID
+	}
+	ingredientsByRegion, err := s.loadRegionIngredients(regionIDs)
+	if err != nil {
+		return nil, err
+	}
+	for i := range regions {
+		if ing, ok := ingredientsByRegion[regions[i].ID]; ok {
+			regions[i].Ingredients = ing
+		}
+	}
+
+	return regions, nil
+}
+
+// loadRegionIngredients carrega os ingredientes de várias regiões numa query
+// só, agrupados por region_id, em sort_order (rf-16 T2). Chamado uma vez por
+// aba a partir de loadTabRegions, para não fazer uma query por região.
+func (s *PaintService) loadRegionIngredients(regionIDs []int64) (map[int64][]PaintingIngredientDTO, error) {
+	result := make(map[int64][]PaintingIngredientDTO, len(regionIDs))
+	if len(regionIDs) == 0 {
+		return result, nil
+	}
+
+	placeholders := strings.Repeat("?,", len(regionIDs))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]interface{}, len(regionIDs))
+	for i, id := range regionIDs {
+		args[i] = id
+	}
+
+	rows, err := s.db.Query(fmt.Sprintf(`
+		SELECT region_id, COALESCE(paint_id, 0), COALESCE(manufacturer_id, 0), manufacturer, name, code, r, g, b, percentage
+		FROM painting_region_ingredients
+		WHERE region_id IN (%s)
+		ORDER BY region_id, sort_order
+	`, placeholders), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var regionID int64
+		var ing PaintingIngredientDTO
+		if err := rows.Scan(&regionID, &ing.PaintID, &ing.ManufacturerID, &ing.Manufacturer,
+			&ing.Name, &ing.Code, &ing.R, &ing.G, &ing.B, &ing.Percentage,
+		); err != nil {
+			return nil, err
+		}
+		result[regionID] = append(result[regionID], ing)
+	}
+	return result, rows.Err()
 }
 
 // DeletePlan remove um plano e suas abas/regiões (ON DELETE CASCADE em cadeia).
@@ -730,6 +1078,13 @@ func (s *PaintService) DeletePlan(id int64) error {
 	}
 	defer tx.Rollback()
 
+	if _, err := tx.Exec(`DELETE FROM painting_region_ingredients WHERE region_id IN (
+		SELECT pr.id FROM painting_regions pr
+		JOIN painting_tabs t ON t.id = pr.tab_id
+		WHERE t.plan_id = ?
+	)`, id); err != nil {
+		return fmt.Errorf("removendo ingredientes do plano: %w", err)
+	}
 	if _, err := tx.Exec(`DELETE FROM painting_regions WHERE tab_id IN
 		(SELECT id FROM painting_tabs WHERE plan_id = ?)`, id); err != nil {
 		return fmt.Errorf("removendo regiões do plano: %w", err)

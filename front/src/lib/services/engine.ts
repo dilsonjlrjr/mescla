@@ -164,6 +164,10 @@ export interface UniversoBusca {
   foraDoUniverso?: boolean;
   /** rf-13 RN5: teto de ingredientes da receita. Ausente ou 0 = sem teto. */
   maxIngredients?: number;
+  /** rf-16 RN14: o estoque vive no aparelho (`stock.svelte.ts`), não no
+   *  servidor. Com `useStockOnly` e esta lista, o cálculo vai por POST com o
+   *  estoque no corpo; sem ela, o GET antigo (que lê `user_paints`). */
+  stock?: StockPaint[];
 }
 
 /** Resposta possível quando o universo escolhido não tem tinta nenhuma. Não é
@@ -194,6 +198,28 @@ export async function suggestRecipeForColor(
   b: number,
   universo: UniversoBusca,
 ): Promise<EquivalentRecipe | UniversoVazio> {
+  if (universo.useStockOnly && universo.stock) {
+    // Campo a campo, nunca spread: quantidade, notas e ids de catálogo do
+    // estoque local não interessam ao motor.
+    return apiPost<EquivalentRecipe | UniversoVazio>('/recipes/by-color', {
+      r,
+      g,
+      b,
+      targetManufacturerId: universo.targetManufacturerId ?? 0,
+      foraDoUniverso: universo.foraDoUniverso ?? false,
+      maxIngredients: universo.maxIngredients ?? 0,
+      stock: universo.stock.map(p => ({
+        id: p.id,
+        manufacturerId: p.manufacturerId,
+        manufacturer: p.manufacturer,
+        name: p.name,
+        code: p.code,
+        r: p.r,
+        g: p.g,
+        b: p.b,
+      })),
+    });
+  }
   return apiGet<EquivalentRecipe | UniversoVazio>(`/recipes/by-color?${paramsDoUniverso(r, g, b, universo)}`);
 }
 

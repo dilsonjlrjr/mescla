@@ -2,18 +2,20 @@
   // T2 — Plano da peça (rf-04). Reescrita para fidelidade ao protótipo
   // (D-001/Epic D) — oráculo tests/fixtures/mockup/t2-plano.html.
   //
-  // Foto com pins numerados por região (ainda desenhados em <canvas>, com
-  // zoom por pinça e pan — não dá pra trocar para pins DOM absolutos do
-  // protótipo sem reescrever a matemática de hit-test/zoom, que não está na
-  // lista de "preservar toda a lógica" do rito; ver relato de entrega).
-  // CARD INTEIRO da região é selecionável (CA13). Painel direito: seletor de
-  // fabricante ("Pintar com o que eu tenho") que recalcula TODAS as regiões
-  // (CA14), painel de equivalência da região selecionada, lista de regiões
-  // com estado pintada/a pintar (toggle no próprio card, como no protótipo)
-  // e "Tintas da peça" — checklist local de compra dos ingredientes usados
-  // pelas regiões (US-15/T3 herda a receita salva no rodapé).
+  // rf-16: T2 entra por uma LISTA de projetos (ProjetosLista); abrir um
+  // projeto leva ao editor. No editor: título no cabeçalho, Salvar/Exportar
+  // numa barra de ícones junto do zoom, e cada região selecionada expande o
+  // próprio card com a conta da cor e um ajuste de fornecedor só dela.
+  //
+  // Foto com pins numerados por região (desenhados em <canvas>, com zoom por
+  // pinça e pan). Painel lateral: fabricante do projeto ("Pintar com o que eu
+  // tenho", Combobox) que recalcula as regiões que seguem o projeto, lista de
+  // regiões com estado pintada/a pintar e "Tintas da peça".
+  import { tick, untrack } from 'svelte';
   import Header from '../components/Header.svelte';
   import Spinner from '../components/Spinner.svelte';
+  import Combobox from '../components/Combobox.svelte';
+  import ProjetosLista from '../components/ProjetosLista.svelte';
   import {
     fitView, toImage, toScreen, zoomAround, zoomPercent, type View,
   } from '../planner/viewport';
@@ -22,19 +24,20 @@
     type EquivalentRecipe, type UniversoBusca,
   } from '../services/engine';
   import { allManufacturers } from '../services/catalog';
-  import { saveRecipe } from '../services/recipes.svelte';
+  import { stock, relinkStockManufacturers } from '../services/stock.svelte';
   import { verdictKeys } from '../ui';
   import { t, decimal, type DictKey } from '../i18n.svelte';
   import { toast } from '../toast.svelte';
   import { nav } from '../nav.svelte';
   import {
-    lerRascunho, agendarGravacao, apagarRascunho,
-    lerPlanoAtivo, gravarPlanoAtivo, limparPlanoAtivo, estadoAutoSave,
+    lerRascunho, agendarGravacao, apagarRascunho, gravarPendente, estadoAutoSave,
     type Rascunho, type RegiaoRascunho, type AbaRascunho, type EstadoAutoSave,
   } from '../planner/rascunho';
   import {
-    validarPlano, validarImagemDaAba, salvarPlano, carregarPlano, baixarRelatorio, PlanoError,
+    validarPlano, validarImagemDaAba, salvarPlano, carregarPlano, baixarRelatorio, listarPlanos, excluirPlano,
+    tetoArquivoImagem, TIPOS_IMAGEM_ACEITOS, PlanoError,
     type PlanoDTO, type RegiaoDTO, type AbaDTO, type ErroValidacaoPlano,
+    type IngredienteDTO, type ResumoPlanoDTO,
   } from '../services/plans';
 
   interface PlannerRegion {
@@ -48,10 +51,19 @@
     painted: boolean;
     result: EquivalentRecipe | null;
     computing: boolean;
-    /** Tinta que veio do plano salvo/rascunho. `result` nasce nulo ao
-     *  hidratar e só é preenchido quando o recálculo termina — sem esta
-     *  cópia, salvar antes disso gravaria tinta vazia por cima da boa. */
+    /** Última mistura boa (do plano salvo, do rascunho ou do último cálculo
+     *  que deu certo). rf-16 RN26: sem `result` na hora de gravar, é isto
+     *  que vai — nunca mistura vazia por cima da boa. */
     salvo: RegiaoSalva | null;
+    /** rf-16 RN19: true = usa o próprio fornecedor/estoque, não o do projeto. */
+    override: boolean;
+    regionManufacturerId: number | null;
+    regionUseStockOnly: boolean;
+    /** rf-16 RN21: época de cálculo — resposta de um cálculo antigo é
+     *  descartada. Não vai para DTO nem rascunho. */
+    calcSeq: number;
+    /** rf-16 RN20: motivo de universo vazio desta região. */
+    vazioMotivo: string | null;
   }
 
   interface RegiaoSalva {
@@ -61,6 +73,13 @@
     paintCode: string;
     deltaE: number;
     foraDoUniverso: boolean;
+    ingredients: IngredienteDTO[];
+    resultR: number | null;
+    resultG: number | null;
+    resultB: number | null;
+    /** `''` = sem mistura salva (RN27). */
+    faixa: string;
+    method: string;
   }
 
   /** rf-09/RN7: chave de dedup é marca+código+nome — `paintId` colapsaria
@@ -77,10 +96,8 @@
   /** rf-09 — estado de uma aba (figura). `regions`, `image`, `hasImage`,
    *  `imageDataUrl`, `nextId`, `selectedId` e `view` só pertencem à aba ATIVA
    *  nas variáveis de topo (abaixo); o resto do tempo moram aqui. `uid` é a
-   *  chave estável do `{#each}` — nunca o índice, que muda ao
-   *  reordenar/excluir. Fabricante base, modo estoque e a resposta do
-   *  diálogo de fallback (rf-11) são do PLANO inteiro desde a mudança macro
-   *  de 2026-09-07 — vivem só nas variáveis de topo, nunca aqui. */
+   *  chave estável do `{#each}` — nunca o índice. Fabricante base, modo
+   *  estoque e a resposta do diálogo de fallback (rf-11) são do PLANO. */
   interface AbaState {
     uid: number;
     serverId?: number;
@@ -94,10 +111,17 @@
     view: View;
   }
 
+  /** rf-16 D2: universo do plano passado explicitamente — a abertura calcula
+   *  com o contexto do plano que está chegando, antes de gravá-lo no topo. */
+  interface CtxUniverso {
+    manufacturerId: number | null;
+    useStockOnly: boolean;
+    saida: 'marca' | 'todos' | null;
+  }
+
   let canvasEl: HTMLCanvasElement | undefined = $state();
   /** a caixa da foto — é ELA que dá o tamanho do bitmap e o enquadramento
-   *  (D-002a: medir o próprio canvas é circular, porque o bitmap dependia da
-   *  resolução da imagem). */
+   *  (D-002a). */
   let boxEl: HTMLDivElement | undefined = $state();
   let fileInputEl: HTMLInputElement | undefined = $state();
   let image: HTMLImageElement | null = $state(null);
@@ -112,9 +136,6 @@
   let touchStartZoom = 1;
 
   let manufacturers = $derived(allManufacturers());
-  // rf-11 + mudança macro de 2026-09-07: fabricante base, modo estoque e a
-  // resposta do diálogo de fallback são do PLANO inteiro — um controle só em
-  // T2, valendo para todas as abas. Nunca mais mirados em AbaState.
   let manufacturerId: number | null = $state(null);
   let useStockOnly = $state(false);
   let saidaAutorizada: 'marca' | 'todos' | null = $state(null);
@@ -123,21 +144,25 @@
   let regiaoNoDialogo: number | null = $state(null);
   let dialogoMelhorMarca: number | null = $state(null);
   let dialogoMelhorTodos: number | null = $state(null);
-  let universoVazioMotivo: string | null = $state(null);
   let dialogoElemento: HTMLDivElement | undefined = $state();
   let dialogoDisparador: HTMLElement | null = null;
 
-  // Checklist local de "tenho"/"comprar" das tintas do PLANO INTEIRO — não há
-  // conceito de posse por tinta no app hoje (só por marca, na estante); este
-  // estado vive só nesta tela. Chave = marca+código+nome (RN7), sobrevive à
-  // troca de aba e de foto (RN8/CA14) — só zera ao (re)carregar outro plano.
+  // Checklist local de "tenho"/"comprar" das tintas do PLANO INTEIRO.
   let ownedPaints: Set<string> = $state(new Set());
 
+  // ── rf-16: lista de projetos e abertura ──
+  let modo: 'lista' | 'editor' = $state('lista');
+  let planos: ResumoPlanoDTO[] = $state([]);
+  let listaCarregando = $state(false);
+  let listaErro = $state(false);
+  let abrindo = $state(false);
+  let rascunhoInfo: { planId: number | null; nome: string } | null = $state(null);
+  let listaSeq = 0;
+  /** RN6b: época de abertura. Toda abertura sobe; carga, cálculo e
+   *  marcação de alteração de uma época antiga se descartam. */
+  let aberturaSeq = 0;
+
   // ── rf-09: abas de figura ──
-  // `tabs[activeTabIndex]` é a aba "estacionada" — as variáveis acima (regions,
-  // image, hasImage, imageDataUrl, nextId, selectedId, view, manufacturerId)
-  // são o espelho de trabalho da aba ATIVA; troca de aba grava o espelho na
-  // aba de origem e relê da aba de destino (RN4: nunca marca alteração).
   let abaUidSeq = 1;
   function emptyAba(): AbaState {
     return {
@@ -158,26 +183,14 @@
   let renamingTabIndex: number | null = $state(null);
   const MAX_ABAS_UI = 10;
 
-  /** Nome efetivo pra exibir — mesma convenção de `plans.ts`
-   *  (`nomeEfetivoDaAba`), de propósito não traduzida (RN3: "Figura N" é
-   *  convenção fixa, igual na mensagem de erro do servidor). */
   function displayTabName(aba: AbaState, i: number): string {
     const nome = aba.name.trim();
     return nome.length > 0 ? nome : `Figura ${i + 1}`;
   }
 
-  /** Regiões "ao vivo" de uma aba: a ativa lê do espelho de trabalho — que
-   *  pode estar mais fresco que `tabs[i].regions` entre uma mutação e o
-   *  próximo `snapshotActiveIntoTabs()`. */
+  /** Regiões "ao vivo" de uma aba: a ativa lê do espelho de trabalho. */
   function tabRegions(i: number): PlannerRegion[] {
     return i === activeTabIndex ? regions : tabs[i].regions;
-  }
-
-  /** `hasImage` "ao vivo" de uma aba — mesma convenção de `tabRegions`. Usada
-   *  pelo cabeçalho (achado 3 do guardrail rf-09): o progresso é do plano
-   *  inteiro, não pode sumir só porque a aba ATIVA está sem foto. */
-  function tabHasImage(i: number): boolean {
-    return i === activeTabIndex ? hasImage : tabs[i].hasImage;
   }
 
   function tabProgressLabel(i: number): string {
@@ -185,9 +198,6 @@
     return t('tabProgressShort', { a: rs.filter(r => r.painted).length, b: rs.length });
   }
 
-  /** Grava o espelho de trabalho de volta na aba ativa — chamado antes de
-   *  trocar de aba, montar o DTO/rascunho, ou qualquer leitura que precise do
-   *  estado mais recente de todas as abas. */
   function snapshotActiveIntoTabs(): void {
     const atual = tabs[activeTabIndex];
     if (!atual) return;
@@ -197,8 +207,7 @@
     };
   }
 
-  /** Relê o espelho de trabalho a partir da aba `i` — nunca marca alteração
-   *  (RN4/CA21: trocar de aba não é alteração de conteúdo). */
+  /** Relê o espelho de trabalho a partir da aba `i` — nunca marca alteração. */
   function loadTabIntoWorkingState(i: number): void {
     const aba = tabs[i];
     imageDataUrl = aba.imageDataUrl;
@@ -208,9 +217,7 @@
     nextId = aba.nextId;
     selectedId = aba.selectedId;
     view = aba.view;
-    // CAN5: o diálogo é da região da aba anterior — fecha ao trocar.
     regiaoNoDialogo = null;
-    universoVazioMotivo = null;
   }
 
   function switchTab(i: number): void {
@@ -220,7 +227,6 @@
     loadTabIntoWorkingState(i);
   }
 
-  // RN1/CA8: 11ª aba é negada na hora, com a mesma mensagem do servidor.
   function addTab(): void {
     if (tabs.length >= MAX_ABAS_UI) {
       toast(t('errTabsMax'), 'error');
@@ -245,7 +251,6 @@
     marcarAlteracao();
   }
 
-  // RN6/CA6/CA7: excluir a única aba é negado; as demais pedem confirmação.
   function onDeleteTabClick(i: number): void {
     if (tabs.length <= 1) {
       toast(t('errTabDeleteLast'), 'error');
@@ -282,10 +287,8 @@
     else if (e.key === 'Escape') { e.preventDefault(); renamingTabIndex = null; }
   }
 
-  /** CA29: seta esquerda/direita move o foco (e a seleção) entre as abas. */
   function focusTabButton(i: number): void {
-    const el = document.getElementById(`t2-tab-btn-${i}`);
-    el?.focus();
+    document.getElementById(`t2-tab-btn-${i}`)?.focus();
   }
 
   function onTabKeydown(e: KeyboardEvent, i: number): void {
@@ -305,69 +308,58 @@
   // ── rf-07: plano da peça (nome, salvar, auto save local) ──
   let planId: number | null = $state(null);
   let planName = $state('');
-  /** data URL da foto — guardada à parte de `image` (HTMLImageElement) porque
-   *  o rascunho e o PlanoDTO precisam da string crua, não do bitmap. */
   let imageDataUrl = $state('');
 
   type SaveState = 'idle' | 'saving' | 'saved' | 'error';
   let saveState: SaveState = $state('idle');
   let savedAtLabel = $state('');
-  /** Chave i18n do erro de Salvar — nunca texto cru do servidor (RN11). */
+  /** RN9: check no ícone por 3 s depois de salvar. */
+  let saveFlash = $state(false);
+  let saveFlashTimer: ReturnType<typeof setTimeout> | null = null;
   let saveErrorKey: DictKey | null = $state(null);
-  /** Erro de validação do formulário (CA11/CA13/CA17-CA20) — `abaNome`
-   *  (RN15) compõe a mensagem final quando o erro é de uma aba específica. */
   let validationError: ErroValidacaoPlano | null = $state(null);
+
+  /** RN11: teto do arquivo em MB, com o separador do idioma. */
+  let tetoMb = $derived(decimal(tetoArquivoImagem() / (1024 * 1024), 1));
+
   let validationErrorText = $derived.by((): string | null => {
     const erro = validationError;
     if (!erro) return null;
-    const msg = t(erro.chave as DictKey);
+    const msg = t(erro.chave as DictKey, { mb: tetoMb });
     return erro.abaNome ? `${erro.abaNome}: ${msg}` : msg;
   });
 
   let draftBannerVisible = $state(false);
-  /** Reflete `estadoAutoSave()` (RN8) — só o módulo de rascunho decide a
-   *  escada; a tela apenas relê depois que a gravação (debounce) já rodou. */
   let autoSaveStatus: EstadoAutoSave = $state('ligado');
 
-  /** RN5: T2 fica sempre montada — hidrata uma única vez na TRANSIÇÃO para
-   *  'plano', nunca de novo. `hidratando` impede reentrância do próprio
-   *  `$effect`; `hidratado` é o que trava `marcarAlteracao` até a hidratação
-   *  terminar (maior risco da fatia: auto save sobrescrevendo rascunho bom
-   *  com estado vazio no boot). */
-  let hidratando = false;
-  let hidratado = $state(false);
-  /** Marca que o usuário mexeu na tela enquanto o `GET` da hidratação estava
-   *  em voo. Aplicar o plano do servidor por cima apagaria esse trabalho, e
-   *  não há rascunho de resgate (`marcarAlteracao` ainda está travado). */
-  let alteradoDuranteHidratacao = false;
-  /** Sobe a cada Salvar concluído e a cada alteração de conteúdo — deixa o
-   *  código distinguir "nada mudou desde o POST" de "mudou durante o POST". */
+  /** Sobe a cada Salvar concluído e a cada alteração de conteúdo. */
   let salvamentoSeq = 0;
   let alteracaoSeq = 0;
-  /** rf-08/RN11: valor de `alteracaoSeq` no último Salvar bem-sucedido sem
-   *  edição concorrente (o ramo que apaga o rascunho). Reaproveita os
-   *  contadores do rf-07 em vez de inventar flag nova — "rascunho pendente"
-   *  é `alteracaoSeq` ter avançado depois desse ponto, ou o banner de
-   *  rascunho restaurado ainda estar visível. */
   let alteracaoSeqSalva = $state(0);
 
   // ── rf-08: exportar relatório (PDF/PNG) ──
-  let reportFormat: 'pdf' | 'png' = $state('pdf');
   let reportGenerating = $state(false);
-  /** Chave i18n do estado/erro da exportação — nunca texto cru do servidor (CA18). */
   let reportErrorKey: DictKey | null = $state(null);
+  let exportMenuOpen = $state(false);
+
+  // ── rf-16 RN7: título editável ──
+  let renomeandoTitulo = $state(false);
+  let tituloRascunho = $state('');
+  let tituloCancelado = false;
+  let tituloInputEl: HTMLInputElement | undefined = $state();
 
   let planNamePlaceholder = $derived.by(() => {
     const d = new Date();
     const dd = String(d.getDate()).padStart(2, '0');
     const mm = String(d.getMonth() + 1).padStart(2, '0');
-    return t('planNamePh', { data: `${dd}/${mm}` });
+    return t('projectNamePh', { data: `${dd}/${mm}` });
   });
 
+  // RN1: a lista recarrega sempre que T2 fica visível no modo lista, e
+  // sempre que o modo volta do editor para a lista.
   $effect(() => {
-    if (nav.tab === 'plano' && !hidratando) {
-      hidratando = true;
-      void hidratarT2();
+    if (nav.tab === 'plano' && modo === 'lista') {
+      untrack(() => void carregarLista());
     }
   });
 
@@ -375,44 +367,46 @@
     if (manufacturerId === null && manufacturers.length > 0) manufacturerId = manufacturers[0].id;
   });
 
-  // CA19: foco vai para o diálogo assim que ele aparece.
   $effect(() => {
     if (regiaoNoDialogo !== null) dialogoElemento?.focus();
   });
 
+  $effect(() => {
+    if (renomeandoTitulo) tituloInputEl?.focus();
+  });
+
   let selectedRegion = $derived(regions.find(r => r.id === selectedId) ?? null);
-  // CA13/RN9: o progresso do cabeçalho soma as regiões pintadas de TODAS as
-  // abas — cada aba mostra o seu próprio na tira (tabProgressLabel).
   let totalRegionsCount = $derived(tabs.reduce((acc, _a, i) => acc + tabRegions(i).length, 0));
   let paintedCount = $derived(
     tabs.reduce((acc, _a, i) => acc + tabRegions(i).filter(r => r.painted).length, 0)
   );
   let progressPct = $derived(totalRegionsCount ? Math.round((paintedCount / totalRegionsCount) * 100) : 0);
 
-  // CA13/achado 3: o cabeçalho mostra o progresso do PLANO INTEIRO sempre
-  // que alguma aba tem foto — mesmo que a aba ativa não tenha.
-  let planHasImage = $derived(tabs.some((_a, i) => tabHasImage(i)));
-  let plannerTitle = $derived(
-    planHasImage ? t('progress', { a: paintedCount, b: totalRegionsCount }) : t('t2EmptyTitle')
-  );
+  /** RN25: Salvar espera os cálculos em voo. */
+  let algumCalculando = $derived(tabs.some((_a, i) => tabRegions(i).some(r => r.computing)));
 
-  // rf-08/RN11: plano nunca salvo ou com rascunho local pendente bloqueia a exportação.
+  /** RN20: o aviso do topo do painel é só das regiões que seguem o projeto. */
+  let avisoUniversoProjeto = $derived.by((): string | null => {
+    for (let i = 0; i < tabs.length; i++) {
+      const achado = tabRegions(i).find(r => !r.override && r.vazioMotivo);
+      if (achado) return achado.vazioMotivo;
+    }
+    return null;
+  });
+
   let rascunhoPendente = $derived(draftBannerVisible || alteracaoSeq !== alteracaoSeqSalva);
   let exportDisabled = $derived(planId == null || rascunhoPendente || reportGenerating);
 
   function paintKey(brand: string, code: string, name: string): string {
-    return `${brand} ${code} ${name}`;
+    return `${brand} ${code} ${name}`;
   }
 
-  // RN7/CA10-CA12: dedup por marca+código+nome (o mesmo descritor gravado por
-  // região — mapRegionCommon), atravessando TODAS as abas do plano; região
-  // sem tinta (descritor vazio) não entra; cada item cita as abas onde aparece.
   let shoppingItems = $derived.by((): ShoppingItem[] => {
     const map = new Map<string, ShoppingItem>();
     tabs.forEach((aba, i) => {
       const abaNome = displayTabName(aba, i);
-      tabRegions(i).forEach((r, idx) => {
-        const desc = mapRegionCommon(r, idx);
+      tabRegions(i).forEach((r) => {
+        const desc = descritorDaRegiao(r);
         if (!desc.paintBrand && !desc.paintCode && !desc.paintName) return;
         const key = paintKey(desc.paintBrand, desc.paintCode, desc.paintName);
         const existente = map.get(key);
@@ -438,12 +432,10 @@
 
   function regionMatchText(r: PlannerRegion): string {
     if (r.computing) return t('calculating');
-    if (!r.result) return t('noSimilarPaint');
+    if (!r.result) return r.vazioMotivo ?? t('noSimilarPaint');
     return `ΔE ${decimal(r.result.deltaE, 1)} · ${r.result.ingredients.map(ing => ing.name).join(' + ')}`;
   }
 
-  /** rf-11 RN3: selo da faixa de qualidade. Nunca só por cor — o texto e o
-   *  ΔE00 andam juntos. */
   function seloDaFaixa(r: PlannerRegion): { texto: string; cor: string } | null {
     const faixa = r.result?.faixa;
     if (!faixa) return null;
@@ -452,17 +444,31 @@
     return { texto: t('faixaNaoEncontrei'), cor: 'var(--color-danger, #D1495B)' };
   }
 
-  function equivHeadline(res: EquivalentRecipe): string {
-    return res.ingredients.length <= 1 ? t('hPote') : t('hMix', { n: res.ingredients.length });
-  }
-
-  // Cor do número de ΔE00 no painel de equivalência — some conforme o
-  // veredito piora (RG-05), sem inventar tom fora dos tokens do tema.
   function verdictColor(deltaE: number): string {
     const { v } = verdictKeys(deltaE);
     if (v === 'v1' || v === 'v2') return 'var(--color-accent-400)';
     if (v === 'v3') return 'var(--color-neutral-300)';
     return 'var(--color-neutral-500)';
+  }
+
+  function hexDe(r: number, g: number, b: number): string {
+    return `#${[r, g, b].map(n => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+  }
+
+  function nomeFabricante(id: number | null): string {
+    if (id == null) return '';
+    return manufacturers.find(m => m.id === id)?.name ?? '';
+  }
+
+  /** RN18.7: de onde a tinta da região pôde sair. */
+  function origemDaRegiao(r: PlannerRegion): string {
+    if (r.override) {
+      const base = t('regionOriginOverride', { marca: nomeFabricante(r.regionManufacturerId) || t('allMakers') });
+      return r.regionUseStockOnly ? `${base}, ${t('regionOriginStock')}` : base;
+    }
+    const marca = saidaAutorizada === 'todos' ? t('allMakers') : nomeFabricante(manufacturerId) || t('allMakers');
+    const base = t('regionOriginProject', { marca });
+    return useStockOnly && saidaAutorizada === null ? `${base}, ${t('regionOriginStock')}` : base;
   }
 
   function toggleOwned(key: string) {
@@ -472,15 +478,11 @@
     ownedPaints = next;
   }
 
-  /** Cor de token para o canvas — o `<canvas>` não entende `var(--x)`, então o
-   *  valor é lido do documento em vez de escrito em hex aqui (NFR-10). */
   function token(name: string, fallback: string): string {
     const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     return v || fallback;
   }
 
-  /** Tamanho da caixa da foto em CSS px. Todo o enquadramento é calculado
-   *  aqui — nunca a partir do canvas, que é justamente o que se ajusta. */
   function boxSize(): { w: number; h: number } {
     return { w: boxEl?.clientWidth ?? 0, h: boxEl?.clientHeight ?? 0 };
   }
@@ -495,8 +497,6 @@
     if (w <= 0 || h <= 0) return;
     const dpr = window.devicePixelRatio || 1;
 
-    // O bitmap acompanha a CAIXA (em pixels do dispositivo); o desenho fala em
-    // CSS px, com a escala do dispositivo aplicada de uma vez na transformação.
     c.width = Math.max(1, Math.round(w * dpr));
     c.height = Math.max(1, Math.round(h * dpr));
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -538,7 +538,6 @@
     });
   }
 
-  /** Enquadra a foto inteira na caixa (também é o botão "ajustar à tela"). */
   function fitToBox() {
     if (!image) return;
     const { w, h } = boxSize();
@@ -549,13 +548,9 @@
 
   $effect(() => {
     if (!image || !canvasEl) return;
-    // Uma volta de layout antes de medir: no primeiro quadro depois do
-    // {#if hasImage} a caixa ainda não tem tamanho.
     requestAnimationFrame(fitToBox);
   });
 
-  // Redimensionar a janela mantém o enquadramento válido; sem isso a foto
-  // fica deslocada depois de girar o tablet.
   $effect(() => {
     if (!boxEl) return;
     const ro = new ResizeObserver(() => {
@@ -565,8 +560,6 @@
     return () => ro.disconnect();
   });
 
-  // RN8/CA14: o checklist "tenho" é do PLANO — trocar a foto de uma aba não
-  // zera mais `ownedPaints` (a marcação sobrevive, como manda a spec).
   function loadImage(src: string) {
     const img = new Image();
     img.onload = () => {
@@ -581,8 +574,6 @@
     img.src = src;
   }
 
-  /** Carrega o bitmap de uma foto sem tocar no estado de trabalho — usado na
-   *  hidratação, para as abas que ainda não são a ativa. */
   function loadImageBitmap(src: string): Promise<HTMLImageElement | null> {
     return new Promise(resolve => {
       const img = new Image();
@@ -596,19 +587,25 @@
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
+    // rf-16 RN12: tipo e tamanho barrados ANTES de ler o arquivo — o usuário
+    // já viu o limite na tela, e ler 20 MB só para recusar gasta memória.
+    if (!TIPOS_IMAGEM_ACEITOS.includes(file.type)) {
+      toast(t('errImageType'), 'error');
+      input.value = '';
+      return;
+    }
+    if (file.size > tetoArquivoImagem()) {
+      toast(t('errImageMax', { mb: tetoMb }), 'error');
+      input.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       const src = reader.result as string;
-      // D-005: a MESMA guarda da CA17, aplicada já no upload em vez de só no
-      // Salvar. Uma foto acima do teto entrava no estado, o auto save batia
-      // na cota e a RN8 cortava a foto de TODAS as abas; o usuário só
-      // descobria ao recarregar, com a foto perdida e — em plano nunca salvo
-      // — sem servidor de onde buscá-la. Recusar na entrada mantém o estado
-      // sempre gravável.
+      // D-005: a mesma guarda da CA17 continua como rede de segurança.
       const erroImagem = validarImagemDaAba(src);
       if (erroImagem) {
-        toast(t(erroImagem as DictKey), 'error');
-        // Libera o input para o usuário reescolher, inclusive o mesmo arquivo.
+        toast(t(erroImagem as DictKey, { mb: tetoMb }), 'error');
         input.value = '';
         return;
       }
@@ -617,7 +614,6 @@
     reader.readAsDataURL(file);
   }
 
-  /** Ponto do evento em CSS px relativos à caixa — mesmo espaço do desenho. */
   function canvasPos(clientX: number, clientY: number) {
     const el = canvasEl ?? boxEl;
     if (!el) return { mx: 0, my: 0 };
@@ -654,9 +650,9 @@
     zoomBy(e.deltaY < 0 ? 1.12 : 1 / 1.12, { x: mx, y: my });
   }
 
-  function getTouchDist(t: TouchList): number {
-    if (t.length < 2) return 0;
-    return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  function getTouchDist(tl: TouchList): number {
+    if (tl.length < 2) return 0;
+    return Math.hypot(tl[0].clientX - tl[1].clientX, tl[0].clientY - tl[1].clientY);
   }
 
   function onTouchStart(e: TouchEvent) {
@@ -683,7 +679,6 @@
         (e.touches[0].clientX + e.touches[1].clientX) / 2,
         (e.touches[0].clientY + e.touches[1].clientY) / 2,
       );
-      // A pinça também ancora no ponto entre os dedos.
       view = zoomAround(view, alvo / view.zoom, { x: meio.mx, y: meio.my });
       draw();
     }
@@ -698,8 +693,7 @@
     const { mx, my } = canvasPos(clientX, clientY);
     const hit = hitTest(mx, my);
     if (hit) {
-      selectedId = hit.id;
-      draw();
+      selectRegion(hit.id, true);
       return;
     }
     const p = toImage(view, mx, my);
@@ -712,7 +706,6 @@
 
   async function addRegion(ix: number, iy: number) {
     if (!image) return;
-    // RN2/CA9: teto de 50 regiões É POR ABA — a mensagem cita a aba (RN15).
     if (regions.length >= 50) {
       toast(`${displayTabName(tabs[activeTabIndex], activeTabIndex)}: ${t('errRegionsMax')}`, 'error');
       return;
@@ -734,78 +727,91 @@
       result: null,
       computing: true,
       salvo: null,
+      override: false,
+      regionManufacturerId: null,
+      regionUseStockOnly: false,
+      calcSeq: 0,
+      vazioMotivo: null,
     };
     regions = [...regions, region];
-    selectedId = region.id;
-    draw();
-    await computeRegion(region.id);
-    marcarAlteracao();
+    selectRegion(region.id, true);
+    const tabUid = tabs[activeTabIndex].uid;
+    await recalcularComMarcacao(() => computeRegion(region.id, tabUid));
   }
 
   /** Acha a região `id` pela identidade da aba (`tabUid`) — nunca pelo
-   *  binding vivo `regions`, que passa a apontar para outra aba assim que o
-   *  usuário troca de aba. Os ids de região reiniciam em 1 por aba: ler
-   *  direto de `regions` gravaria o resultado na região de mesmo id da aba
-   *  que virou ativa (achado 1 do guardrail rf-09). Enquanto a aba de
-   *  origem continuar ativa, `regions` É o espelho dela; se deixou de ser,
-   *  o espelho já foi estacionado em `tabs` por `snapshotActiveIntoTabs`. */
+   *  binding vivo `regions` (achado 1 do guardrail rf-09). */
   function regiaoDaAba(tabUid: number, id: number): PlannerRegion | null {
     const arr = tabs[activeTabIndex]?.uid === tabUid ? regions : (tabs.find(a => a.uid === tabUid)?.regions ?? null);
     return arr?.find(r => r.id === id) ?? null;
   }
 
-  /** D-002b: o cálculo é endereçado por ID, nunca por referência.
-   *  `regions` é `$state`, então o que está no array é o PROXY da região —
-   *  escrever no objeto cru que `addRegion` criou não dispara reatividade
-   *  nenhuma, e a tela fica presa em "calculando" com a resposta já em mãos.
-   *  `tabUidChamada` (mesmo padrão de época do `onManufacturerChange`, com
-   *  `salvamentoSeq`) fixa a aba de origem no instante da chamada — troca de
-   *  aba durante o cálculo nunca escreve na aba errada nem deixa a região de
-   *  origem presa em "calculando" (achado 1 do guardrail rf-09). */
-  /** rf-11 RN1/RN10: o universo vai para o servidor como dois parâmetros; a
-   *  interseção é montada lá, nunca aqui. */
-  function universoAtual(): UniversoBusca {
+  function ctxAtual(): CtxUniverso {
+    return { manufacturerId, useStockOnly, saida: saidaAutorizada };
+  }
+
+  /** rf-16 RN20: o universo sai da região — ajuste próprio, ou o do projeto
+   *  (com a saída autorizada do rf-11). Com "só o que eu tenho", o estoque do
+   *  aparelho viaja junto (RN14). */
+  function universoDaRegiao(reg: PlannerRegion, ctx: CtxUniverso = ctxAtual()): UniversoBusca {
+    if (reg.override) {
+      const so = reg.regionUseStockOnly;
+      return {
+        targetManufacturerId: reg.regionManufacturerId ?? undefined,
+        useStockOnly: so,
+        foraDoUniverso: false,
+        stock: so ? stock.paints : undefined,
+      };
+    }
+    const so = ctx.saida === null && ctx.useStockOnly;
     return {
-      targetManufacturerId: saidaAutorizada === 'todos' ? undefined : manufacturerId ?? undefined,
-      useStockOnly: saidaAutorizada === null && useStockOnly,
-      foraDoUniverso: saidaAutorizada !== null,
+      targetManufacturerId: ctx.saida === 'todos' ? undefined : ctx.manufacturerId ?? undefined,
+      useStockOnly: so,
+      foraDoUniverso: ctx.saida !== null,
+      stock: so ? stock.paints : undefined,
     };
   }
 
-  /** rf-11 RN4/RN5/RN6: o diálogo de fallback. Abre UMA vez por aba, na
-   *  primeira região que estoura o limiar, e mostra o melhor ΔE00 alcançável
-   *  em cada saída antes de o usuário escolher. */
+  /** rf-11 RN4/RN5/RN6: o diálogo de fallback. */
   async function abrirDialogoDeFallback(regiaoId: number, r: number, g: number, b: number): Promise<void> {
-    if (regiaoNoDialogo !== null) return; // já tem um aberto
+    if (regiaoNoDialogo !== null) return;
     dialogoDisparador = document.activeElement as HTMLElement | null;
     regiaoNoDialogo = regiaoId;
     dialogoMelhorMarca = null;
     dialogoMelhorTodos = null;
 
-    // As duas saídas, na ordem da RN5: primeiro todo o catálogo do fabricante
-    // base (comprar uma tinta que falta), depois os outros fabricantes.
     if (manufacturerId != null) {
       dialogoMelhorMarca = await melhorDeltaE(r, g, b, { targetManufacturerId: manufacturerId });
     }
     dialogoMelhorTodos = await melhorDeltaE(r, g, b, {});
   }
 
-  /** RN4 (mudança macro 07/09/2026): a escolha vale para o plano inteiro —
-   *  um controle só — e dispara o recálculo de todas as abas. */
   async function escolherSaida(saida: 'marca' | 'todos'): Promise<void> {
     saidaAutorizada = saida;
     regiaoNoDialogo = null;
     devolverFoco();
-    marcarAlteracao();
-    await recalcularTodasAsAbas();
+    await recalcularComMarcacao(recalcularRegioesDoProjeto);
   }
 
-  /** RN8 (mudança macro 07/09/2026): trocar o controle único de
-   *  fabricante/estoque recalcula as regiões de TODAS as abas do plano, não
-   *  só a ativa — `tabRegions`/`computeRegion` já sabem ler a ativa do
-   *  espelho de trabalho e as demais de `tabs[i].regions`. */
-  async function recalcularTodasAsAbas(): Promise<void> {
-    await Promise.all(tabs.flatMap((aba, i) => tabRegions(i).map(r => computeRegion(r.id, aba.uid))));
+  /** Marca a alteração no gesto (antes do await) e de novo quando o cálculo
+   *  termina. A marcação síncrona é o que faz um Salvar em voo perceber que
+   *  a tela mudou e manter o rascunho (achado 2 do guardrail); a segunda
+   *  grava o resultado. Só a época de abertura barra — um Salvar concluído
+   *  no meio não barra mais, porque o Salvar fica desabilitado enquanto há
+   *  cálculo (RN25) e a mudança só pode ter vindo depois dele. */
+  async function recalcularComMarcacao(calcular: () => Promise<void>): Promise<void> {
+    const ep = aberturaSeq;
+    marcarAlteracao();
+    await calcular();
+    if (ep === aberturaSeq) marcarAlteracao();
+  }
+
+  /** RN22: mudança global recalcula só quem segue o projeto, em todas as
+   *  figuras. Região ajustada mantém fornecedor, interruptor e mistura. */
+  async function recalcularRegioesDoProjeto(): Promise<void> {
+    await Promise.all(
+      tabs.flatMap((aba, i) => tabRegions(i).filter(r => !r.override).map(r => computeRegion(r.id, aba.uid))),
+    );
   }
 
   function devolverFoco(): void {
@@ -821,74 +827,136 @@
   }
 
   function fecharDialogo(): void {
-    // CA19: fechar sem escolher não decide nada.
     regiaoNoDialogo = null;
     devolverFoco();
   }
 
-  /** RN8: trocar qualquer interruptor limpa a resposta lembrada e recalcula. */
   async function onUseStockOnlyChange(valor: boolean): Promise<void> {
     useStockOnly = valor;
     saidaAutorizada = null;
-    universoVazioMotivo = null;
-    marcarAlteracao();
-    await recalcularTodasAsAbas();
+    await recalcularComMarcacao(recalcularRegioesDoProjeto);
   }
 
+  /** Recibo de mistura no formato gravado (RN24/RN26). */
+  function salvoDoResultado(res: EquivalentRecipe): RegiaoSalva {
+    const ing = res.ingredients ?? [];
+    return {
+      paintId: ing.length === 1 ? ing[0].paintId : null,
+      paintBrand: res.targetManufacturer ?? '',
+      paintName: ing.length === 1 ? ing[0].name : ing.map(x => x.name).join(' + '),
+      paintCode: ing.length === 1 ? ing[0].code : '',
+      deltaE: res.deltaE ?? 0,
+      foraDoUniverso: res.foraDoUniverso ?? false,
+      ingredients: ing.map(x => ({
+        paintId: x.paintId,
+        manufacturerId: x.manufacturerId ?? 0,
+        manufacturer: x.manufacturer ?? '',
+        name: x.name,
+        code: x.code,
+        r: x.r,
+        g: x.g,
+        b: x.b,
+        percentage: x.percentage,
+      })),
+      resultR: res.resultR,
+      resultG: res.resultG,
+      resultB: res.resultB,
+      faixa: res.faixa ?? '',
+      method: res.method ?? '',
+    };
+  }
+
+  /** RN27: monta a receita a partir da mistura salva, sem chamar o motor.
+   *  `null` quando não há mistura salva (`faixa` vazia). */
+  function receitaDoSalvo(s: RegiaoSalva | null, r: number, g: number, b: number): EquivalentRecipe | null {
+    if (!s || !s.faixa) return null;
+    const ingredients = s.ingredients.map(i => ({ ...i }));
+    return {
+      sourcePaintId: 0,
+      sourceName: '',
+      sourceManufacturer: '',
+      sourceR: r,
+      sourceG: g,
+      sourceB: b,
+      targetManufacturer: s.paintBrand,
+      ingredients,
+      resultR: s.resultR ?? r,
+      resultG: s.resultG ?? g,
+      resultB: s.resultB ?? b,
+      deltaE: s.deltaE,
+      method: s.method,
+      reproducible: s.faixa !== 'nao-encontrei',
+      faixa: s.faixa as EquivalentRecipe['faixa'],
+      foraDoUniverso: s.foraDoUniverso,
+      tips: null,
+      crossBrand: new Set(ingredients.map(i => i.manufacturerId)).size > 1,
+      manufacturers: [...new Set(ingredients.map(i => i.manufacturer).filter(Boolean))].sort(),
+    };
+  }
+
+  /** D-002b: cálculo endereçado por ID. rf-16: com época de abertura
+   *  (RN6b) e época de cálculo da região (RN21) — resposta velha não escreve. */
   async function computeRegion(id: number, tabUidChamada: number = tabs[activeTabIndex].uid) {
     const alvo = () => regiaoDaAba(tabUidChamada, id);
     const inicio = alvo();
     if (!inicio) return;
+    const ep = aberturaSeq;
+    const seq = inicio.calcSeq + 1;
+    inicio.calcSeq = seq;
     inicio.computing = true;
+    const vigente = (): PlannerRegion | null => {
+      const agora = alvo();
+      return ep === aberturaSeq && agora && agora.calcSeq === seq ? agora : null;
+    };
     try {
-      const resp = await suggestRecipeForColor(inicio.r, inicio.g, inicio.b, universoAtual());
-      if (ehUniversoVazio(resp)) {
-        // RN9: universo sem tinta não é erro — a tela diz o motivo e o
-        // usuário decide se abre o universo.
-        universoVazioMotivo = resp.motivo;
-        const vazio = alvo();
-        if (vazio) vazio.result = null;
+      const resp = await suggestRecipeForColor(inicio.r, inicio.g, inicio.b, universoDaRegiao(inicio));
+      const agora = vigente();
+      if (!agora) return;
+      if (!resp) {
+        agora.result = null;
         return;
       }
-      universoVazioMotivo = null;
-      const agora = alvo();
-      if (agora) agora.result = resp;
-      // RN3/RN4: estourou o limiar e a aba ainda não respondeu o diálogo.
-      if (resp.faixa === 'nao-encontrei' && saidaAutorizada === null) {
+      if (ehUniversoVazio(resp)) {
+        agora.vazioMotivo = resp.motivo;
+        agora.result = null;
+        return;
+      }
+      agora.vazioMotivo = null;
+      agora.result = resp;
+      agora.salvo = salvoDoResultado(resp);
+      // RN23: o diálogo de fallback é só de quem segue o projeto.
+      if (resp.faixa === 'nao-encontrei' && !agora.override && saidaAutorizada === null) {
         void abrirDialogoDeFallback(id, inicio.r, inicio.g, inicio.b);
       }
     } catch (e) {
       console.error('Erro ao calcular região:', e);
-      const agora = alvo();
+      const agora = vigente();
       if (agora) agora.result = null;
     } finally {
-      const agora = alvo();
+      const agora = vigente();
       if (agora) agora.computing = false;
       draw();
     }
   }
 
-  // CA14: trocar de fabricante recalcula TODAS as abas do plano (RN8, mudança
-  // macro 07/09/2026), não só a ativa.
   async function onManufacturerChange(id: number) {
+    if (id === manufacturerId) return;
     manufacturerId = id;
-    // RN8: trocar de fabricante base limpa a resposta lembrada — a mesma
-    // disciplina do estoque em onUseStockOnlyChange.
     saidaAutorizada = null;
-    universoVazioMotivo = null;
-    const epoca = salvamentoSeq;
-    // marcarAlteracao só depois que o laço de recálculo termina — nunca
-    // antes, e nunca por região (um `$effect` sobre `regions` dispararia a
-    // cada escrita assíncrona de computeRegion, o que a spec proíbe).
-    await recalcularTodasAsAbas();
-    // Um Salvar concluiu durante o recálculo: marcar agora ressuscitaria um
-    // rascunho para um plano que já está salvo.
-    if (salvamentoSeq === epoca) marcarAlteracao();
+    await recalcularComMarcacao(recalcularRegioesDoProjeto);
   }
 
-  function selectRegion(id: number) {
+  /** RN35: seleciona, destaca, rola e dá foco ao card na lista. */
+  function selectRegion(id: number, focar = false) {
     selectedId = id;
     draw();
+    if (!focar) return;
+    void tick().then(() => {
+      const el = document.getElementById(`t2-region-card-${id}`);
+      if (!el) return;
+      el.scrollIntoView?.({ block: 'nearest' });
+      el.focus({ preventScroll: true });
+    });
   }
 
   function togglePainted(r: PlannerRegion) {
@@ -904,61 +972,67 @@
     marcarAlteracao();
   }
 
-  function saveRegionAsRecipe() {
-    const r = selectedRegion;
-    if (!r || manufacturerId == null) return;
-    const idx = regions.findIndex(x => x.id === r.id);
-    saveRecipe({
-      name: regionName(idx),
-      targetPaintId: null,
-      targetR: r.r,
-      targetG: r.g,
-      targetB: r.b,
-      manufacturerId,
-    });
-    toast(t('recipeSavedToast'));
+  // ── rf-16 RN19–RN21: ajuste por região ──
+  async function ajustarFornecedorDaRegiao(r: PlannerRegion, id: number | null): Promise<void> {
+    if (id === null) {
+      r.override = false;
+      r.regionManufacturerId = null;
+      r.regionUseStockOnly = false;
+    } else {
+      if (!r.override) r.regionUseStockOnly = useStockOnly;
+      r.override = true;
+      r.regionManufacturerId = id;
+    }
+    await recalcularUmaRegiao(r.id);
   }
 
-  // ── rf-07: mapeamento tela → rascunho/DTO ──
-  // PlannerRegion não tem `regionName`/`note` — deriva-se do rótulo que a
-  // tela já usa (regionName(i)) e envia-se `note: ''` (não inventa campo).
-  function mapRegionCommon(r: PlannerRegion, i: number) {
-    const base = { x: r.x, y: r.y, r: r.r, g: r.g, b: r.b, hex: r.hex, regionName: regionName(i), note: '' };
-    if (!r.result) {
-      // Recálculo ainda não terminou (ou a API está fora): preserva a tinta
-      // que veio do plano salvo em vez de gravar vazio por cima.
-      const s = r.salvo;
-      return {
-        ...base,
-        paintId: s?.paintId ?? null,
-        paintBrand: s?.paintBrand ?? '',
-        paintName: s?.paintName ?? '',
-        paintCode: s?.paintCode ?? '',
-        deltaE: s?.deltaE ?? 0,
-        foraDoUniverso: s?.foraDoUniverso ?? false,
-      };
-    }
-    const ing = r.result.ingredients ?? [];
-    return {
-      ...base,
-      paintId: ing.length === 1 ? ing[0].paintId : null,
-      paintBrand: r.result.targetManufacturer ?? '',
-      paintName: ing.length === 1 ? ing[0].name : ing.map(x => x.name).join(' + '),
-      paintCode: ing.length === 1 ? ing[0].code : '',
-      deltaE: r.result.deltaE ?? 0,
-      // rf-11 RN7: sem foraDoUniverso na resposta (T1/T3 não o enviam), a
-      // marcação é falsa — só true quando o rf-11 explicitamente autorizou.
-      foraDoUniverso: r.result.foraDoUniverso ?? false,
-    };
+  async function ajustarEstoqueDaRegiao(r: PlannerRegion, valor: boolean): Promise<void> {
+    r.regionUseStockOnly = valor;
+    await recalcularUmaRegiao(r.id);
+  }
+
+  async function recalcularUmaRegiao(id: number): Promise<void> {
+    const tabUid = tabs[activeTabIndex].uid;
+    await recalcularComMarcacao(() => computeRegion(id, tabUid));
+  }
+
+  // ── rf-07/rf-16: mapeamento tela → rascunho/DTO ──
+  const SALVO_VAZIO: RegiaoSalva = {
+    paintId: null, paintBrand: '', paintName: '', paintCode: '', deltaE: 0, foraDoUniverso: false,
+    ingredients: [], resultR: null, resultG: null, resultB: null, faixa: '', method: '',
+  };
+
+  /** RN26: com `result`, a mistura atual; sem, a última mistura boa. */
+  function descritorDaRegiao(r: PlannerRegion): RegiaoSalva {
+    return r.result ? salvoDoResultado(r.result) : (r.salvo ?? SALVO_VAZIO);
   }
 
   function regiaoParaRascunho(r: PlannerRegion, i: number): RegiaoRascunho {
-    return { ...mapRegionCommon(r, i), painted: r.painted };
+    const d = descritorDaRegiao(r);
+    return {
+      x: r.x, y: r.y, r: r.r, g: r.g, b: r.b, hex: r.hex, regionName: regionName(i), note: '',
+      paintId: d.paintId, paintBrand: d.paintBrand, paintName: d.paintName, paintCode: d.paintCode,
+      deltaE: d.deltaE, painted: r.painted, foraDoUniverso: d.foraDoUniverso,
+      regionOverride: r.override,
+      regionManufacturerId: r.override ? r.regionManufacturerId : null,
+      regionUseStockOnly: r.override && r.regionUseStockOnly,
+      resultR: d.resultR, resultG: d.resultG, resultB: d.resultB,
+      faixa: d.faixa, method: d.method, ingredients: d.ingredients,
+    };
   }
 
   function regiaoParaDTO(r: PlannerRegion, i: number): RegiaoDTO {
-    const comum = mapRegionCommon(r, i);
-    return { ...comum, painted: r.painted ? 1 : 0, foraDoUniverso: comum.foraDoUniverso ? 1 : 0 };
+    const d = descritorDaRegiao(r);
+    return {
+      x: r.x, y: r.y, r: r.r, g: r.g, b: r.b, hex: r.hex, regionName: regionName(i), note: '',
+      paintId: d.paintId, paintBrand: d.paintBrand, paintName: d.paintName, paintCode: d.paintCode,
+      deltaE: d.deltaE, painted: r.painted ? 1 : 0, foraDoUniverso: d.foraDoUniverso ? 1 : 0,
+      regionOverride: r.override ? 1 : 0,
+      regionManufacturerId: r.override ? r.regionManufacturerId : null,
+      regionUseStockOnly: r.override && r.regionUseStockOnly ? 1 : 0,
+      resultR: d.resultR, resultG: d.resultG, resultB: d.resultB,
+      faixa: d.faixa, method: d.method, ingredients: d.ingredients,
+    };
   }
 
   function buildAbaDTO(aba: AbaState): AbaDTO {
@@ -990,16 +1064,14 @@
     };
   }
 
-  // ── rf-07/rf-09: auto save local (RN3/RN4/RN5) ──
-  /** Chamada explícita nos mutadores de CONTEÚDO — nunca em zoom/pan/view
-   *  (RN4/CA21) e nunca antes da hidratação terminar (RN5). Criar, renomear,
-   *  reordenar e excluir aba TAMBÉM chamam esta função (RN5/CA22); trocar de
-   *  aba nunca chama (switchTab só faz snapshot). */
+  // ── rf-07/rf-09: auto save local ──
+  /** Chamada explícita nos mutadores de CONTEÚDO — nunca em zoom/pan/view, e
+   *  nunca com uma abertura em andamento (rf-16 RN6b; quem chama depois de um
+   *  await confere a época). Vale também com a lista na tela: um cálculo
+   *  pedido no editor pode terminar depois do "← Projetos", e o resultado
+   *  dele é do projeto que ainda está no editor (achado 1 do guardrail). */
   function marcarAlteracao() {
-    if (!hidratado) {
-      alteradoDuranteHidratacao = true;
-      return;
-    }
+    if (abrindo) return;
     snapshotActiveIntoTabs();
     const payload: Rascunho = {
       v: 2,
@@ -1013,16 +1085,204 @@
     };
     alteracaoSeq++;
     agendarGravacao(payload);
-    // A escada de cota (RN8) só se resolve dentro do módulo depois do
-    // debounce de 1500 ms — relê um pouco depois para refletir na tela.
+    if (modo === 'lista') {
+      // A lista já leu o rascunho: grava agora e atualiza o card.
+      gravarPendente();
+      lerRascunhoInfo();
+    }
     setTimeout(() => { autoSaveStatus = estadoAutoSave(); }, 1600);
   }
 
-  // ── rf-07/rf-09: hidratar / aplicar plano carregado ──
+  // ── rf-16: lista, abertura e volta ──
+  function lerRascunhoInfo(): void {
+    const { rascunho, corrompido } = lerRascunho();
+    if (corrompido) toast(t('draftCorrupted'), 'error');
+    rascunhoInfo = rascunho ? { planId: rascunho.planId, nome: rascunho.name } : null;
+  }
+
+  async function carregarLista(): Promise<void> {
+    const ep = ++listaSeq;
+    listaCarregando = true;
+    listaErro = false;
+    lerRascunhoInfo();
+    try {
+      const lista = await listarPlanos();
+      if (ep !== listaSeq) return;
+      planos = lista;
+    } catch {
+      if (ep === listaSeq) listaErro = true;
+    } finally {
+      if (ep === listaSeq) listaCarregando = false;
+    }
+  }
+
+  function nomeDoRascunho(): string {
+    return rascunhoInfo?.nome.trim() || t('projectNoName');
+  }
+
+  /** RN5: a vaga única do rascunho seria sobrescrita pelo outro projeto. */
+  function confirmarDescarteDoRascunho(nomeAlvo: string): boolean {
+    if (!rascunhoInfo) return true;
+    if (!window.confirm(t('discardOtherDraftConfirm', { a: nomeDoRascunho(), b: nomeAlvo }))) return false;
+    apagarRascunho();
+    rascunhoInfo = null;
+    return true;
+  }
+
+  function entrarNoEditor(comRascunho: boolean): void {
+    saveState = 'idle';
+    saveErrorKey = null;
+    validationError = null;
+    reportErrorKey = null;
+    exportMenuOpen = false;
+    renomeandoTitulo = false;
+    draftBannerVisible = comRascunho;
+    alteracaoSeqSalva = alteracaoSeq;
+    autoSaveStatus = estadoAutoSave();
+    // A3 do plano E1: o estoque local precisa do id de fabricante atual para
+    // a interseção por id no servidor.
+    relinkStockManufacturers(manufacturers);
+    modo = 'editor';
+  }
+
+  function voltarParaLista(): void {
+    gravarPendente();
+    exportMenuOpen = false;
+    modo = 'lista';
+  }
+
+  function novoProjeto(): void {
+    if (!confirmarDescarteDoRascunho(t('newProjectBtn'))) return;
+    ++aberturaSeq;
+    resetToEmpty();
+    entrarNoEditor(false);
+  }
+
+  async function abrirProjeto(p: ResumoPlanoDTO): Promise<void> {
+    if (rascunhoInfo && rascunhoInfo.planId === p.id) {
+      await abrirRascunho();
+      return;
+    }
+    if (!confirmarDescarteDoRascunho(p.name)) return;
+    const ep = ++aberturaSeq;
+    abrindo = true;
+    try {
+      const plano = await carregarPlano(p.id);
+      if (ep !== aberturaSeq) return;
+      await applyLoadedPlan(plano, true, 0, ep);
+      if (ep !== aberturaSeq) return;
+      entrarNoEditor(false);
+    } catch (e) {
+      if (ep !== aberturaSeq) return;
+      const naoExiste = e instanceof PlanoError && e.code === 'nao-encontrado';
+      toast(t(naoExiste ? 'planNotFound' : 'planSaveError'), 'error');
+      if (naoExiste) void carregarLista();
+    } finally {
+      if (ep === aberturaSeq) abrindo = false;
+    }
+  }
+
+  async function abrirRascunho(): Promise<void> {
+    const { rascunho, corrompido, truncado } = lerRascunho();
+    if (corrompido) toast(t('draftCorrupted'), 'error');
+    if (!rascunho) {
+      await carregarLista();
+      return;
+    }
+    const ep = ++aberturaSeq;
+    abrindo = true;
+    try {
+      // RN4: rascunho de projeto que não está mais na lista vira projeto novo.
+      let planIdEfetivo = rascunho.planId;
+      if (planIdEfetivo != null && !listaErro && !planos.some(pl => pl.id === planIdEfetivo)) {
+        planIdEfetivo = null;
+      }
+      // RN8 do rf-07 cortou a foto para caber na cota: busca do servidor.
+      const semFoto = rascunho.tabs.some(aba => !aba.imageData);
+      let abasServidor: AbaDTO[] | null = null;
+      if (semFoto && planIdEfetivo != null) {
+        try {
+          abasServidor = (await carregarPlano(planIdEfetivo)).tabs;
+        } catch {
+          /* sem o plano do servidor não há foto de resgate — avisa abaixo. */
+        }
+        if (ep !== aberturaSeq) return;
+      }
+      if (abasServidor === null && rascunho.tabs.some(aba => !aba.imageData && aba.regions.length > 0)) {
+        toast(t('draftNoPhoto'), 'error');
+      }
+      const abaServidorPorIdentidade = (rt: AbaRascunho): AbaDTO | undefined => {
+        if (!abasServidor) return undefined;
+        if (rt.id != null) {
+          const porId = abasServidor.find(a => a.id === rt.id);
+          if (porId) return porId;
+        }
+        return abasServidor.find(a => a.name === rt.name);
+      };
+      // RN27: o rascunho traz ajuste e mistura — a remontagem copia tudo,
+      // inclusive o `foraDoUniverso`, que antes se perdia.
+      const tabsDTO: AbaDTO[] = rascunho.tabs.map((rt) => ({
+        id: undefined,
+        name: rt.name,
+        imageData: rt.imageData || abaServidorPorIdentidade(rt)?.imageData || '',
+        regions: rt.regions.map((rr): RegiaoDTO => ({
+          x: rr.x, y: rr.y, r: rr.r, g: rr.g, b: rr.b, hex: rr.hex,
+          regionName: rr.regionName, note: rr.note,
+          paintId: rr.paintId, paintBrand: rr.paintBrand,
+          paintName: rr.paintName, paintCode: rr.paintCode,
+          deltaE: rr.deltaE, painted: rr.painted ? 1 : 0,
+          foraDoUniverso: rr.foraDoUniverso ? 1 : 0,
+          regionOverride: rr.regionOverride ? 1 : 0,
+          regionManufacturerId: rr.regionManufacturerId ?? null,
+          regionUseStockOnly: rr.regionUseStockOnly ? 1 : 0,
+          resultR: rr.resultR ?? null, resultG: rr.resultG ?? null, resultB: rr.resultB ?? null,
+          faixa: rr.faixa ?? '', method: rr.method ?? '', ingredients: rr.ingredients ?? [],
+        })),
+      }));
+      await applyLoadedPlan(
+        {
+          id: planIdEfetivo ?? undefined,
+          name: rascunho.name,
+          selectedManufacturerId: rascunho.selectedManufacturerId,
+          useStockOnly: rascunho.useStockOnly ? 1 : 0,
+          tabs: tabsDTO,
+        },
+        false,
+        rascunho.abaAtiva,
+        ep,
+      );
+      if (ep !== aberturaSeq) return;
+      entrarNoEditor(true);
+      if (truncado) toast(t('errRegionsMax'), 'error');
+    } finally {
+      if (ep === aberturaSeq) abrindo = false;
+    }
+  }
+
+  async function excluirProjeto(p: ResumoPlanoDTO): Promise<void> {
+    if (!window.confirm(t('deleteProjectConfirm', { name: p.name }))) return;
+    try {
+      await excluirPlano(p.id);
+    } catch {
+      toast(t('deleteProjectError'), 'error');
+      return;
+    }
+    if (rascunhoInfo?.planId === p.id) {
+      apagarRascunho();
+      rascunhoInfo = null;
+    }
+    if (planId === p.id) {
+      ++aberturaSeq;
+      resetToEmpty();
+    }
+    planos = planos.filter(x => x.id !== p.id);
+  }
+
+  // ── rf-07/rf-09: aplicar plano carregado ──
   function resetToEmpty() {
     planId = null;
     planName = '';
-    manufacturerId = null;
+    manufacturerId = manufacturers[0]?.id ?? null;
     useStockOnly = false;
     saidaAutorizada = null;
     ownedPaints = new Set();
@@ -1031,80 +1291,91 @@
     loadTabIntoWorkingState(0);
   }
 
-  // rf-11 + mudança macro de 2026-09-07: universo é do plano (variáveis de
-  // topo), nunca da aba — mesma leitura de `universoAtual()`, aplicada aqui a
-  // uma aba que ainda não está em `tabs` (hidratação, antes do `tabs =
-  // novasAbas` em `applyLoadedPlan` — `computeRegion` não a alcançaria).
-  async function computeRegionInAba(aba: AbaState, id: number): Promise<void> {
+  /** Cálculo de uma região de uma aba que ainda não está em `tabs`
+   *  (abertura), com o contexto do plano que está chegando. */
+  async function computeRegionInAba(aba: AbaState, id: number, ctx: CtxUniverso, ep: number): Promise<void> {
     const alvo = () => aba.regions.find(r => r.id === id) ?? null;
     const inicio = alvo();
     if (!inicio) return;
     inicio.computing = true;
     try {
-      const resp = await suggestRecipeForColor(inicio.r, inicio.g, inicio.b, universoAtual());
+      const resp = await suggestRecipeForColor(inicio.r, inicio.g, inicio.b, universoDaRegiao(inicio, ctx));
+      if (ep !== aberturaSeq) return;
       const agora = alvo();
-      if (agora) agora.result = ehUniversoVazio(resp) ? null : resp;
+      if (!agora) return;
+      if (!resp) {
+        agora.result = null;
+      } else if (ehUniversoVazio(resp)) {
+        agora.vazioMotivo = resp.motivo;
+        agora.result = null;
+      } else {
+        agora.vazioMotivo = null;
+        agora.result = resp;
+        agora.salvo = salvoDoResultado(resp);
+      }
     } catch (e) {
       console.error('Erro ao calcular região:', e);
-      const agora = alvo();
-      if (agora) agora.result = null;
     } finally {
       const agora = alvo();
       if (agora) agora.computing = false;
     }
   }
 
-  async function recomputeAba(aba: AbaState): Promise<void> {
-    if (manufacturerId == null) return;
-    await Promise.all(aba.regions.map(r => computeRegionInAba(aba, r.id)));
-  }
+  /** Aplica um `PlanoDTO` (do servidor ou do rascunho). rf-16 RN6b: tudo o
+   *  que é do topo (id, nome, universo, abas) só é gravado no FIM, e só se a
+   *  época ainda for a desta abertura. */
+  async function applyLoadedPlan(plano: PlanoDTO, recalcular: boolean, abaAtivaIndex: number, ep: number): Promise<void> {
+    // RN13: fabricante efetivo fixado antes de qualquer recálculo.
+    const salvoExiste = plano.selectedManufacturerId != null && manufacturers.some(m => m.id === plano.selectedManufacturerId);
+    const ctx: CtxUniverso = {
+      manufacturerId: salvoExiste ? (plano.selectedManufacturerId as number) : (manufacturers[0]?.id ?? null),
+      useStockOnly: plano.useStockOnly === 1,
+      saida: null,
+    };
 
-  /** Aplica um `PlanoDTO` (do servidor ou remontado do rascunho) ao estado
-   *  da tela — uma `AbaState` por `AbaDTO`. Nunca chama `marcarAlteracao` —
-   *  é hidratação, não input. `abaAtivaIndex` (rascunho) escolhe qual aba
-   *  fica em foco; planos vindos do servidor sempre abrem na primeira. */
-  async function applyLoadedPlan(plano: PlanoDTO, recalcular = true, abaAtivaIndex = 0): Promise<void> {
-    planId = plano.id ?? null;
-    planName = plano.name;
-    // Mudança macro 07/09/2026: fabricante/estoque são do plano — setar ANTES
-    // do recálculo abaixo, que lê as variáveis de topo (recomputeAba).
-    manufacturerId = plano.selectedManufacturerId ?? null;
-    useStockOnly = plano.useStockOnly === 1;
-    // rf-11 "Não faz": a resposta do diálogo não persiste — nunca vem do plano.
-    saidaAutorizada = null;
-    // rf-09/"Não faz": o checklist "tenho" não sobrevive ao recarregar o plano.
-    ownedPaints = new Set();
-
-    const tabsDTO = plano.tabs.length > 0 ? plano.tabs : [
-      { name: '', imageData: '', regions: [] },
-    ];
+    const tabsDTO = plano.tabs.length > 0 ? plano.tabs : [{ name: '', imageData: '', regions: [] }];
 
     const novasAbas: AbaState[] = [];
     for (const abaDTO of tabsDTO) {
       let nextIdLocal = 1;
-      const abaRegions: PlannerRegion[] = abaDTO.regions.map((rd): PlannerRegion => ({
-        id: nextIdLocal++,
-        x: rd.x, y: rd.y, r: rd.r, g: rd.g, b: rd.b, hex: rd.hex,
-        painted: rd.painted === 1,
-        result: null,
-        computing: false,
-        salvo: {
+      const abaRegions: PlannerRegion[] = abaDTO.regions.map((rd): PlannerRegion => {
+        const salvo: RegiaoSalva = {
           paintId: rd.paintId ?? null,
           paintBrand: rd.paintBrand,
           paintName: rd.paintName,
           paintCode: rd.paintCode,
           deltaE: rd.deltaE,
           foraDoUniverso: rd.foraDoUniverso === 1,
-        },
-      }));
-      const image = abaDTO.imageData ? await loadImageBitmap(abaDTO.imageData) : null;
+          ingredients: rd.ingredients ?? [],
+          resultR: rd.resultR ?? null,
+          resultG: rd.resultG ?? null,
+          resultB: rd.resultB ?? null,
+          faixa: rd.faixa ?? '',
+          method: rd.method ?? '',
+        };
+        return {
+          id: nextIdLocal++,
+          x: rd.x, y: rd.y, r: rd.r, g: rd.g, b: rd.b, hex: rd.hex,
+          painted: rd.painted === 1,
+          result: receitaDoSalvo(salvo, rd.r, rd.g, rd.b),
+          computing: false,
+          salvo,
+          override: rd.regionOverride === 1,
+          regionManufacturerId: rd.regionManufacturerId ?? null,
+          regionUseStockOnly: rd.regionUseStockOnly === 1,
+          calcSeq: 0,
+          vazioMotivo: null,
+        };
+      });
+      const img = abaDTO.imageData ? await loadImageBitmap(abaDTO.imageData) : null;
+      if (ep !== aberturaSeq) return;
       novasAbas.push({
         uid: abaUidSeq++,
         serverId: abaDTO.id,
         name: abaDTO.name,
         imageDataUrl: abaDTO.imageData || '',
         hasImage: !!abaDTO.imageData,
-        image,
+        image: img,
         regions: abaRegions,
         nextId: nextIdLocal,
         selectedId: null,
@@ -1112,108 +1383,24 @@
       });
     }
 
-    // CA8: restaurar rascunho não consulta o servidor — a tinta já veio no
-    // próprio rascunho. Só o plano vindo do banco recalcula (por aba).
+    // RN27/RN28: só região sem mistura salva recalcula; rascunho nunca
+    // consulta o servidor (CA8 do rf-07).
     if (recalcular) {
-      await Promise.all(novasAbas.map(recomputeAba));
+      await Promise.all(
+        novasAbas.flatMap(aba => aba.regions.filter(r => !r.salvo?.faixa).map(r => computeRegionInAba(aba, r.id, ctx, ep))),
+      );
     }
+    if (ep !== aberturaSeq) return;
 
+    planId = plano.id ?? null;
+    planName = plano.name;
+    manufacturerId = ctx.manufacturerId;
+    useStockOnly = ctx.useStockOnly;
+    saidaAutorizada = null;
+    ownedPaints = new Set();
     tabs = novasAbas;
     activeTabIndex = Math.min(Math.max(abaAtivaIndex, 0), tabs.length - 1);
     loadTabIntoWorkingState(activeTabIndex);
-  }
-
-  /** RN5 — entrada em T2: rascunho vence; senão plano ativo; senão vazia. */
-  async function hidratarT2() {
-    try {
-      const { rascunho, corrompido, truncado } = lerRascunho();
-      if (corrompido) {
-        toast(t('draftCorrupted'), 'error');
-      }
-      if (rascunho) {
-        // RN8 cortou a foto de TODAS as abas para caber na cota: a imagem
-        // continua no banco, então busca de lá (por posição) em vez de
-        // reabrir o plano sem foto — sem ela o Salvar seguinte apagaria a
-        // foto das abas no servidor.
-        const semFoto = rascunho.tabs.some(aba => !aba.imageData);
-        let abasServidor: AbaDTO[] | null = null;
-        if (semFoto && rascunho.planId != null) {
-          try {
-            const salvo = await carregarPlano(rascunho.planId);
-            abasServidor = salvo.tabs;
-          } catch {
-            /* sem o plano do servidor não há foto de resgate — avisa abaixo. */
-          }
-        }
-        // D-005: região só nasce de um clique sobre a foto, então aba COM
-        // região e SEM `imageData` é foto cortada pela RN8, não aba ainda
-        // vazia. O aviso da CA21 morreu junto com a sessão anterior; sem este,
-        // a foto some sem explicação nenhuma. Cobre também o plano nunca
-        // salvo, que não tem `planId` para buscar a foto no servidor.
-        if (
-          abasServidor === null &&
-          rascunho.tabs.some(aba => !aba.imageData && aba.regions.length > 0)
-        ) {
-          toast(t('draftNoPhoto'), 'error');
-        }
-        // achado 2 do guardrail rf-09: casa a aba do rascunho com a do
-        // servidor por identidade estável — o `id` da aba quando existir, e
-        // o nome como segundo critério — nunca pela posição na tira, que
-        // pode ter sido reordenada depois do último Salvar.
-        const abaServidorPorIdentidade = (rt: AbaRascunho): AbaDTO | undefined => {
-          if (!abasServidor) return undefined;
-          if (rt.id != null) {
-            const porId = abasServidor.find(a => a.id === rt.id);
-            if (porId) return porId;
-          }
-          return abasServidor.find(a => a.name === rt.name);
-        };
-        const tabsDTO: AbaDTO[] = rascunho.tabs.map((rt) => ({
-          id: undefined,
-          name: rt.name,
-          imageData: rt.imageData || abaServidorPorIdentidade(rt)?.imageData || '',
-          regions: rt.regions.map((rr): RegiaoDTO => ({
-            x: rr.x, y: rr.y, r: rr.r, g: rr.g, b: rr.b, hex: rr.hex,
-            regionName: rr.regionName, note: rr.note,
-            paintId: rr.paintId, paintBrand: rr.paintBrand,
-            paintName: rr.paintName, paintCode: rr.paintCode,
-            deltaE: rr.deltaE, painted: rr.painted ? 1 : 0,
-          })),
-        }));
-        await applyLoadedPlan(
-          {
-            id: rascunho.planId ?? undefined,
-            name: rascunho.name,
-            selectedManufacturerId: rascunho.selectedManufacturerId,
-            useStockOnly: rascunho.useStockOnly ? 1 : 0,
-            tabs: tabsDTO,
-          },
-          false,
-          rascunho.abaAtiva,
-        );
-        draftBannerVisible = true;
-        // CAN5/CAN8: reaproveita a mensagem de teto de regiões — mesmo limite,
-        // mesmo aviso.
-        if (truncado) toast(t('errRegionsMax'), 'error');
-        return;
-      }
-      const idAtivo = lerPlanoAtivo();
-      if (idAtivo != null) {
-        try {
-          const plano = await carregarPlano(idAtivo);
-          // O usuário mexeu na tela enquanto o GET vinha: o trabalho dele
-          // vence o plano do servidor, e vira rascunho na próxima marcação.
-          if (!alteradoDuranteHidratacao) await applyLoadedPlan(plano);
-        } catch (e) {
-          limparPlanoAtivo();
-          if (!alteradoDuranteHidratacao) resetToEmpty();
-          const key = e instanceof PlanoError && e.code === 'nao-encontrado' ? 'planNotFound' : 'planSaveError';
-          toast(t(key), 'error');
-        }
-      }
-    } finally {
-      hidratado = true;
-    }
   }
 
   // ── rf-07: descartar rascunho (RN6) ──
@@ -1224,18 +1411,17 @@
 
   async function discardDraftAndReload() {
     if (planId != null) {
-      // Nunca apaga antes de ter o plano em mãos — falhando, o rascunho
-      // permanece intacto.
+      const ep = ++aberturaSeq;
+      abrindo = true;
       try {
         const plano = await carregarPlano(planId);
-        await applyLoadedPlan(plano);
+        await applyLoadedPlan(plano, true, 0, ep);
+        if (ep !== aberturaSeq) return;
         apagarRascunho();
       } catch (e) {
+        if (ep !== aberturaSeq) return;
         if (e instanceof PlanoError && e.code === 'nao-encontrado') {
-          // Plano apagado no servidor: manter o rascunho deixaria o botão
-          // Descartar travado para sempre. Volta à tela vazia.
           apagarRascunho();
-          limparPlanoAtivo();
           resetToEmpty();
           toast(t('planNotFound'), 'error');
         } else {
@@ -1243,25 +1429,24 @@
           saveErrorKey = 'planSaveError';
           return;
         }
+      } finally {
+        if (ep === aberturaSeq) abrindo = false;
       }
     } else {
       apagarRascunho();
+      ++aberturaSeq;
       resetToEmpty();
     }
     draftBannerVisible = false;
-    // Sem isto, `rascunhoPendente` fica verdadeiro para sempre depois de um
-    // descarte e a ação de exportar trava até o próximo Salvar.
     alteracaoSeqSalva = alteracaoSeq;
   }
 
-  // ── rf-07: Salvar (CA1-CA23, RN10, CAN1-3) ──
+  // ── rf-07: Salvar ──
   async function handleSave() {
-    if (saveState === 'saving') return; // RN10/CAN3: um Salvar por vez
+    if (saveState === 'saving' || algumCalculando) return;
     const dto = buildPlanoDTO();
     const erro = validarPlano(dto);
     if (erro) {
-      // validarPlano devolve a chave i18n e, para erro de aba (RN15), o nome
-      // dela — validationErrorText compõe a mensagem final.
       validationError = erro;
       return;
     }
@@ -1269,16 +1454,12 @@
     saveErrorKey = null;
     saveState = 'saving';
     const seqNoEnvio = alteracaoSeq;
+    const ep = aberturaSeq;
     try {
       const { plano, suspeitaD003 } = await salvarPlano(dto);
-      // O id vem para o estado mesmo na suspeita de D-003: o servidor já
-      // commitou, e sem adotá-lo cada nova tentativa criaria outro plano.
-      if (plano.id != null) {
-        planId = plano.id;
-        gravarPlanoAtivo(plano.id);
-      }
+      if (ep !== aberturaSeq) return;
+      if (plano.id != null) planId = plano.id;
       if (suspeitaD003) {
-        // RN1/RN7/CA16: não apaga o rascunho.
         saveState = 'error';
         saveErrorKey = 'planSaveError';
         return;
@@ -1288,29 +1469,30 @@
         apagarRascunho();
         alteracaoSeqSalva = seqNoEnvio;
       } else {
-        // O usuário editou durante o POST: apagar o rascunho perderia essa
-        // edição, que não entrou no plano enviado. Regrava com o estado atual.
         marcarAlteracao();
       }
       draftBannerVisible = false;
       const agora = new Date();
       savedAtLabel = `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`;
       saveState = 'saved';
+      saveFlash = true;
+      if (saveFlashTimer) clearTimeout(saveFlashTimer);
+      saveFlashTimer = setTimeout(() => { saveFlash = false; }, 3000);
     } catch (e) {
+      if (ep !== aberturaSeq) return;
       saveState = 'error';
       saveErrorKey = e instanceof PlanoError && e.code === 'nao-encontrado' ? 'planNotFound' : 'planSaveError';
     }
   }
 
-  // ── rf-08: exportar relatório (CA16-CA18, CAN1, CAN8) ──
-  async function handleExport() {
-    if (reportGenerating) return; // CAN8: um download por vez
+  // ── rf-08: exportar relatório ──
+  async function handleExport(formato: 'pdf' | 'png') {
+    exportMenuOpen = false;
+    if (reportGenerating) return;
     if (planId == null || rascunhoPendente) {
       reportErrorKey = 'exportSaveFirst';
       return;
     }
-    // CAN1: o id só pode vir do estado interno da tela, nunca de entrada do
-    // usuário — checagem defensiva antes de montar a URL em plans.ts.
     if (!Number.isInteger(planId) || planId <= 0) {
       reportErrorKey = 'exportInvalid';
       return;
@@ -1318,8 +1500,7 @@
     reportErrorKey = null;
     reportGenerating = true;
     try {
-      const { blob, filename } = await baixarRelatorio(planId, reportFormat);
-      // RN12: fetch + blob + âncora temporária — nunca navegação direta.
+      const { blob, filename } = await baixarRelatorio(planId, formato);
       const url = URL.createObjectURL(blob);
       try {
         const a = document.createElement('a');
@@ -1343,30 +1524,95 @@
       reportGenerating = false;
     }
   }
+
+  // ── rf-16 RN7: renomear o projeto pelo título ──
+  function iniciarRenomearTitulo(): void {
+    tituloRascunho = planName;
+    tituloCancelado = false;
+    renomeandoTitulo = true;
+  }
+
+  function confirmarTitulo(): void {
+    if (!renomeandoTitulo) return;
+    renomeandoTitulo = false;
+    if (tituloCancelado) return;
+    if (tituloRascunho !== planName) {
+      planName = tituloRascunho;
+      marcarAlteracao();
+    }
+  }
+
+  function onTituloKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      confirmarTitulo();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      tituloCancelado = true;
+      renomeandoTitulo = false;
+    }
+  }
 </script>
 
+{#if modo === 'lista'}
+  <ProjetosLista
+    {planos}
+    carregando={listaCarregando}
+    erro={listaErro}
+    {abrindo}
+    rascunho={rascunhoInfo}
+    onabrir={(p) => void abrirProjeto(p)}
+    onabrirRascunho={() => void abrirRascunho()}
+    onnovo={novoProjeto}
+    onexcluir={(p) => void excluirProjeto(p)}
+    onrecarregar={() => void carregarLista()}
+  />
+{:else}
 <div style="display: flex; flex-direction: column; height: 100%; min-height: 0;">
-  <Header kicker={t('navPlano')} title={plannerTitle}>
+  <Header kicker={t('projectKicker')} back={{ label: t('backToProjects'), onclick: voltarParaLista }}>
+    {#snippet titleSlot()}
+      {#if renomeandoTitulo}
+        <input
+          bind:this={tituloInputEl}
+          bind:value={tituloRascunho}
+          aria-label={t('projectNameLabel')}
+          maxlength="200"
+          placeholder={planNamePlaceholder}
+          onkeydown={onTituloKeydown}
+          onblur={confirmarTitulo}
+          style="min-width: 220px; height: 36px; padding: 0 10px; border: 2px solid var(--color-accent); border-radius: 8px; background: var(--color-bg); color: var(--color-text); font-family: inherit; font-size: 17px;"
+        />
+      {:else}
+        <span style="display: inline-flex; align-items: center; gap: 6px; min-width: 0;">
+          <span
+            style="font-size: clamp(16px, 1.8cqi, 21px); font-weight: 500; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: {planName.trim() ? 'var(--color-text)' : 'var(--color-neutral-500)'};"
+          >{planName.trim() || planNamePlaceholder}</span>
+          <button
+            class="t2-icon-btn"
+            aria-label={t('renameProjectBtn')}
+            title={t('renameProjectBtn')}
+            onclick={iniciarRenomearTitulo}
+            style="width: 44px; height: 44px; flex-shrink: 0;"
+          ><i class="ph ph-pencil-simple" style="font-size: 17px;"></i></button>
+        </span>
+      {/if}
+    {/snippet}
     {#snippet actions()}
-      <span style="display: inline-flex; align-items: center; gap: 10px; height: 48px; padding: 0 16px; border: 1px solid var(--color-neutral-800); border-radius: 8px; font-size: 15px; color: var(--color-neutral-400);">
-        <i class="ph ph-pencil-simple" style="font-size: 18px; color: var(--color-accent-400);"></i>{t('pencilTool')}
-      </span>
       <button
         class="t2-newphoto-btn"
-        style="display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 18px; border: 1px solid var(--color-accent-700); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;"
+        style="display: inline-flex; align-items: center; gap: 10px; min-height: 52px; padding: 4px 18px; border: 1px solid var(--color-accent-700); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer; text-align: left;"
         onclick={() => fileInputEl?.click()}
       >
-        <i class="ph ph-camera" style="font-size: 19px;"></i>{t('newPhoto')}
+        <i class="ph ph-camera" style="font-size: 19px;"></i>
+        <span style="display: flex; flex-direction: column; line-height: 1.2;">
+          <span>{t('newPhoto')}</span>
+          <span style="font-size: 11.5px; font-weight: 400; color: var(--color-neutral-400);">{t('uploadHint', { mb: tetoMb })}</span>
+        </span>
       </button>
-      <input type="file" accept="image/*" bind:this={fileInputEl} onchange={onFileInput} style="display: none;" />
+      <input type="file" accept={TIPOS_IMAGEM_ACEITOS.join(',')} bind:this={fileInputEl} onchange={onFileInput} style="display: none;" />
     {/snippet}
   </Header>
 
-  <!-- rf-09 (revisão 2026-09-08, ajuste de posição): tira de abas — uma por
-       figura, só seleção. Mover/excluir NÃO ficam mais por aba (eram 4
-       botões × N abas, duplicando controle a cada figura nova); viram um
-       controle único, na MESMA linha da tira, separado por régua vertical,
-       agindo sobre a aba ATIVA. -->
   <div
     style="flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 8px 20px; border-bottom: 1px solid var(--color-line);"
   >
@@ -1377,10 +1623,6 @@
     >
     {#each tabs as aba, i (aba.uid)}
       {#if renamingTabIndex === i}
-        <!-- achado 4 do guardrail rf-09/CA28: o `tabpanel` referencia
-             `t2-tab-btn-{i}` por `aria-labelledby`; enquanto o botão vira
-             o campo de rename esse id some do DOM. Este span invisível
-             mantém a referência válida durante a edição. -->
         <span id={`t2-tab-btn-${i}`} style="position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap;">{displayTabName(aba, i)}</span>
         <label for={`t2-tab-rename-${aba.uid}`} style="position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap;">{t('renameTabLabel')}</label>
         <input
@@ -1419,7 +1661,6 @@
       ><i class="ph ph-plus" style="font-size: 18px;"></i></button>
     </div>
 
-    <!-- separador entre figuras e controle único da aba ativa -->
     <div aria-hidden="true" style="flex-shrink: 0; width: 1px; align-self: stretch; margin: 6px 0; background: var(--color-line);"></div>
 
     <div style="flex-shrink: 0; display: flex; align-items: center; gap: 6px;">
@@ -1458,8 +1699,6 @@
         style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: repeating-conic-gradient(var(--color-panel) 0% 25%, var(--color-bg) 0% 50%) 0 0 / 40px 40px; cursor: crosshair;"
       >
         {#if hasImage}
-          <!-- O canvas ocupa a caixa inteira; o enquadramento da foto vive na
-               transformação, não no tamanho do elemento (D-002a). -->
           <canvas
             bind:this={canvasEl}
             style="width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair;"
@@ -1473,49 +1712,91 @@
             <i class="ph ph-image" style="font-size: 44px; color: var(--color-neutral-800);"></i>
             <span style="font-size: 15px; color: var(--color-neutral-500);">{t('t2EmptyTitle')}</span>
             <span style="font-size: 13.5px; color: var(--color-neutral-600); max-width: 40ch;">{t('t2EmptyHint')}</span>
+            <span style="font-size: 13px; color: var(--color-neutral-400);">{t('uploadHint', { mb: tetoMb })}</span>
           </div>
         {/if}
       </div>
 
-      {#if hasImage}
-        <!-- rf-06: zoom in/out. A pinça já existia; no desktop não havia como
-             aproximar. Roda do mouse faz o mesmo, ancorada no cursor. -->
+      <!-- rf-16 RN8: barra única sobre a foto — zoom (rf-06) e, depois do
+           separador, Salvar e Exportar. Aparece sempre; sem foto o zoom fica
+           desabilitado. -->
+      <div
+        style="position: absolute; right: 20px; top: 20px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;"
+      >
         <div
-          style="position: absolute; right: 20px; top: 20px; display: flex; align-items: center; gap: 6px; padding: 6px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: rgba(22,24,38,0.92); backdrop-filter: blur(8px);"
+          style="display: flex; align-items: center; gap: 6px; padding: 6px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: rgba(22,24,38,0.92); backdrop-filter: blur(8px);"
         >
-          <button
-            class="t2-zoom-btn"
-            aria-label={t('zoomOut')}
-            title={t('zoomOut')}
-            onclick={() => zoomBy(1 / 1.25)}
-            style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-300); cursor: pointer;"
-          >
+          <button class="t2-icon-btn t2-zoom-btn" aria-label={t('zoomOut')} title={t('zoomOut')} disabled={!hasImage} onclick={() => zoomBy(1 / 1.25)}>
             <i class="ph ph-minus" style="font-size: 18px;"></i>
           </button>
           <span
             aria-live="polite"
             style="min-width: 58px; text-align: center; font-size: 13px; color: var(--color-neutral-400); font-variant-numeric: tabular-nums;"
-          >{zoomPercent(view)}%</span>
-          <button
-            class="t2-zoom-btn"
-            aria-label={t('zoomIn')}
-            title={t('zoomIn')}
-            onclick={() => zoomBy(1.25)}
-            style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-300); cursor: pointer;"
-          >
+          >{hasImage ? `${zoomPercent(view)}%` : '—'}</span>
+          <button class="t2-icon-btn t2-zoom-btn" aria-label={t('zoomIn')} title={t('zoomIn')} disabled={!hasImage} onclick={() => zoomBy(1.25)}>
             <i class="ph ph-plus" style="font-size: 18px;"></i>
           </button>
-          <button
-            class="t2-zoom-btn"
-            aria-label={t('zoomFit')}
-            title={t('zoomFit')}
-            onclick={fitToBox}
-            style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-300); cursor: pointer;"
-          >
+          <button class="t2-icon-btn t2-zoom-btn" aria-label={t('zoomFit')} title={t('zoomFit')} disabled={!hasImage} onclick={fitToBox}>
             <i class="ph ph-corners-out" style="font-size: 18px;"></i>
           </button>
+
+          <div aria-hidden="true" style="width: 1px; align-self: stretch; margin: 4px 2px; background: var(--color-neutral-800);"></div>
+
+          <button
+            class="t2-icon-btn t2-save-plan-btn"
+            aria-label={algumCalculando ? t('saveWaitCalc') : t('savePlanBtn')}
+            title={algumCalculando ? t('saveWaitCalc') : t('savePlanBtn')}
+            disabled={saveState === 'saving' || algumCalculando}
+            onclick={handleSave}
+          >
+            {#if saveState === 'saving'}
+              <Spinner size={18} label={t('planSaving')} />
+            {:else if saveFlash}
+              <i class="ph-bold ph-check" style="font-size: 18px; color: var(--color-accent-400);"></i>
+            {:else}
+              <i class="ph ph-floppy-disk" style="font-size: 18px;"></i>
+            {/if}
+          </button>
+
+          <div style="position: relative;">
+            <button
+              class="t2-icon-btn t2-export-btn"
+              aria-label={exportDisabled && !reportGenerating ? t('exportSaveFirst') : t('exportReportBtn')}
+              title={exportDisabled && !reportGenerating ? t('exportSaveFirst') : t('exportReportBtn')}
+              aria-haspopup="menu"
+              aria-expanded={exportMenuOpen}
+              disabled={exportDisabled}
+              onclick={() => (exportMenuOpen = !exportMenuOpen)}
+            >
+              {#if reportGenerating}
+                <Spinner size={18} label={t('exportGenerating')} />
+              {:else}
+                <i class="ph ph-file-arrow-down" style="font-size: 18px;"></i>
+              {/if}
+            </button>
+            {#if exportMenuOpen}
+              <div
+                role="menu"
+                style="position: absolute; right: 0; top: 52px; z-index: 5; display: flex; flex-direction: column; min-width: 140px; padding: 6px; border: 1px solid var(--color-neutral-800); border-radius: 10px; background: var(--color-panel);"
+              >
+                <button role="menuitem" class="t2-menu-item" onclick={() => void handleExport('pdf')}>{t('exportPdf')}</button>
+                <button role="menuitem" class="t2-menu-item" onclick={() => void handleExport('png')}>{t('exportPng')}</button>
+              </div>
+            {/if}
+          </div>
         </div>
-      {/if}
+
+        <div aria-live="polite" style="max-width: 320px; text-align: right; font-size: 12.5px; color: var(--color-neutral-300); text-shadow: 0 1px 2px rgba(0,0,0,0.6);">
+          {#if validationErrorText}
+            <span role="alert"><i class="ph ph-warning-circle" style="margin-right: 6px;"></i>{validationErrorText}</span>
+          {:else if saveState === 'saving'}{t('planSaving')}
+          {:else if saveState === 'saved'}{t('planSavedAt', { hora: savedAtLabel })}
+          {:else if saveState === 'error' && saveErrorKey}{t(saveErrorKey)}
+          {:else if reportGenerating}{t('exportGenerating')}
+          {:else if reportErrorKey}{t(reportErrorKey)}
+          {/if}
+        </div>
+      </div>
 
       <div style="position: absolute; left: 20px; bottom: 20px; display: flex; align-items: center; gap: 14px; padding: 12px 18px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: rgba(22,24,38,0.92); backdrop-filter: blur(8px);">
         <span style="font-size: 15px; color: var(--color-neutral-400);">{t('progress', { a: paintedCount, b: totalRegionsCount })}</span>
@@ -1527,19 +1808,39 @@
 
     <div style="min-height: 0; display: flex; flex-direction: column;">
       <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 20px;">
-        <p class="section-label" style="margin: 0 0 10px;">{t('paintWithMine')}</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-          {#each manufacturers as m (m.id)}
+        {#if draftBannerVisible}
+          <div role="status" aria-live="polite" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--color-accent-700); border-radius: 8px; background: var(--color-accent-panel); font-size: 13.5px; color: var(--color-text);">
+            <span>{t('draftRestored')}</span>
             <button
-              class="t2-mfr-pill"
-              style="height: 46px; padding: 0 14px; border: 1px solid {manufacturerId === m.id ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 8px; background: {manufacturerId === m.id ? 'var(--color-accent)' : 'var(--color-bg)'}; color: {manufacturerId === m.id ? 'var(--color-accent-100)' : 'var(--color-neutral-300)'}; font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer;"
-              onclick={() => onManufacturerChange(m.id)}
-            >{m.name}</button>
-          {/each}
-        </div>
+              class="t2-discard-btn"
+              style="min-width: 44px; min-height: 44px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-300); font-family: inherit; font-size: 13px; cursor: pointer;"
+              onclick={onDiscardDraftClick}
+            >{t('discardDraftBtn')}</button>
+          </div>
+        {/if}
 
-        <!-- rf-11: os dois interruptores são independentes. Ligados juntos,
-             o universo é a interseção: só o que eu tenho daquela marca. -->
+        {#if autoSaveStatus === 'sem-foto'}
+          <div aria-live="polite" style="margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; background: var(--color-raised); font-size: 13px; color: var(--color-neutral-400);">
+            <i class="ph ph-warning" style="margin-right: 6px;"></i>{t('draftNoPhoto')}
+          </div>
+        {:else if autoSaveStatus === 'desligado'}
+          <div role="alert" style="margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--color-neutral-800); background: var(--color-raised); font-size: 13px; color: var(--color-neutral-300);">
+            <i class="ph ph-warning-circle" style="margin-right: 6px;"></i>{t('autosaveOff')}
+          </div>
+        {/if}
+
+        <p class="section-label" style="margin: 0 0 10px;">{t('paintWithMine')}</p>
+        <Combobox
+          options={manufacturers}
+          value={manufacturerId}
+          onchange={(id) => { if (id != null) void onManufacturerChange(id); }}
+          placeholder={t('chooseSupplierPlaceholder')}
+          searchPlaceholder={t('phFindMaker')}
+          emptyText={t('noMakerFound')}
+          ariaLabel={t('paintWithMine')}
+          moreText={(n) => t('comboMore', { n })}
+        />
+
         <label
           style="display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 12px; font-size: 13.5px; color: var(--color-neutral-300); cursor: pointer;"
         >
@@ -1553,15 +1854,13 @@
           {t('onlyMyStock')}
         </label>
 
-        {#if universoVazioMotivo}
+        {#if avisoUniversoProjeto}
           <p role="alert" style="margin: 8px 0 0; font-size: 12.5px; color: var(--color-warning, #E4A11B);">
-            {universoVazioMotivo}
+            {avisoUniversoProjeto}
           </p>
         {/if}
 
         {#if regiaoNoDialogo !== null}
-          <!-- rf-11 RN4/RN5: uma vez por aba, com as duas saídas na ordem e o
-               melhor ΔE00 alcançável em cada uma. -->
           <div
             bind:this={dialogoElemento}
             role="dialog"
@@ -1603,71 +1902,24 @@
           </div>
         {/if}
 
-        {#if selectedRegion}
-          {@const region = selectedRegion}
-          {@const idx = regions.findIndex(x => x.id === region.id)}
-          <div style="position: relative; margin: 14px 0 22px; padding: 16px; border: 1px solid var(--color-accent-700); border-radius: 14px; background: var(--color-accent-panel);">
-            <button
-              class="t2-remove-btn"
-              aria-label={t('removeRegionBtn')}
-              style="position: absolute; top: 10px; right: 10px; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; background: transparent; color: var(--color-neutral-500); cursor: pointer;"
-              onclick={removeSelected}
-            >
-              <i class="ph ph-trash-simple" style="font-size: 16px;"></i>
-            </button>
-
-            {#if region.computing}
-              <div
-                style="display: flex; align-items: center; justify-content: center; gap: 12px; height: 80px; border-radius: 8px; background: var(--color-raised); font-size: 14px; color: var(--color-neutral-500);"
-              >
-                <Spinner size={22} label={t('calculating')} />{t('calculating')}
-              </div>
-            {:else if region.result}
-              {@const res = region.result}
-              {@const vc = verdictKeys(res.deltaE)}
-              <div style="display: flex; align-items: center; gap: 14px;">
-                <span style="display: flex; border-radius: 4px; overflow: hidden; border: 1px solid var(--color-neutral-800); flex-shrink: 0;">
-                  <span style="width: 30px; height: 44px; background: {region.hex};"></span>
-                  <span style="width: 30px; height: 44px; background: rgb({res.resultR}, {res.resultG}, {res.resultB});"></span>
-                </span>
-                <span style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0;">
-                  <span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent-400);">{regionName(idx)}</span>
-                  <span style="font-size: clamp(14px, 1.45cqi, 17px); font-weight: 500; color: var(--color-text); text-wrap: pretty;">{equivHeadline(res)}</span>
-                </span>
-                <span style="display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0;">
-                  <span class="font-mono" style="font-size: 26px; font-weight: 500; line-height: 1; color: {verdictColor(res.deltaE)};">{decimal(res.deltaE, 1)}</span>
-                  <span style="font-size: 11px; color: var(--color-neutral-500);">ΔE00</span>
-                </span>
-              </div>
-              <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 14px;">
-                {#each res.ingredients as ing (ing.paintId)}
-                  <div style="display: flex; align-items: center; gap: 12px;">
-                    <span style="width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--color-neutral-800); background: rgb({ing.r}, {ing.g}, {ing.b}); flex-shrink: 0;"></span>
-                    <span style="flex: 1; min-width: 0; font-size: 14px; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{ing.name}</span>
-                    <span style="font-size: 13px; color: var(--color-neutral-500); flex-shrink: 0;">{ing.code}</span>
-                    <span class="font-mono" style="width: 66px; text-align: right; font-size: 14px; font-weight: 500; color: var(--color-neutral-400); flex-shrink: 0;">{Math.round(ing.percentage)}%</span>
-                  </div>
-                {/each}
-              </div>
-              <p style="margin: 12px 0 0; font-size: 13.5px; color: var(--color-neutral-400); text-wrap: pretty;">{t(vc.c)}</p>
-            {:else}
-              <p style="font-size: 13.5px; color: var(--color-neutral-400);">{t('noSimilarPaint')}</p>
-            {/if}
-          </div>
-        {/if}
-
-        <p class="section-label" style="margin: 0 0 12px;">{t('regions')}</p>
+        <p class="section-label" style="margin: 22px 0 12px;">{t('regions')}</p>
         <div style="display: flex; flex-direction: column; gap: 10px;">
           {#each regions as r, i (r.id)}
+            {@const selecionada = selectedId === r.id}
             <div
               class="t2-region-card"
-              role="button"
-              tabindex="0"
-              style="padding: 14px; border: 1px solid {selectedId === r.id ? 'var(--color-accent-700)' : 'var(--color-neutral-800)'}; border-radius: 14px; background: {selectedId === r.id ? 'var(--color-accent-panel)' : 'var(--color-panel)'}; cursor: pointer;"
-              onclick={() => selectRegion(r.id)}
-              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectRegion(r.id); } }}
+              style="border: 1px solid {selecionada ? 'var(--color-accent-700)' : 'var(--color-neutral-800)'}; border-radius: 14px; background: {selecionada ? 'var(--color-accent-panel)' : 'var(--color-panel)'};"
             >
-              <div style="display: flex; align-items: center; gap: 12px;">
+              <div
+                id={`t2-region-card-${r.id}`}
+                class="t2-region-head"
+                role="button"
+                tabindex="0"
+                aria-expanded={selecionada}
+                onclick={() => selectRegion(r.id)}
+                onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); selectRegion(r.id); } }}
+                style="display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 14px; cursor: pointer;"
+              >
                 <span style="width: 34px; height: 34px; border-radius: 4px; border: 1px solid var(--color-neutral-800); background: {r.hex}; flex-shrink: 0;"></span>
                 <span style="display: flex; flex-direction: column; flex: 1; min-width: 0;">
                   <span style="font-size: 16px; font-weight: 500; color: var(--color-text);">{regionName(i)}</span>
@@ -1685,10 +1937,124 @@
                   aria-pressed={r.painted}
                   style="display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid {r.painted ? 'var(--color-accent-700)' : 'var(--color-neutral-800)'}; border-radius: 8px; background: transparent; color: {r.painted ? 'var(--color-accent-400)' : 'var(--color-neutral-400)'}; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; flex-shrink: 0;"
                   onclick={(e) => { e.stopPropagation(); togglePainted(r); }}
+                  onkeydown={(e) => e.stopPropagation()}
                 >
                   <i class="ph-bold ph-check" style="font-size: 14px;"></i>{r.painted ? t('painted') : t('toPaint')}
                 </button>
               </div>
+
+              {#if selecionada}
+                <!-- rf-16 RN17/RN18: o detalhe mora no próprio card. -->
+                <div style="padding: 0 14px 16px; display: flex; flex-direction: column; gap: 14px;">
+                  {#if r.computing}
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 12px; height: 64px; border-radius: 8px; background: var(--color-raised); font-size: 14px; color: var(--color-neutral-500);">
+                      <Spinner size={22} label={t('calculating')} />{t('calculating')}
+                    </div>
+                  {:else if r.result}
+                    {@const res = r.result}
+                    {@const vc = verdictKeys(res.deltaE)}
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                      <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="width: 34px; height: 34px; border-radius: 4px; border: 1px solid var(--color-neutral-800); background: {r.hex}; flex-shrink: 0;"></span>
+                        <span style="display: flex; flex-direction: column; min-width: 0;">
+                          <span style="font-size: 11.5px; color: var(--color-neutral-500);">{t('regionDetailPieceColor')}</span>
+                          <span class="font-mono" style="font-size: 12.5px; color: var(--color-text);">{hexDe(r.r, r.g, r.b)} · {r.r} {r.g} {r.b}</span>
+                        </span>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="width: 34px; height: 34px; border-radius: 4px; border: 1px solid var(--color-neutral-800); background: rgb({res.resultR}, {res.resultG}, {res.resultB}); flex-shrink: 0;"></span>
+                        <span style="display: flex; flex-direction: column; min-width: 0;">
+                          <span style="font-size: 11.5px; color: var(--color-neutral-500);">{t('regionDetailMixColor')}</span>
+                          <span class="font-mono" style="font-size: 12.5px; color: var(--color-text);">{hexDe(res.resultR, res.resultG, res.resultB)} · {res.resultR} {res.resultG} {res.resultB}</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;">
+                      <span class="font-mono" style="font-size: 26px; font-weight: 500; line-height: 1; color: {verdictColor(res.deltaE)};">{decimal(res.deltaE, 1)}</span>
+                      <span style="font-size: 11px; color: var(--color-neutral-500);">ΔE00</span>
+                      {#if seloDaFaixa(r)}
+                        {@const selo = seloDaFaixa(r)}
+                        <span style="font-size: 12.5px; font-weight: 600; color: {selo?.cor};">{selo?.texto}</span>
+                      {/if}
+                    </div>
+                    <p style="margin: 0; font-size: 13.5px; color: var(--color-neutral-300); text-wrap: pretty;">{t(vc.c)}</p>
+                    <p style="margin: 0; font-size: 12.5px; color: var(--color-neutral-500); text-wrap: pretty;">
+                      {#if res.method}{t('regionDetailMethod')}: {res.method} · {/if}{t('regionDetailDeltaHelp')}
+                    </p>
+
+                    <div>
+                      <p class="section-label" style="margin: 0 0 8px;">{t('regionDetailIngredients')}</p>
+                      <div style="display: flex; flex-direction: column; gap: 6px;">
+                        {#each [...res.ingredients].sort((a, b) => b.percentage - a.percentage) as ing, k (k)}
+                          <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--color-neutral-800); background: rgb({ing.r}, {ing.g}, {ing.b}); flex-shrink: 0;"></span>
+                            <span style="display: flex; flex-direction: column; flex: 1; min-width: 0;">
+                              <span style="font-size: 14px; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{ing.name}</span>
+                              <span style="font-size: 12px; color: var(--color-neutral-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{ing.code}{#if ing.code && ing.manufacturer} · {/if}{ing.manufacturer ?? ''}</span>
+                            </span>
+                            <span class="font-mono" style="width: 56px; text-align: right; font-size: 14px; font-weight: 500; color: var(--color-neutral-300); flex-shrink: 0;">{Math.round(ing.percentage)}%</span>
+                          </div>
+                        {/each}
+                      </div>
+                    </div>
+
+                    {#if res.tips && res.tips.length > 0}
+                      <div>
+                        <p class="section-label" style="margin: 0 0 6px;">{t('regionDetailTips')}</p>
+                        <ul style="margin: 0; padding-left: 18px; font-size: 13px; color: var(--color-neutral-400);">
+                          {#each res.tips as tip, k (k)}<li>{tip}</li>{/each}
+                        </ul>
+                      </div>
+                    {/if}
+
+                    {#if r.override && res.faixa === 'nao-encontrei'}
+                      <p role="status" style="margin: 0; font-size: 12.5px; color: var(--color-warning, #E4A11B);">{t('regionOverrideNoMatch')}</p>
+                    {/if}
+                  {:else}
+                    <p style="margin: 0; font-size: 13.5px; color: var(--color-neutral-400);">{r.vazioMotivo ?? t('noSimilarPaint')}</p>
+                  {/if}
+
+                  <p style="margin: 0; font-size: 12.5px; color: var(--color-neutral-400);">
+                    {origemDaRegiao(r)}{#if r.result?.foraDoUniverso} · {t('foraDoUniversoLabel')}{/if}
+                  </p>
+
+                  <!-- rf-16 RN19: ajuste de fornecedor só desta região. -->
+                  <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--color-line);">
+                    <p class="section-label" style="margin: 0;">{t('regionAdjustTitle')}</p>
+                    <Combobox
+                      options={manufacturers}
+                      value={r.override ? r.regionManufacturerId : null}
+                      onchange={(id) => void ajustarFornecedorDaRegiao(r, id)}
+                      placeholder={t('regionFollowProject', { marca: nomeFabricante(manufacturerId) || t('allMakers') })}
+                      clearLabel={t('regionFollowProject', { marca: nomeFabricante(manufacturerId) || t('allMakers') })}
+                      searchPlaceholder={t('phFindMaker')}
+                      emptyText={t('noMakerFound')}
+                      ariaLabel={t('regionAdjustTitle')}
+                      moreText={(n) => t('comboMore', { n })}
+                    />
+                    <label style="display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 13.5px; color: {r.override ? 'var(--color-neutral-300)' : 'var(--color-neutral-600)'}; cursor: {r.override ? 'pointer' : 'default'};">
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        disabled={!r.override}
+                        checked={r.override ? r.regionUseStockOnly : useStockOnly}
+                        onchange={(e) => void ajustarEstoqueDaRegiao(r, e.currentTarget.checked)}
+                        style="width: 20px; height: 20px; accent-color: var(--color-accent);"
+                      />
+                      {t('onlyMyStock')}
+                    </label>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                      <button class="t2-secondary-btn" disabled={r.computing} onclick={() => void recalcularUmaRegiao(r.id)}>
+                        <i class="ph ph-arrows-clockwise" style="font-size: 16px;"></i>{t('regionRecalcBtn')}
+                      </button>
+                      <button class="t2-secondary-btn" onclick={removeSelected}>
+                        <i class="ph ph-trash-simple" style="font-size: 16px;"></i>{t('removeRegionBtn')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              {/if}
             </div>
           {/each}
         </div>
@@ -1717,124 +2083,14 @@
           {/each}
         </div>
       </div>
-
-      <div style="flex-shrink: 0; padding: 16px 20px; border-top: 1px solid var(--color-line); display: flex; flex-direction: column; gap: 10px;">
-        {#if draftBannerVisible}
-          <div role="status" aria-live="polite" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--color-accent-700); border-radius: 8px; background: var(--color-accent-panel); font-size: 13.5px; color: var(--color-text);">
-            <span>{t('draftRestored')}</span>
-            <button
-              class="t2-discard-btn"
-              style="min-width: 44px; min-height: 44px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-300); font-family: inherit; font-size: 13px; cursor: pointer;"
-              onclick={onDiscardDraftClick}
-            >{t('discardDraftBtn')}</button>
-          </div>
-        {/if}
-
-        {#if autoSaveStatus === 'sem-foto'}
-          <div aria-live="polite" style="padding: 8px 12px; border-radius: 8px; background: var(--color-raised); font-size: 13px; color: var(--color-neutral-400);">
-            <i class="ph ph-warning" style="margin-right: 6px;"></i>{t('draftNoPhoto')}
-          </div>
-        {:else if autoSaveStatus === 'desligado'}
-          <div role="alert" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--color-neutral-800); background: var(--color-raised); font-size: 13px; color: var(--color-neutral-300);">
-            <i class="ph ph-warning-circle" style="margin-right: 6px;"></i>{t('autosaveOff')}
-          </div>
-        {/if}
-
-        <label for="plan-name-input" class="section-label" style="margin: 0;">{t('planNameLabel')}</label>
-        <input
-          id="plan-name-input"
-          type="text"
-          bind:value={planName}
-          oninput={marcarAlteracao}
-          placeholder={planNamePlaceholder}
-          style="height: 44px; padding: 0 12px; border: 1px solid var(--color-field-border); border-radius: 8px; background: var(--color-bg); color: var(--color-text); font-family: inherit; font-size: 14px;"
-        />
-
-        {#if validationErrorText}
-          <div role="alert" style="font-size: 13px; color: var(--color-neutral-300);">
-            <i class="ph ph-warning-circle" style="margin-right: 6px;"></i>{validationErrorText}
-          </div>
-        {/if}
-
-        <button
-          class="t2-save-plan-btn"
-          style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 56px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 16px; font-weight: 500; cursor: pointer;"
-          disabled={saveState === 'saving'}
-          onclick={handleSave}
-        >
-          {#if saveState === 'saving'}
-            <Spinner size={18} label={t('planSaving')} />
-          {:else}
-            <i class="ph ph-floppy-disk" style="font-size: 19px;"></i>
-          {/if}
-          {t('savePlanBtn')}
-        </button>
-
-        <div aria-live="polite" style="min-height: 16px; font-size: 12.5px; color: var(--color-neutral-500);">
-          {#if saveState === 'saving'}{t('planSaving')}
-          {:else if saveState === 'saved'}{t('planSavedAt', { hora: savedAtLabel })}
-          {:else if saveState === 'error' && saveErrorKey}{t(saveErrorKey)}
-          {/if}
-        </div>
-      </div>
-
-      <div style="flex-shrink: 0; padding: 16px 20px; border-top: 1px solid var(--color-line); display: flex; flex-direction: column; gap: 10px;">
-        <p class="section-label" style="margin: 0;">{t('exportReportBtn')}</p>
-        <fieldset style="display: flex; align-items: center; gap: 18px; margin: 0; padding: 0; border: none;">
-          <legend style="position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap;">{t('exportFormatLabel')}</legend>
-          <label style="display: inline-flex; align-items: center; gap: 8px; min-width: 44px; min-height: 44px; font-size: 14px; color: var(--color-text); cursor: pointer;">
-            <input type="radio" name="report-format" value="pdf" bind:group={reportFormat} style="width: 20px; height: 20px; accent-color: var(--color-accent);" />
-            {t('exportPdf')}
-          </label>
-          <label style="display: inline-flex; align-items: center; gap: 8px; min-width: 44px; min-height: 44px; font-size: 14px; color: var(--color-text); cursor: pointer;">
-            <input type="radio" name="report-format" value="png" bind:group={reportFormat} style="width: 20px; height: 20px; accent-color: var(--color-accent);" />
-            {t('exportPng')}
-          </label>
-        </fieldset>
-
-        <button
-          class="t2-export-btn"
-          style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 44px; height: 52px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;"
-          disabled={exportDisabled}
-          onclick={handleExport}
-        >
-          {#if reportGenerating}
-            <Spinner size={18} label={t('exportGenerating')} />
-          {:else}
-            <i class="ph ph-file-arrow-down" style="font-size: 18px;"></i>
-          {/if}
-          {t('exportReportBtn')}
-        </button>
-
-        <div aria-live="polite" style="min-height: 16px; font-size: 12.5px; color: var(--color-neutral-500);">
-          {#if reportGenerating}{t('exportGenerating')}
-          {:else if reportErrorKey}{t(reportErrorKey)}
-          {:else if planId == null || rascunhoPendente}{t('exportSaveFirst')}
-          {/if}
-        </div>
-      </div>
-
-      <div style="flex-shrink: 0; padding: 16px 20px; border-top: 1px solid var(--color-line);">
-        <button
-          class="t2-save-btn"
-          style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 60px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 17px; font-weight: 500; cursor: pointer;"
-          disabled={!selectedRegion}
-          onclick={saveRegionAsRecipe}
-        >
-          <i class="ph ph-bookmark-simple" style="font-size: 20px;"></i>{t('saveRegionBtn')}
-        </button>
-      </div>
     </div>
   </div>
 </div>
+{/if}
 
 <style>
   .t2-newphoto-btn:hover {
     background: var(--color-accent-hover);
-  }
-
-  .t2-mfr-pill:hover {
-    border-color: var(--color-accent-700);
   }
 
   .t2-tab-btn:hover {
@@ -1847,7 +2103,12 @@
   }
 
   .t2-region-card:hover {
-    border-color: var(--color-accent-700);
+    border-color: var(--color-accent-700) !important;
+  }
+
+  .t2-region-head:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 
   .t2-done-btn:hover {
@@ -1855,29 +2116,67 @@
     color: var(--color-accent-400);
   }
 
-  .t2-zoom-btn:hover {
+  .t2-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--color-neutral-800);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-neutral-300);
+    cursor: pointer;
+  }
+
+  .t2-icon-btn:hover {
     border-color: var(--color-accent-700);
     color: var(--color-accent-400);
   }
 
-  .t2-remove-btn:hover {
+  .t2-icon-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .t2-menu-item {
+    min-height: 44px;
+    padding: 0 12px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-text);
+    font-family: inherit;
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .t2-menu-item:hover {
+    background: var(--color-accent-panel);
+  }
+
+  .t2-secondary-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--color-neutral-800);
+    border-radius: 8px;
+    background: transparent;
     color: var(--color-neutral-300);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
   }
 
-  .t2-save-btn:hover {
-    background: var(--color-accent-hover);
+  .t2-secondary-btn:hover {
+    border-color: var(--color-accent-700);
+    color: var(--color-accent-400);
   }
 
-  .t2-save-btn:disabled {
-    opacity: 0.45;
-    pointer-events: none;
-  }
-
-  .t2-save-plan-btn:hover {
-    background: var(--color-accent-hover);
-  }
-
-  .t2-save-plan-btn:disabled {
+  .t2-secondary-btn:disabled {
     opacity: 0.45;
     pointer-events: none;
   }
@@ -1885,14 +2184,5 @@
   .t2-discard-btn:hover {
     border-color: var(--color-accent-700);
     color: var(--color-accent-400);
-  }
-
-  .t2-export-btn:hover {
-    background: var(--color-accent-hover);
-  }
-
-  .t2-export-btn:disabled {
-    opacity: 0.45;
-    pointer-events: none;
   }
 </style>
