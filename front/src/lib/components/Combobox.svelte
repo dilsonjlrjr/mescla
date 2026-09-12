@@ -53,6 +53,22 @@
   let popStyle = $state('');
   let highlight = $state(0);
 
+  // A lista sai do lugar onde foi declarada e vira filha de <body>. Motivo: o
+  // card do modal de T4 anima com `animation: … both`, e o último keyframe
+  // (`transform: scale(1)`) fica aplicado para sempre. Transform diferente de
+  // `none` cria bloco de contenção para descendente `position: fixed` — a lista
+  // passava a ser posicionada em relação ao card, não à janela, e o
+  // `overflow: hidden` do card a cortava por inteiro. Fora do card, `fixed`
+  // volta a significar coordenada de tela (D-017).
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
+  }
+
   // Mesma normalização usada no catálogo (sem maiúscula, sem acento).
   function norm(s: string): string {
     return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -173,9 +189,10 @@
   $effect(() => {
     if (!open) return;
     function onPointerDown(e: PointerEvent) {
-      if (wrapperEl && e.target instanceof Node && !wrapperEl.contains(e.target)) {
-        closePopover(false);
-      }
+      if (!(e.target instanceof Node)) return;
+      // A lista vive em <body> (ação `portal`), então não basta olhar o wrapper.
+      if (wrapperEl?.contains(e.target) || listEl?.contains(e.target)) return;
+      closePopover(false);
     }
     document.addEventListener('pointerdown', onPointerDown, true);
     return () => document.removeEventListener('pointerdown', onPointerDown, true);
@@ -231,6 +248,7 @@
   {#if open}
     <div
       bind:this={listEl}
+      use:portal
       role="listbox"
       style="position: fixed; {popStyle} overflow-y: auto; z-index: 90; background: var(--color-modal); border: 1px solid var(--color-neutral-800); border-radius: 10px; box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);"
     >
