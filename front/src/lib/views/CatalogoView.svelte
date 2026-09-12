@@ -353,7 +353,19 @@
   let fMfrName = $derived(allMfrs.find(m => m.id === fMfr)?.name ?? '');
   let formPreviewMeta = $derived(`${fCode || '—'} · ${fMfrName}${fVolume ? ` · ${fVolume}` : ''}`);
 
+  // Só um card por vez. `modalKind` já escolhe um por prioridade, mas deixar
+  // duas flags ligadas faria a ação abrir um card e mostrar outro.
+  function closeOtherModals() {
+    formOpen = false;
+    makerFormOpen = false;
+    ptypeFormOpen = false;
+    confirmPaintDel = null;
+    confirmMakerDel = null;
+    confirmPTypeDel = null;
+  }
+
   function openAdd() {
+    closeOtherModals();
     editingId = null;
     editingCatalogId = null;
     fMfr = mfrFilter ?? '';
@@ -369,6 +381,7 @@
   }
 
   function openEdit(p: StockPaint) {
+    closeOtherModals();
     editingId = p.id;
     editingCatalogId = null;
     const m = allMfrs.find(x => x.name === p.manufacturer);
@@ -385,6 +398,7 @@
   }
 
   function openEditCatalog(p: Paint) {
+    closeOtherModals();
     editingId = null;
     editingCatalogId = p.id;
     fMfr = p.manufacturerId;
@@ -485,6 +499,7 @@
   }
 
   function askDeleteMaker(m: Manufacturer) {
+    closeOtherModals();
     confirmMakerDel = m;
   }
   async function doDeleteMaker() {
@@ -517,11 +532,13 @@
   let savingMaker = $state(false);
 
   function openNewMaker() {
+    closeOtherModals();
     editingMakerId = null;
     makerNameInput = '';
     makerFormOpen = true;
   }
   function openEditMaker(m: Manufacturer) {
+    closeOtherModals();
     editingMakerId = m.id;
     makerNameInput = m.name;
     makerFormOpen = true;
@@ -625,11 +642,13 @@
   let savingPType = $state(false);
 
   function openNewPType() {
+    closeOtherModals();
     editingPTypeId = null;
     ptypeNameInput = '';
     ptypeFormOpen = true;
   }
   function openEditPType(pt: PaintType) {
+    closeOtherModals();
     editingPTypeId = pt.id;
     ptypeNameInput = pt.name;
     ptypeFormOpen = true;
@@ -687,6 +706,7 @@
   let ptypeDelBlocked = $derived(ptypeDelCounts.catalog > 0 || ptypeDelCounts.stock > 0);
 
   function askDeletePType(pt: PaintType) {
+    closeOtherModals();
     confirmPTypeDel = pt;
   }
   async function doDeletePType() {
@@ -946,7 +966,7 @@
 
   <!-- Modal cadastro/edição de tinta: topo e rodapé fixos, só o corpo rola —
        card sem padding próprio, cada faixa cuida do seu. -->
-  <div class="t4-modal" style="{modalKind !== 'paint' ? 'display: none; ' : ''}position: relative; width: min(560px, 100%); max-height: 100%; display: flex; flex-direction: column; overflow: hidden; padding: 0; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
+  <div class="t4-modal" style="position: relative; width: min(560px, 100%); max-height: 100%; display: {modalKind === 'paint' ? 'flex' : 'none'}; flex-direction: column; overflow: hidden; padding: 0; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
     <div style="flex-shrink: 0; display: flex; align-items: center; gap: 14px; padding: 20px 24px 16px; border-bottom: 1px solid var(--color-line);">
       <span style="flex: 1; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: var(--color-text);">{editing ? t('editPaint') : t('newPaint')}</span>
       <button class="t4-hover-ghost" onclick={closeModal} aria-label={t('ariaClose')} style="display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer;">
