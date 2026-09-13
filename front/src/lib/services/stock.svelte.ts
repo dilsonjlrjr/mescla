@@ -1,54 +1,191 @@
-// "Meu estoque" — as tintas que o pintor tem em casa, cadastradas uma a uma
-// (nome, marca, cor). Diferente da estante (que guarda só IDs de marcas), aqui
-// guardamos a tinta inteira, persistida em localStorage. É o que alimenta o
-// "priorizar meu estoque" na aba Mesclar.
+// "Minhas tintas" — o estoque do pintor. Desde o rf-17 vive no servidor
+// (`/user-paints`) e vale em qualquer navegador; o que ainda estiver no
+// localStorage antigo sobe por `estoque-migracao.ts`, que nunca altera a chave.
 //
-// IDs são locais e NEGATIVOS (contador decrescente): o catálogo usa IDs
+// IDs no cliente continuam NEGATIVOS (`-id do servidor`): o catálogo usa IDs
 // positivos, então um id negativo nunca colide com uma tinta do catálogo
-// dentro do motor de mistura.
+// dentro do motor de mistura nem na mistura salva do rf-16.
+//
+// Nenhuma gravação falha em silêncio (D-018): toda escrita lança `ApiError` e
+// a tela decide a mensagem; a lista em memória só muda com sucesso.
 
+import { apiDelete, apiGet, apiPost, apiPut, ApiError } from './api';
 import type { StockPaint } from './engine';
 
-const KEY = 'mescla.stock.v1';
-const SEQ_KEY = 'mescla.stock.seq.v1';
+export type EstadoEstoque = 'carregando' | 'pronto' | 'erro';
 
-function load(): StockPaint[] {
+/** Linha do localStorage que o servidor recusou (dado local, RN7). */
+export interface LinhaNaoSubiu {
+  localRef: string;
+  name: string;
+  code: string;
+  manufacturer: string;
+  motivo: string;
+}
+
+/** Linha local ainda não migrada nem dispensada — prende exclusão (RN15). */
+export interface LinhaPendente {
+  manufacturerId: number;
+  manufacturer: string;
+  paintTypeId: number | null;
+}
+
+export const stock = $state({
+  paints: [] as StockPaint[],
+  estado: 'carregando' as EstadoEstoque,
+  /** Falha na primeira carga deixa `paints` vazio: sem esta marca, T4 mostraria
+   *  o catálogo inteiro como "não tenho" e um "tenho" duplicaria no servidor. */
+  carregadoAlgumaVez: false,
+  naoSubiram: [] as LinhaNaoSubiu[],
+  falhaEnvio: false,
+  pendentes: [] as LinhaPendente[],
+});
+
+interface UserPaintDTO {
+  id: number;
+  manufacturerId: number;
+  manufacturer: string;
+  name: string;
+  code: string;
+  r: number;
+  g: number;
+  b: number;
+  volume: string;
+  notes: string;
+  quantity: number;
+  paintTypeId: number | null;
+  catalogId: number | null;
+}
+
+function doServidor(d: UserPaintDTO): StockPaint {
+  return {
+    id: -d.id,
+    manufacturerId: d.manufacturerId,
+    manufacturer: d.manufacturer ?? '',
+    name: d.name ?? '',
+    code: d.code ?? '',
+    r: d.r, g: d.g, b: d.b,
+    volume: d.volume ?? '',
+    notes: d.notes ?? '',
+    catalogId: d.catalogId ?? undefined,
+    paintTypeId: d.paintTypeId ?? undefined,
+    quantity: normalizeQuantity(d.quantity),
+  };
+}
+
+// 0 em tipo/catálogo limpa no servidor: o formulário descreve a tinta inteira.
+function paraServidor(p: Omit<StockPaint, 'id'>) {
+  return {
+    manufacturerId: p.manufacturerId,
+    name: p.name,
+    code: p.code,
+    r: p.r, g: p.g, b: p.b,
+    volume: p.volume,
+    notes: p.notes,
+    quantity: normalizeQuantity(p.quantity),
+    paintTypeId: p.paintTypeId ?? 0,
+    catalogId: p.catalogId ?? 0,
+  };
+}
+
+// Quantidade sempre inteira e >= 1: ausente, não finita ou < 1 vira 1.
+function normalizeQuantity(n: unknown): number {
+  const q = Math.floor(Number(n));
+  return Number.isFinite(q) ? Math.max(1, q) : 1;
+}
+
+function idServidor(idLocal: number): number {
+  if (!Number.isInteger(idLocal) || idLocal >= 0) throw new ApiError('id inválido', 400);
+  return -idLocal;
+}
+
+// ── Carga (RN11) ──
+// Toda carga e toda escrita sobem `rev`: resposta de uma carga iniciada antes
+// da última escrita (ou de uma carga mais nova) é descartada — senão um GET
+// lento tiraria da tela a tinta que acabou de ser gravada.
+let rev = 0;
+let esperando: Array<() => void> = [];
+let migracoesEmVoo = 0;
+
+function liberarQuemEspera(): void {
+  if (stock.estado === 'carregando' || migracoesEmVoo > 0) return;
+  const fila = esperando;
+  esperando = [];
+  fila.forEach(f => f());
+}
+
+/** RN13: T1/T2 esperam a carga E a migração do navegador — no boot a carga
+ *  paralela volta "pronto" com 0 tintas antes de a migração enviar as dele. */
+export function estoqueAssentado(): Promise<void> {
+  if (stock.estado !== 'carregando' && migracoesEmVoo === 0) return Promise.resolve();
+  return new Promise(resolve => esperando.push(resolve));
+}
+
+/** Marca o começo/fim de uma migração (boot no App, envio em estoque-migracao). */
+export function definirMigrando(ativo: boolean): void {
+  migracoesEmVoo = Math.max(0, migracoesEmVoo + (ativo ? 1 : -1));
+  liberarQuemEspera();
+}
+
+export async function carregarEstoque(opts: { mostrarCarregando?: boolean } = {}): Promise<void> {
+  const minha = ++rev;
+  if (opts.mostrarCarregando) stock.estado = 'carregando';
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return [];
-    const list = JSON.parse(raw);
-    return Array.isArray(list) ? list : [];
+    const lista = await apiGet<UserPaintDTO[] | null>('/user-paints');
+    if (minha !== rev) return;
+    stock.paints = (lista ?? []).map(doServidor);
+    stock.estado = 'pronto';
+    stock.carregadoAlgumaVez = true;
   } catch {
-    return [];
+    if (minha !== rev) return;
+    stock.estado = 'erro';
+  } finally {
+    liberarQuemEspera();
   }
 }
 
-// Sequência de IDs locais: decrementa a cada tinta nova para nunca reusar um id.
-let seq = (() => {
-  const raw = Number(localStorage.getItem(SEQ_KEY));
-  return Number.isFinite(raw) && raw < 0 ? raw : 0;
-})();
-
-function nextId(): number {
-  seq -= 1;
+/** Uma escrita invalida cargas em voo; se a primeira carga foi descartada por
+ *  ela, dispara outra para a tela não ficar presa em "carregando". */
+async function escrever<T>(fn: () => Promise<T>): Promise<T> {
+  ++rev;
   try {
-    localStorage.setItem(SEQ_KEY, String(seq));
-  } catch {
-    /* storage indisponível */
-  }
-  return seq;
-}
-
-export const stock = $state({ paints: load() as StockPaint[] });
-
-function persist() {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(stock.paints));
-  } catch {
-    /* storage cheio/indisponível: o estoque só não persiste */
+    return await fn();
+  } finally {
+    ++rev;
+    if (stock.estado === 'carregando') void carregarEstoque();
   }
 }
 
+// ── Escrita (RN12) ──
+export function addStockPaint(p: Omit<StockPaint, 'id'>): Promise<StockPaint> {
+  return escrever(async () => {
+    const salvo = doServidor(await apiPost<UserPaintDTO>('/user-paints', paraServidor(p)));
+    stock.paints = [...stock.paints.filter(x => x.id !== salvo.id), salvo];
+    return salvo;
+  });
+}
+
+export function updateStockPaint(p: StockPaint): Promise<StockPaint> {
+  return escrever(async () => {
+    const salvo = doServidor(await apiPut<UserPaintDTO>(`/user-paints/${idServidor(p.id)}`, paraServidor(p)));
+    stock.paints = stock.paints.map(x => (x.id === p.id ? salvo : x));
+    return salvo;
+  });
+}
+
+/** 404 conta como sucesso: a tinta já não existe no servidor e sai da lista. */
+export function removeStockPaint(id: number): Promise<void> {
+  return escrever(async () => {
+    try {
+      await apiDelete<void>(`/user-paints/${idServidor(id)}`);
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 404)) throw e;
+    }
+    stock.paints = stock.paints.filter(x => x.id !== id);
+  });
+}
+
+// ── Leitura ──
 /** Tintas do estoque ordenadas por marca e nome (para listagem). */
 export function sortedStock(): StockPaint[] {
   return [...stock.paints].sort(
@@ -61,108 +198,28 @@ export function stockBrands(): string[] {
   return [...new Set(stock.paints.map(p => p.manufacturer))].sort();
 }
 
-// Quantidade sempre inteira e >= 1: ausente, não finita ou < 1 vira 1.
-function normalizeQuantity(n: unknown): number {
-  const q = Math.floor(Number(n));
-  return Number.isFinite(q) ? Math.max(1, q) : 1;
+/** Tintas do estoque (servidor) daquele fabricante. */
+export function stockCountFor(mfr: { id: number }): number {
+  return stock.paints.filter(p => p.manufacturerId === mfr.id).length;
 }
 
-export function addStockPaint(p: Omit<StockPaint, 'id'>): StockPaint {
-  const paint: StockPaint = { ...p, id: nextId(), quantity: normalizeQuantity(p.quantity) };
-  stock.paints.push(paint);
-  persist();
-  return paint;
-}
-
-export function updateStockPaint(p: StockPaint) {
-  const i = stock.paints.findIndex(x => x.id === p.id);
-  if (i !== -1) {
-    stock.paints[i] = { ...p, quantity: normalizeQuantity(p.quantity) };
-    persist();
-  }
-}
-
-export function removeStockPaint(id: number) {
-  const i = stock.paints.findIndex(x => x.id === id);
-  if (i !== -1) {
-    stock.paints.splice(i, 1);
-    persist();
-  }
-}
-
-/** Liga o estoque local aos fabricantes do servidor (rf-14, RN5): pelo id
- *  quando ele existe no servidor, senão pelo nome sem distinguir caixa. A
- *  tinta ligada recebe o id e o nome atuais, então o rename feito em qualquer
- *  aparelho chega aqui na próxima recarga. */
-export function relinkStockManufacturers(mfrs: { id: number; name: string }[]) {
-  const nameById = new Map(mfrs.map(m => [m.id, m.name]));
-  const byName = new Map(mfrs.map(m => [m.name.toLowerCase(), m]));
-  let changed = false;
-  for (const p of stock.paints) {
-    const current = nameById.get(p.manufacturerId);
-    if (current !== undefined) {
-      if (p.manufacturer !== current) {
-        p.manufacturer = current;
-        changed = true;
-      }
-      continue;
-    }
-    const match = byName.get(p.manufacturer.toLowerCase());
-    if (match) {
-      p.manufacturerId = match.id;
-      p.manufacturer = match.name;
-      changed = true;
-    }
-  }
-  if (changed) persist();
-}
-
-/** Tintas do estoque local deste aparelho ligadas ao fabricante (RN3/RN5). */
-export function localStockCountFor(mfr: { id: number; name: string }): number {
-  const name = mfr.name.toLowerCase();
-  return stock.paints.filter(p => p.manufacturerId === mfr.id || p.manufacturer.toLowerCase() === name).length;
-}
-
-/** Dá tipo de tinta a quem ainda não tem (rf-15) e persiste se algo mudou. */
-export function fillStockPaintTypes(typeFor: (p: StockPaint) => number | undefined) {
-  let changed = false;
-  for (const p of stock.paints) {
-    if (p.paintTypeId) continue;
-    const id = typeFor(p);
-    if (id) {
-      p.paintTypeId = id;
-      changed = true;
-    }
-  }
-  if (changed) persist();
-}
-
-/** Tintas do estoque local deste aparelho com o tipo — prende a exclusão. */
-export function localStockCountForType(typeId: number): number {
+/** Tintas do estoque (servidor) daquele tipo. */
+export function stockCountForType(typeId: number): number {
   return stock.paints.filter(p => p.paintTypeId === typeId).length;
 }
 
-/** Insere um lote (importação CSV já validada). Devolve quantas entraram. */
-export function addStockPaints(paints: Omit<StockPaint, 'id'>[]): number {
-  for (const p of paints) {
-    stock.paints.push({ ...p, id: nextId(), quantity: normalizeQuantity(p.quantity) });
-  }
-  persist();
-  return paints.length;
+/** RN15: linhas locais pendentes daquele fabricante (por id ou nome). */
+export function pendentesDoFabricante(mfr: { id: number; name: string }): number {
+  const nome = mfr.name.trim().toLowerCase();
+  return stock.pendentes.filter(p => p.manufacturerId === mfr.id || p.manufacturer.trim().toLowerCase() === nome).length;
 }
 
-/** Dá quantidade 1 a quem foi cadastrado antes do campo e persiste se algo mudou. */
-export function fillStockQuantities() {
-  let changed = false;
-  for (const p of stock.paints) {
-    if (Number.isInteger(p.quantity) && (p.quantity as number) >= 1) continue;
-    p.quantity = 1;
-    changed = true;
-  }
-  if (changed) persist();
+/** RN15: linhas locais pendentes daquele tipo. */
+export function pendentesDoTipo(typeId: number): number {
+  return stock.pendentes.filter(p => p.paintTypeId === typeId).length;
 }
 
-/** Soma dos potes do estoque local (conta a quantidade, não a linha). */
+/** Soma dos potes do estoque (conta a quantidade, não a linha). */
 export function totalPots(): number {
   return stock.paints.reduce((sum, p) => sum + normalizeQuantity(p.quantity), 0);
 }

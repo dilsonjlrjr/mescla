@@ -7,13 +7,14 @@
   // herdado de docs/mesclaai-userstory.md): não existe rota de escrita para
   // tinta em api/httpapi. O catálogo de tintas servido (GET /paints) é
   // só-leitura aqui. Por isso:
-  //   - "Cadastrar/Editar/Excluir tinta" grava em services/stock.svelte.ts
-  //     (localStorage, MESMO mecanismo já usado por T1 "Só o que eu tenho" e
-  //     pela prioridade de estoque) — cadastro real no catálogo do servidor
-  //     fica bloqueado até confirmação do contrato de escrita.
-  //   - O toggle "tenho/não tenho" numa linha da lista escreve em
-  //     stock.svelte.ts (por código+fabricante — RG-17), nunca no paint do
-  //     servidor.
+  //   - "Cadastrar/Editar/Excluir tinta" grava no estoque do servidor
+  //     (`/user-paints`, rf-17) por services/stock.svelte.ts — o catálogo de
+  //     tintas continua só-leitura. Falha de gravação aparece em toast e o
+  //     formulário não fecha (D-018).
+  //   - O toggle "tenho/não tenho" numa linha da lista grava no estoque do
+  //     servidor (por código+fabricante — RG-17), nunca no paint do catálogo.
+  //   - O estoque antigo do localStorage sobe sozinho no boot
+  //     (estoque-migracao.ts); o que não subir aparece numa faixa aqui.
   //   - Fabricantes vivem no servidor (rf-14): buscar, cadastrar, alterar e
   //     excluir usam /manufacturers. Só sai fabricante sem nenhuma tinta —
   //     catálogo, estoque do servidor ou estoque deste aparelho (RG-18
@@ -43,19 +44,23 @@
   import PaintBottle from '../components/PaintBottle.svelte';
   import VirtualList from '../components/VirtualList.svelte';
   import Combobox from '../components/Combobox.svelte';
+  import Spinner from '../components/Spinner.svelte';
   import { onMount, tick } from 'svelte';
   import {
     allManufacturers, allPaints, hexOf, searchPaints, type Paint, type Manufacturer,
     reloadManufacturers, createManufacturer, updateManufacturer, deleteManufacturer,
-    migrateLegacyManufacturers, MAX_MANUFACTURER_NAME, paintById,
+    MAX_MANUFACTURER_NAME,
     allPaintTypes, reloadPaintTypes, createPaintType, updatePaintType, deletePaintType,
     MAX_PAINT_TYPE_NAME, type PaintType,
   } from '../services/catalog';
   import {
-    stock, sortedStock, addStockPaint, updateStockPaint, removeStockPaint,
-    relinkStockManufacturers, localStockCountFor, fillStockPaintTypes, localStockCountForType,
-    fillStockQuantities,
+    stock, sortedStock, addStockPaint, updateStockPaint, removeStockPaint, carregarEstoque,
+    stockCountFor, stockCountForType, pendentesDoFabricante, pendentesDoTipo, type LinhaNaoSubiu,
   } from '../services/stock.svelte';
+  import {
+    migrarEstoqueLocal, dispensarNaoSubiram, importarArquivoDeEstoque, ErroDeImportacao,
+    chaveDoMotivo, MAX_ARQUIVO_BYTES,
+  } from '../services/estoque-migracao';
   import { catalogRev } from '../services/catalogRev.svelte';
   import type { StockPaint } from '../services/engine';
   import { appState } from '../appState.svelte';
@@ -79,16 +84,12 @@
     }
   });
 
-  // Ao abrir T4: a lista local antiga sobe uma vez, a lista vem do servidor e o
-  // estoque local é religado pelo id (rf-14, RN5/RN6).
+  // Ao abrir T4: fabricantes e tipos vêm do servidor. A subida da lista local
+  // antiga de fabricantes e do estoque local roda no boot (App.svelte, rf-17).
   onMount(() => {
     void (async () => {
-      const pending = await migrateLegacyManufacturers();
-      if (pending > 0) toast(t('errMakerMigrate'), 'error');
       await refreshMakers();
       await refreshPTypes();
-      backfillStockPaintTypes();
-      fillStockQuantities();
     })();
   });
 
@@ -152,21 +153,83 @@
     })
   );
 
+  // rf-17 RN12: a linha só muda com a resposta do servidor; enquanto a chamada
+  // anda, o toggle daquela linha fica desabilitado.
+  let ocupadas: Set<string> = $state(new Set());
+
+  function avisarErroDeEstoque(e: unknown) {
+    const status = statusOf(e);
+    toast(t(status === 404 ? 'errStockGone' : status === 400 ? 'errStockInvalid' : 'errStockWrite'), 'error');
+  }
+
+  async function comOcupacao(chave: string, fn: () => Promise<unknown>) {
+    if (ocupadas.has(chave)) return;
+    ocupadas = new Set([...ocupadas, chave]);
+    try {
+      await fn();
+    } catch (e) {
+      avisarErroDeEstoque(e);
+    } finally {
+      const resto = new Set(ocupadas);
+      resto.delete(chave);
+      ocupadas = resto;
+    }
+  }
+
   function toggleHave(p: Paint) {
     const sp = stock.paints.find(s => catalogOriginOf(s) === p.id);
-    if (sp) {
-      removeStockPaint(sp.id);
-    } else {
-      addStockPaint({
-        catalogId: p.id,
-        manufacturerId: p.manufacturerId,
-        manufacturer: p.manufacturer,
-        name: p.name,
-        code: p.code,
-        r: p.r, g: p.g, b: p.b,
-        volume: '',
-        notes: '',
-      });
+    void comOcupacao(`c${p.id}`, () =>
+      sp
+        ? removeStockPaint(sp.id)
+        : addStockPaint({
+            catalogId: p.id,
+            paintTypeId: p.paintTypeId || undefined,
+            manufacturerId: p.manufacturerId,
+            manufacturer: p.manufacturer,
+            name: p.name,
+            code: p.code,
+            r: p.r, g: p.g, b: p.b,
+            volume: '',
+            notes: '',
+          }),
+    );
+  }
+
+  // ── Estoque que ainda não subiu e importação de arquivo (rf-17 RN7/RN10) ──
+  let importInputEl: HTMLInputElement | null = $state(null);
+  let importando = $state(false);
+  let recusadasDoArquivo: LinhaNaoSubiu[] = $state([]);
+
+  async function tentarMigrarDeNovo() {
+    await migrarEstoqueLocal();
+    await carregarEstoque();
+  }
+
+  async function dispensar() {
+    await dispensarNaoSubiram();
+    await carregarEstoque();
+  }
+
+  async function onImportFile(ev: Event) {
+    const input = ev.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || importando) return;
+    if (file.size > MAX_ARQUIVO_BYTES) {
+      toast(t('importStockTooBig'), 'error');
+      return;
+    }
+    importando = true;
+    try {
+      const r = await importarArquivoDeEstoque(file);
+      recusadasDoArquivo = r.recusadas;
+      toast(t('importStockDone', { c: r.criadas, m: r.mescladas, j: r.jaMigradas, r: r.recusadas.length }));
+      await carregarEstoque();
+    } catch (e) {
+      const codigo = e instanceof ErroDeImportacao ? e.codigo : 'falha';
+      toast(t(codigo === 'grande' ? 'importStockTooBig' : codigo === 'nao-lista' ? 'importStockNotList' : 'importStockFailed'), 'error');
+    } finally {
+      importando = false;
     }
   }
 
@@ -192,7 +255,7 @@
       // Desmarcar tinta do catálogo só devolve a linha ao catálogo; tinta
       // cadastrada à mão sumiria de vez, então passa pela confirmação.
       toggle: () => {
-        if (catalogOriginOf(p) != null) removeStockPaint(p.id);
+        if (catalogOriginOf(p) != null) void comOcupacao(`s${p.id}`, () => removeStockPaint(p.id));
         else askDeletePaint(p);
       },
       edit: () => openEdit(p),
@@ -413,7 +476,8 @@
     void resetFormScroll();
   }
 
-  function saveForm() {
+  async function saveForm() {
+    if (saving) return;
     if (!fName.trim()) {
       toast(t('errNameRequired'), 'error');
       return;
@@ -444,19 +508,25 @@
       quantity: Number(fQty),
       notes: '',
     };
-    if (editingId !== null) {
-      // A origem sai do registro ANTES da troca: código e fabricante podem
-      // mudar agora e o casamento por chave se perderia.
-      const prev = stock.paints.find(x => x.id === editingId);
-      updateStockPaint({ ...base, id: editingId, catalogId: prev ? catalogOriginOf(prev) : undefined });
-    } else if (editingCatalogId !== null) {
-      addStockPaint({ ...base, catalogId: editingCatalogId });
-    } else {
-      addStockPaint(base);
+    try {
+      if (editingId !== null) {
+        // A origem sai do registro ANTES da troca: código e fabricante podem
+        // mudar agora e o casamento por chave se perderia.
+        const prev = stock.paints.find(x => x.id === editingId);
+        await updateStockPaint({ ...base, id: editingId, catalogId: prev ? catalogOriginOf(prev) : undefined });
+      } else if (editingCatalogId !== null) {
+        await addStockPaint({ ...base, catalogId: editingCatalogId });
+      } else {
+        await addStockPaint(base);
+      }
+      formOpen = false;
+      toast(t('saveChanges'));
+    } catch (e) {
+      // D-018: a falha aparece e o formulário continua aberto com os dados.
+      avisarErroDeEstoque(e);
+    } finally {
+      saving = false;
     }
-    saving = false;
-    formOpen = false;
-    toast(t('saveChanges'));
   }
 
   // ── Confirmação de exclusão (RG-18/CAN1) ──
@@ -467,11 +537,19 @@
     const alvo = p ?? (editingId != null ? stock.paints.find(x => x.id === editingId) : undefined);
     if (alvo) confirmPaintDel = alvo;
   }
-  function doDeletePaint() {
-    if (!confirmPaintDel) return;
-    removeStockPaint(confirmPaintDel.id);
-    confirmPaintDel = null;
-    formOpen = false;
+  let deletingPaint = $state(false);
+  async function doDeletePaint() {
+    if (!confirmPaintDel || deletingPaint) return;
+    deletingPaint = true;
+    try {
+      await removeStockPaint(confirmPaintDel.id);
+      confirmPaintDel = null;
+      formOpen = false;
+    } catch (e) {
+      avisarErroDeEstoque(e);
+    } finally {
+      deletingPaint = false;
+    }
   }
 
   // ── Excluir fabricante (RG-18 reescrita, rf-14 RN3) ──
@@ -481,7 +559,8 @@
   let deletingMaker = $state(false);
   let makerDelCounts = $derived.by(() => {
     const m = confirmMakerDel;
-    return m ? { catalog: m.paintCount, stock: m.userPaintCount + localStockCountFor(m) } : { catalog: 0, stock: 0 };
+    // rf-17 RN14/RN15: estoque do servidor + linhas locais que ainda não subiram.
+    return m ? { catalog: m.paintCount, stock: m.userPaintCount + pendentesDoFabricante(m) } : { catalog: 0, stock: 0 };
   });
   let makerDelBlocked = $derived(makerDelCounts.catalog > 0 || makerDelCounts.stock > 0);
 
@@ -495,12 +574,15 @@
     } catch {
       // Sem rede, a lista em memória continua valendo.
     }
-    relinkStockManufacturers(allManufacturers());
   }
 
   function askDeleteMaker(m: Manufacturer) {
     closeOtherModals();
     confirmMakerDel = m;
+    // Contagem fresca: outro aparelho pode ter gravado tinta desse fabricante.
+    void refreshMakers().then(() => {
+      if (confirmMakerDel?.id === m.id) confirmMakerDel = allManufacturers().find(x => x.id === m.id) ?? confirmMakerDel;
+    });
   }
   async function doDeleteMaker() {
     if (!confirmMakerDel || makerDelBlocked || deletingMaker) return;
@@ -615,13 +697,6 @@
     return acrilicaId() ?? allPTypes[0]?.id;
   }
 
-  // O estoque anterior ao campo não tem tipo: a cópia de uma tinta do catálogo
-  // herda o tipo dela, e o resto é Acrílica.
-  function backfillStockPaintTypes() {
-    const acrilica = acrilicaId();
-    fillStockPaintTypes(p => (p.catalogId != null ? paintById(p.catalogId)?.paintTypeId || undefined : undefined) ?? acrilica);
-  }
-
   let ptypeSearch = $state('');
   let filteredPTypes = $derived.by(() => {
     const q = foldText(ptypeSearch.trim());
@@ -701,13 +776,16 @@
   let deletingPType = $state(false);
   let ptypeDelCounts = $derived.by(() => {
     const pt = confirmPTypeDel;
-    return pt ? { catalog: pt.paintCount, stock: localStockCountForType(pt.id) } : { catalog: 0, stock: 0 };
+    return pt ? { catalog: pt.paintCount, stock: (pt.userPaintCount ?? 0) + pendentesDoTipo(pt.id) } : { catalog: 0, stock: 0 };
   });
   let ptypeDelBlocked = $derived(ptypeDelCounts.catalog > 0 || ptypeDelCounts.stock > 0);
 
   function askDeletePType(pt: PaintType) {
     closeOtherModals();
     confirmPTypeDel = pt;
+    void refreshPTypes().then(() => {
+      if (confirmPTypeDel?.id === pt.id) confirmPTypeDel = allPaintTypes().find(x => x.id === pt.id) ?? confirmPTypeDel;
+    });
   }
   async function doDeletePType() {
     if (!confirmPTypeDel || ptypeDelBlocked || deletingPType) return;
@@ -810,6 +888,16 @@
             >
               <i class="ph-bold ph-check" style="font-size: 15px;"></i>{t('onlyMineShort')}
             </button>
+            <!-- rf-17 RN10: JSON copiado do localStorage de um navegador. -->
+            <input type="file" accept=".json,application/json" bind:this={importInputEl} onchange={onImportFile} style="display: none;" />
+            <button
+              class="t4-hover-ghost"
+              disabled={importando}
+              onclick={() => importInputEl?.click()}
+              style="display: inline-flex; align-items: center; gap: 8px; height: 50px; padding: 0 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
+            >
+              {#if importando}<Spinner size={16} label={t('importStockBtn')} />{:else}<i class="ph ph-upload-simple" style="font-size: 16px;"></i>{/if}{t('importStockBtn')}
+            </button>
           </div>
 
           <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
@@ -843,7 +931,60 @@
 
           <p style="margin: 0 0 8px; font-size: 13px; color: var(--color-neutral-500);">{listNote}</p>
 
-          {#if mergedRows.length === 0}
+          {#if stock.estado === 'erro'}
+            <div role="alert" class="t4-faixa">
+              <i class="ph ph-warning-circle" style="font-size: 18px;"></i>
+              <span style="flex: 1;">{t('stockLoadError')}</span>
+              <button class="t4-hover-ghost t4-faixa-btn" onclick={() => void carregarEstoque({ mostrarCarregando: true })}>{t('retryBtn')}</button>
+            </div>
+          {/if}
+          {#if stock.falhaEnvio}
+            <div role="alert" class="t4-faixa">
+              <i class="ph ph-warning-circle" style="font-size: 18px;"></i>
+              <span style="flex: 1;">{t('stockSendError')}</span>
+              <button class="t4-hover-ghost t4-faixa-btn" onclick={() => void tentarMigrarDeNovo()}>{t('retryBtn')}</button>
+            </div>
+          {/if}
+          {#if stock.naoSubiram.length > 0}
+            <div role="alert" class="t4-faixa" style="flex-direction: column; align-items: stretch;">
+              <span>{t('stockNotUploaded', { n: stock.naoSubiram.length })}</span>
+              <ul style="margin: 4px 0; padding-left: 18px; font-size: 13px; color: var(--color-neutral-400);">
+                {#each stock.naoSubiram.slice(0, 20) as l (l.localRef)}
+                  <li>{l.name || '—'} · {l.code || '—'} · {l.manufacturer || '—'} — {t(chaveDoMotivo(l.motivo))}</li>
+                {/each}
+              </ul>
+              {#if stock.naoSubiram.length > 20}
+                <span style="font-size: 12.5px; color: var(--color-neutral-500);">{t('stockMore', { n: stock.naoSubiram.length - 20 })}</span>
+              {/if}
+              <div style="display: flex; gap: 8px;">
+                <button class="t4-hover-ghost t4-faixa-btn" onclick={() => void tentarMigrarDeNovo()}>{t('retryBtn')}</button>
+                <button class="t4-hover-ghost t4-faixa-btn" onclick={() => void dispensar()}>{t('stockDismissBtn')}</button>
+              </div>
+            </div>
+          {/if}
+          {#if recusadasDoArquivo.length > 0}
+            <div role="alert" class="t4-faixa" style="flex-direction: column; align-items: stretch;">
+              <span>{t('importStockRejected', { n: recusadasDoArquivo.length })}</span>
+              <ul style="margin: 4px 0; padding-left: 18px; font-size: 13px; color: var(--color-neutral-400);">
+                {#each recusadasDoArquivo.slice(0, 20) as l (l.localRef)}
+                  <li>{l.name || '—'} · {l.code || '—'} · {l.manufacturer || '—'} — {t(chaveDoMotivo(l.motivo))}</li>
+                {/each}
+              </ul>
+              <div style="display: flex; gap: 8px;">
+                <button class="t4-hover-ghost t4-faixa-btn" onclick={() => (recusadasDoArquivo = [])}>{t('stockDismissBtn')}</button>
+              </div>
+            </div>
+          {/if}
+
+          {#if stock.estado === 'carregando' || !stock.carregadoAlgumaVez}
+            <!-- Sem nenhuma carga bem-sucedida, a lista mostraria tudo como
+                 "não tenho" e um "tenho" duplicaria no servidor. -->
+            {#if stock.estado !== 'erro'}
+              <div style="display: flex; align-items: center; gap: 12px; padding: 48px 4px; font-size: 15px; color: var(--color-neutral-500);">
+                <Spinner size={24} label={t('stockLoading')} />{t('stockLoading')}
+              </div>
+            {/if}
+          {:else if mergedRows.length === 0}
             <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 48px 4px;">
               <i class="ph ph-drop-half" style="font-size: 34px; color: var(--color-neutral-700);"></i>
               <p style="margin: 0; font-size: 20px; font-weight: 500; color: var(--color-text);">
@@ -858,6 +999,7 @@
                   <div style="display: flex; align-items: center; gap: 14px; height: 100%; padding: 10px 4px; border-bottom: 1px solid var(--color-line);">
                     <button
                       onclick={r.toggle}
+                      disabled={ocupadas.has(r.key)}
                       aria-pressed={r.have}
                       style="display: inline-flex; align-items: center; gap: 10px; height: 48px; padding: 0 10px 0 4px; border: none; background: transparent; color: {r.have ? 'var(--color-accent-400)' : 'var(--color-neutral-500)'}; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; flex-shrink: 0;"
                     >
@@ -901,7 +1043,7 @@
           </div>
           {#each filteredMakers as m (m.id)}
             {@const catalogCount = m.paintCount}
-            {@const haveCount = localStockCountFor(m)}
+            {@const haveCount = stockCountFor(m)}
             <div style="display: flex; align-items: center; gap: 16px; min-height: 76px; padding: 12px 4px; border-bottom: 1px solid var(--color-line);">
               <span style="display: flex; gap: 3px; flex-shrink: 0;">
                 {#each swatchesFor(m) as hex, i (i)}
@@ -943,7 +1085,7 @@
             <div style="display: flex; align-items: center; gap: 16px; min-height: 68px; padding: 12px 4px; border-bottom: 1px solid var(--color-line);">
               <span style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0;">
                 <span style="font-size: 17px; font-weight: 500; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{pt.name}</span>
-                <span style="font-size: 13px; color: var(--color-neutral-500);">{t('pTypeMeta', { n: pt.paintCount, m: localStockCountForType(pt.id) })}</span>
+                <span style="font-size: 13px; color: var(--color-neutral-500);">{t('pTypeMeta', { n: pt.paintCount, m: stockCountForType(pt.id) })}</span>
               </span>
               <button class="t4-hover-ghost" onclick={() => openEditPType(pt)} style="height: 48px; padding: 0 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('edit')}</button>
               <button class="t4-hover-ghost" onclick={() => askDeletePType(pt)} style="height: 48px; padding: 0 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('del')}</button>
@@ -1131,7 +1273,7 @@
     <p style="margin: 10px 0 0; font-size: 15px; color: var(--color-neutral-400); text-wrap: pretty;">{confirmPaintDel && catalogOriginOf(confirmPaintDel) != null ? t('delPaintBCat') : t('delPaintB')}</p>
     <div style="display: flex; gap: 10px; margin-top: 22px;">
       <button class="t4-hover-ghost" onclick={closeModal} style="flex: 1; height: 56px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{t('cancel')}</button>
-      <button class="t4-hover-accent" onclick={doDeletePaint} style="flex: 1; height: 56px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{t('delPaintA')}</button>
+      <button class="t4-hover-accent" onclick={doDeletePaint} disabled={deletingPaint} style="flex: 1; height: 56px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{t('delPaintA')}</button>
     </div>
   </div>
 
@@ -1206,6 +1348,31 @@
       opacity: 1;
       transform: translateY(0) scale(1);
     }
+  }
+
+  /* rf-17: faixas de estoque (carga, envio, recusas) — mesmo tom dos avisos de T2. */
+  .t4-faixa {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--color-neutral-800);
+    border-radius: 8px;
+    background: var(--color-raised);
+    font-size: 14px;
+    color: var(--color-neutral-300);
+  }
+  .t4-faixa-btn {
+    min-height: 44px;
+    padding: 0 14px;
+    border: 1px solid var(--color-neutral-800);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-neutral-300);
+    font-family: inherit;
+    font-size: 13.5px;
+    cursor: pointer;
   }
 
   /* `style-hover="..."` do protótipo — reproduzido aqui por classe (rule 7). */

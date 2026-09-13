@@ -165,6 +165,8 @@ export interface PaintType {
   name: string;
   /** Tintas do catálogo com este tipo — prende a exclusão. */
   paintCount: number;
+  /** rf-17: tintas do estoque (servidor) com este tipo — também prende. */
+  userPaintCount?: number;
 }
 
 export const MAX_PAINT_TYPE_NAME = 60;

@@ -49,15 +49,16 @@ func NewRouter(svc *service.PaintService) *router.Router {
 	r.GET("/compare-to-anchor", handleCompareToAnchor(svc))
 	r.GET("/best-brands", handleBestBrandsFor(svc))
 
-	// Estoque stateless — usado pelo front (estoque no localStorage do navegador).
+	// Estoque ad-hoc — cálculo sobre a lista que o cliente manda no corpo, sem persistir.
 	r.GET("/stock/csv-template", handleStockCSVTemplate(svc))
 	r.POST("/stock/parse-csv", handleStockParseCSV(svc))
 	r.POST("/stock/to-csv", handleStockToCSV)
 	r.POST("/stock/suggest-recipe", handleStockSuggestRecipe(svc))
 
-	// Estoque persistido no servidor — paridade com o binding Wails do desktop.
+	// Estoque do usuário persistido no servidor (rf-17) — mesmo caminho do binding Wails do desktop.
 	r.GET("/user-paints", handleListUserPaints(svc))
 	r.POST("/user-paints", handleAddUserPaint(svc))
+	r.POST("/user-paints/migrate", handleMigrateUserPaints(svc))
 	r.PUT("/user-paints/{id}", handleUpdateUserPaint(svc))
 	r.DELETE("/user-paints/{id}", handleDeleteUserPaint(svc))
 	r.GET("/user-paints/export-csv", handleExportUserPaintsCSV(svc))

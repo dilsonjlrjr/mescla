@@ -157,7 +157,19 @@ export const dict = {
     regionDetailIngredients: 'Ingredientes', regionDetailTips: 'Dicas',
     regionOriginProject: 'Segue o projeto: {marca}', regionOriginOverride: 'Ajuste desta região: {marca}', regionOriginStock: 'só o que eu tenho',
     regionAdjustTitle: 'Ajustar esta região', regionFollowProject: 'Seguir o projeto ({marca})', regionRecalcBtn: 'Recalcular',
-    regionOverrideNoMatch: 'Nenhuma tinta chega perto neste ajuste — troque o fornecedor ou desligue “só o que eu tenho”.'
+    regionOverrideNoMatch: 'Nenhuma tinta chega perto neste ajuste — troque o fornecedor ou desligue “só o que eu tenho”.',
+    stockLoading: 'Carregando suas tintas', stockLoadError: 'Não foi possível carregar suas tintas',
+    stockSendError: 'Não foi possível enviar as tintas deste navegador para o servidor',
+    stockNotUploaded: '{n} tintas deste navegador não subiram para o servidor', stockDismissBtn: 'Dispensar',
+    stockMigrated: '{n} tintas deste navegador estão no servidor', stockMore: 'e mais {n}',
+    importStockBtn: 'Importar arquivo', importStockNotList: 'Arquivo não é um estoque do Mescla',
+    importStockTooBig: 'O arquivo passa de 5 MB', importStockFailed: 'Não foi possível importar o arquivo',
+    importStockRejected: '{n} tintas do arquivo não subiram para o servidor',
+    importStockDone: 'Importação: {c} novas, {m} juntadas, {j} já estavam no servidor, {r} recusadas',
+    errStockWrite: 'Não foi possível gravar a tinta — tente de novo', errStockGone: 'Essa tinta não existe mais no servidor',
+    errStockInvalid: 'Os dados da tinta não foram aceitos',
+    motivoLinhaInvalida: 'linha ilegível', motivoLinhaRepetida: 'linha repetida', motivoFabricante: 'fabricante não encontrado',
+    motivoNome: 'sem nome', motivoTexto: 'texto longo demais', motivoCor: 'cor inválida', motivoQuantidade: 'quantidade inválida'
   },
   en: {
     _name: 'English (US)', _dec: '.',
@@ -312,7 +324,19 @@ export const dict = {
     regionDetailIngredients: 'Ingredients', regionDetailTips: 'Tips',
     regionOriginProject: 'Follows the project: {marca}', regionOriginOverride: 'This region’s own setting: {marca}', regionOriginStock: 'only what I have',
     regionAdjustTitle: 'Adjust this region', regionFollowProject: 'Follow the project ({marca})', regionRecalcBtn: 'Recalculate',
-    regionOverrideNoMatch: 'No paint gets close with this setting — change the supplier or turn off "only what I have".'
+    regionOverrideNoMatch: 'No paint gets close with this setting — change the supplier or turn off "only what I have".',
+    stockLoading: 'Loading your paints', stockLoadError: 'Could not load your paints',
+    stockSendError: 'Could not send this browser’s paints to the server',
+    stockNotUploaded: '{n} paints from this browser did not reach the server', stockDismissBtn: 'Dismiss',
+    stockMigrated: '{n} paints from this browser are on the server', stockMore: 'and {n} more',
+    importStockBtn: 'Import file', importStockNotList: 'This file is not a Mescla paint list',
+    importStockTooBig: 'The file is over 5 MB', importStockFailed: 'Could not import the file',
+    importStockRejected: '{n} paints from the file did not reach the server',
+    importStockDone: 'Import: {c} new, {m} merged, {j} already on the server, {r} rejected',
+    errStockWrite: 'Could not save the paint — try again', errStockGone: 'This paint no longer exists on the server',
+    errStockInvalid: 'The paint data was not accepted',
+    motivoLinhaInvalida: 'unreadable row', motivoLinhaRepetida: 'repeated row', motivoFabricante: 'manufacturer not found',
+    motivoNome: 'no name', motivoTexto: 'text too long', motivoCor: 'invalid color', motivoQuantidade: 'invalid quantity'
   },
   es: {
     _name: 'Español', _dec: ',',
@@ -467,7 +491,19 @@ export const dict = {
     regionDetailIngredients: 'Ingredientes', regionDetailTips: 'Consejos',
     regionOriginProject: 'Sigue el proyecto: {marca}', regionOriginOverride: 'Ajuste de esta región: {marca}', regionOriginStock: 'solo lo que tengo',
     regionAdjustTitle: 'Ajustar esta región', regionFollowProject: 'Seguir el proyecto ({marca})', regionRecalcBtn: 'Recalcular',
-    regionOverrideNoMatch: 'Ninguna pintura se acerca con este ajuste — cambia el proveedor o desactiva «solo lo que tengo».'
+    regionOverrideNoMatch: 'Ninguna pintura se acerca con este ajuste — cambia el proveedor o desactiva «solo lo que tengo».',
+    stockLoading: 'Cargando tus pinturas', stockLoadError: 'No se pudieron cargar tus pinturas',
+    stockSendError: 'No se pudieron enviar al servidor las pinturas de este navegador',
+    stockNotUploaded: '{n} pinturas de este navegador no llegaron al servidor', stockDismissBtn: 'Descartar',
+    stockMigrated: '{n} pinturas de este navegador están en el servidor', stockMore: 'y {n} más',
+    importStockBtn: 'Importar archivo', importStockNotList: 'El archivo no es una lista de pinturas de Mescla',
+    importStockTooBig: 'El archivo supera los 5 MB', importStockFailed: 'No se pudo importar el archivo',
+    importStockRejected: '{n} pinturas del archivo no llegaron al servidor',
+    importStockDone: 'Importación: {c} nuevas, {m} unidas, {j} ya estaban en el servidor, {r} rechazadas',
+    errStockWrite: 'No se pudo guardar la pintura — inténtalo de nuevo', errStockGone: 'Esa pintura ya no existe en el servidor',
+    errStockInvalid: 'Los datos de la pintura no fueron aceptados',
+    motivoLinhaInvalida: 'fila ilegible', motivoLinhaRepetida: 'fila repetida', motivoFabricante: 'fabricante no encontrado',
+    motivoNome: 'sin nombre', motivoTexto: 'texto demasiado largo', motivoCor: 'color inválido', motivoQuantidade: 'cantidad inválida'
   },
   fr: {
     _name: 'Français', _dec: ',',
@@ -622,7 +658,19 @@ export const dict = {
     regionDetailIngredients: 'Ingrédients', regionDetailTips: 'Conseils',
     regionOriginProject: 'Suit le projet : {marca}', regionOriginOverride: 'Réglage de cette zone : {marca}', regionOriginStock: 'seulement ce que j’ai',
     regionAdjustTitle: 'Ajuster cette zone', regionFollowProject: 'Suivre le projet ({marca})', regionRecalcBtn: 'Recalculer',
-    regionOverrideNoMatch: 'Aucune peinture n’approche avec ce réglage — changez de fournisseur ou désactivez « seulement ce que j’ai ».'
+    regionOverrideNoMatch: 'Aucune peinture n’approche avec ce réglage — changez de fournisseur ou désactivez « seulement ce que j’ai ».',
+    stockLoading: 'Chargement de vos peintures', stockLoadError: 'Impossible de charger vos peintures',
+    stockSendError: 'Impossible d’envoyer au serveur les peintures de ce navigateur',
+    stockNotUploaded: '{n} peintures de ce navigateur ne sont pas arrivées sur le serveur', stockDismissBtn: 'Ignorer',
+    stockMigrated: '{n} peintures de ce navigateur sont sur le serveur', stockMore: 'et {n} de plus',
+    importStockBtn: 'Importer un fichier', importStockNotList: 'Ce fichier n’est pas une liste de peintures Mescla',
+    importStockTooBig: 'Le fichier dépasse 5 Mo', importStockFailed: 'Impossible d’importer le fichier',
+    importStockRejected: '{n} peintures du fichier ne sont pas arrivées sur le serveur',
+    importStockDone: 'Import : {c} nouvelles, {m} fusionnées, {j} déjà sur le serveur, {r} refusées',
+    errStockWrite: 'Impossible d’enregistrer la peinture — réessayez', errStockGone: 'Cette peinture n’existe plus sur le serveur',
+    errStockInvalid: 'Les données de la peinture n’ont pas été acceptées',
+    motivoLinhaInvalida: 'ligne illisible', motivoLinhaRepetida: 'ligne répétée', motivoFabricante: 'fabricant introuvable',
+    motivoNome: 'sans nom', motivoTexto: 'texte trop long', motivoCor: 'couleur invalide', motivoQuantidade: 'quantité invalide'
   }
 } as const;
 

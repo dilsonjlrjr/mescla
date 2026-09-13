@@ -1,14 +1,20 @@
 package httpapi
 
 import (
+	"encoding/json"
+	"errors"
+	"log"
+
 	"github.com/valyala/fasthttp"
 
 	"paint-match-ai/api/domain/stock"
 	"paint-match-ai/api/service"
 )
 
-// --- Estoque STATELESS (front/ — o estoque vive no localStorage do
-// navegador, nunca no banco do servidor; estas rotas só validam/calculam) ---
+// --- Estoque ad-hoc (front/ manda uma lista arbitrária no corpo pra calcular
+// em cima dela, sem tocar o banco). rf-17: o estoque do usuário DEIXOU de
+// viver só no localStorage — agora mora em user_paints, servido pelas rotas
+// PERSISTIDAS mais abaixo; estas aqui continuam stateless de propósito. ---
 
 // handleStockCSVTemplate atende GET /stock/csv-template.
 func handleStockCSVTemplate(svc *service.PaintService) fasthttp.RequestHandler {
@@ -73,8 +79,9 @@ func handleStockSuggestRecipe(svc *service.PaintService) fasthttp.RequestHandler
 	}
 }
 
-// --- Estoque PERSISTIDO (paridade com o binding Wails do desktop — útil
-// para qualquer cliente HTTP que queira estoque guardado no servidor) ---
+// --- Estoque PERSISTIDO (rf-17): fonte de verdade do estoque do usuário —
+// front/ migra o que estava no localStorage e passa a ler/gravar só aqui;
+// mesmo caminho que o binding Wails do desktop chama direto, sem HTTP. ---
 
 func handleListUserPaints(svc *service.PaintService) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
@@ -87,15 +94,42 @@ func handleListUserPaints(svc *service.PaintService) fasthttp.RequestHandler {
 	}
 }
 
+// decodeUserPaintBody decodifica o corpo em v SEM eco: erro de JSON vira 400
+// "pedido inválido" fixo — readJSON (json.go) ecoa err.Error(), proibido aqui
+// pelo contrato do rf-17 (nunca devolver o que o cliente mandou).
+func decodeUserPaintBody(ctx *fasthttp.RequestCtx, v any) bool {
+	if err := json.Unmarshal(ctx.PostBody(), v); err != nil {
+		writeError(ctx, fasthttp.StatusBadRequest, "pedido inválido")
+		return false
+	}
+	return true
+}
+
+// writeUserPaintError traduz o erro tipado do service (sentinela not-found e
+// erro de entrada) pro código HTTP certo, sem casar por texto.
+func writeUserPaintError(ctx *fasthttp.RequestCtx, err error) {
+	var inputErr *service.UserPaintInputError
+	switch {
+	case errors.As(err, &inputErr):
+		writeError(ctx, fasthttp.StatusBadRequest, inputErr.Msg)
+	case errors.Is(err, service.ErrUserPaintNotFound):
+		writeError(ctx, fasthttp.StatusNotFound, err.Error())
+	default:
+		log.Printf("[user-paints] %v", err)
+		writeError(ctx, fasthttp.StatusInternalServerError, "não foi possível gravar a tinta")
+	}
+}
+
 func handleAddUserPaint(svc *service.PaintService) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		var p service.UserPaintDTO
-		if !readJSON(ctx, &p) {
+		if !decodeUserPaintBody(ctx, &p) {
 			return
 		}
+		p.ID = 0 // contrato: id do corpo é ignorado
 		saved, err := svc.AddUserPaint(p)
 		if err != nil {
-			writeError(ctx, fasthttp.StatusBadRequest, err.Error())
+			writeUserPaintError(ctx, err)
 			return
 		}
 		writeJSON(ctx, fasthttp.StatusCreated, saved)
@@ -109,13 +143,13 @@ func handleUpdateUserPaint(svc *service.PaintService) fasthttp.RequestHandler {
 			return
 		}
 		var p service.UserPaintDTO
-		if !readJSON(ctx, &p) {
+		if !decodeUserPaintBody(ctx, &p) {
 			return
 		}
 		p.ID = id
 		saved, err := svc.UpdateUserPaint(p)
 		if err != nil {
-			writeError(ctx, fasthttp.StatusBadRequest, err.Error())
+			writeUserPaintError(ctx, err)
 			return
 		}
 		writeJSON(ctx, fasthttp.StatusOK, saved)
@@ -129,10 +163,37 @@ func handleDeleteUserPaint(svc *service.PaintService) fasthttp.RequestHandler {
 			return
 		}
 		if err := svc.DeleteUserPaint(id); err != nil {
-			writeError(ctx, fasthttp.StatusNotFound, err.Error())
+			writeUserPaintError(ctx, err)
 			return
 		}
 		ctx.SetStatusCode(fasthttp.StatusNoContent)
+	}
+}
+
+// handleMigrateUserPaints atende POST /user-paints/migrate — grava o estoque
+// de um navegador (rf-17, RN5/RN6). Corpo externo decodificado sem eco;
+// deviceId/paints[] repassados ao service, que valida e roda a transação.
+func handleMigrateUserPaints(svc *service.PaintService) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		var body struct {
+			DeviceID string            `json:"deviceId"`
+			Paints   []json.RawMessage `json:"paints"`
+		}
+		if !decodeUserPaintBody(ctx, &body) {
+			return
+		}
+		result, err := svc.MigrateUserPaints(body.DeviceID, body.Paints)
+		if err != nil {
+			var inputErr *service.UserPaintInputError
+			if errors.As(err, &inputErr) {
+				writeError(ctx, fasthttp.StatusBadRequest, inputErr.Msg)
+				return
+			}
+			log.Printf("[user-paints] migrate: %v", err)
+			writeError(ctx, fasthttp.StatusInternalServerError, "não foi possível migrar o estoque")
+			return
+		}
+		writeJSON(ctx, fasthttp.StatusOK, result)
 	}
 }
 

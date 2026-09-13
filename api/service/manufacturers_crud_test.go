@@ -29,6 +29,7 @@ func newManufacturersTestService(t *testing.T) *PaintService {
 		);
 		CREATE TABLE product_lines (id INTEGER PRIMARY KEY AUTOINCREMENT, manufacturer_id INTEGER NOT NULL REFERENCES manufacturers(id), name TEXT NOT NULL);
 		CREATE TABLE paints (id INTEGER PRIMARY KEY AUTOINCREMENT, manufacturer_id INTEGER NOT NULL REFERENCES manufacturers(id), product_line_id INTEGER REFERENCES product_lines(id));
+		CREATE TABLE paint_types (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE);
 		CREATE TABLE recipes (id INTEGER PRIMARY KEY AUTOINCREMENT, source_manufacturer_id INTEGER REFERENCES manufacturers(id), target_manufacturer_id INTEGER REFERENCES manufacturers(id));
 		CREATE TABLE resources (id INTEGER PRIMARY KEY AUTOINCREMENT, manufacturer_id INTEGER REFERENCES manufacturers(id));
 		INSERT INTO manufacturers (id, name) VALUES (1, 'Vallejo');

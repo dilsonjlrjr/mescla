@@ -11,8 +11,12 @@
   import ReceitasView from './lib/views/ReceitasView.svelte';
   import CatalogoView from './lib/views/CatalogoView.svelte';
   import { nav, initNav } from './lib/nav.svelte';
-  import { loadCatalog } from './lib/services/catalog';
+  import { loadCatalog, migrateLegacyManufacturers, reloadManufacturers, reloadPaintTypes } from './lib/services/catalog';
   import { engineReady } from './lib/services/engine';
+  import { carregarEstoque, definirMigrando } from './lib/services/stock.svelte';
+  import { migrarEstoqueLocal } from './lib/services/estoque-migracao';
+  import { toast } from './lib/toast.svelte';
+  import { t } from './lib/i18n.svelte';
   import { initPwa } from './lib/pwa.svelte';
 
   let booted = $state(false);
@@ -25,11 +29,43 @@
   // EM PARALELO sem travar — quem precisar dele aguarda via engineReady().
   void engineReady().catch(e => console.error('Motor de cor não inicializou:', e));
   loadCatalog()
-    .then(() => (booted = true))
+    .then(() => {
+      booted = true;
+      void iniciarEstoque();
+    })
     .catch(e => {
       console.error('Catálogo não carregou:', e);
       bootError = 'O catálogo não carregou. Verifique a conexão e recarregue.';
     });
+
+  // rf-17: o estoque vive no servidor. A carga começa já (T4 mostra spinner, não
+  // lista vazia); os fabricantes locais antigos sobem antes do estoque local,
+  // senão a migração recusaria tinta de fabricante que só existia no aparelho.
+  async function iniciarEstoque(): Promise<void> {
+    // T1/T2 esperam até o fim deste bloco: a carga paralela voltaria "pronto"
+    // com 0 tintas antes de a migração do navegador enviar as dele.
+    definirMigrando(true);
+    try {
+      void carregarEstoque({ mostrarCarregando: true });
+      try {
+        const pendentes = await migrateLegacyManufacturers();
+        if (pendentes > 0) toast(t('errMakerMigrate'), 'error');
+        await Promise.allSettled([reloadManufacturers(), reloadPaintTypes()]);
+      } catch (e) {
+        console.error('Fabricantes locais não subiram:', e);
+      }
+      await migrarEstoqueLocal();
+      await carregarEstoque();
+    } finally {
+      definirMigrando(false);
+    }
+  }
+
+  // RN11/M6: outra janela ou aparelho pode ter mudado o estoque.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !booted) return;
+    void migrarEstoqueLocal().then(() => carregarEstoque());
+  });
 
   // As 4 telas ficam montadas (display:none) pra preservar estado ao trocar —
   // troca de idioma ou de aba não perde a resposta atual (US-18, NFR-09).

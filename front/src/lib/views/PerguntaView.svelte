@@ -97,7 +97,7 @@
     type EquivalentRecipe, type BrandBest, type SearchResult,
   } from '../services/engine';
   import { shelf, inShelf, toggleShelf } from '../services/shelf.svelte';
-  import { stock } from '../services/stock.svelte';
+  import { stock, estoqueAssentado } from '../services/stock.svelte';
   import { saveRecipe } from '../services/recipes.svelte';
   import { switchTab, pushLayer } from '../nav.svelte';
   import { appState } from '../appState.svelte';
@@ -373,6 +373,15 @@
       let motivoServidor = '';
 
       if (universo.tipo === 'estoque') {
+        // rf-17 RN13: o estoque vem do servidor. Sem esperar a primeira carga,
+        // a lista vazia do boot diria que o pintor não tem tinta nenhuma.
+        await estoqueAssentado();
+        if (seq !== requestSeq) return;
+        if (stock.estado === 'erro' && stock.paints.length === 0) {
+          poolVazioBody = t('stockLoadError');
+          stage = 'pool-vazio';
+          return;
+        }
         if (shelf.manufacturerIds.length === 0 && stock.paints.length === 0) {
           poolVazioBody = t('noneBodyStock');
           stage = 'pool-vazio';

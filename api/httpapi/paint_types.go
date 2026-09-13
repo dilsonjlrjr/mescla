@@ -78,7 +78,11 @@ func writePaintTypeError(ctx *fasthttp.RequestCtx, err error) {
 	case errors.As(err, &nameErr):
 		writeError(ctx, fasthttp.StatusBadRequest, nameErr.Msg)
 	case errors.As(err, &inUseErr):
-		writeError(ctx, fasthttp.StatusConflict, inUseErr.Error())
+		writeJSON(ctx, fasthttp.StatusConflict, map[string]any{
+			"error":  inUseErr.Error(),
+			"paints": inUseErr.Paints,
+			"stock":  inUseErr.Stock,
+		})
 	case errors.Is(err, service.ErrPaintTypeNotFound):
 		writeError(ctx, fasthttp.StatusNotFound, "Tipo de tinta não encontrado.")
 	case errors.Is(err, service.ErrPaintTypeDuplicate):

@@ -29,6 +29,7 @@ func newUniversoTestService(t *testing.T) *PaintService {
 			paint_id INTEGER NOT NULL,
 			rgb_r INTEGER, rgb_g INTEGER, rgb_b INTEGER
 		);
+		CREATE TABLE paint_types (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE);
 		INSERT INTO manufacturers (id, name) VALUES (1, 'Acrilex'), (2, 'Citadel');
 
 		INSERT INTO paints (id, manufacturer_id, name, code) VALUES

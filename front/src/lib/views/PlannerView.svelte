@@ -24,7 +24,7 @@
     type EquivalentRecipe, type UniversoBusca,
   } from '../services/engine';
   import { allManufacturers } from '../services/catalog';
-  import { stock, relinkStockManufacturers } from '../services/stock.svelte';
+  import { stock, estoqueAssentado } from '../services/stock.svelte';
   import { verdictKeys } from '../ui';
   import { t, decimal, type DictKey } from '../i18n.svelte';
   import { toast } from '../toast.svelte';
@@ -909,7 +909,13 @@
       return ep === aberturaSeq && agora && agora.calcSeq === seq ? agora : null;
     };
     try {
-      const resp = await suggestRecipeForColor(inicio.r, inicio.g, inicio.b, universoDaRegiao(inicio));
+      const universo = universoDaRegiao(inicio);
+      if (universo.useStockOnly) {
+        // rf-17 RN13: o estoque vem do servidor — sem esperar a carga, iria vazio.
+        await estoqueAssentado();
+        universo.stock = stock.paints;
+      }
+      const resp = await suggestRecipeForColor(inicio.r, inicio.g, inicio.b, universo);
       const agora = vigente();
       if (!agora) return;
       if (!resp) {
@@ -1139,9 +1145,6 @@
     draftBannerVisible = comRascunho;
     alteracaoSeqSalva = alteracaoSeq;
     autoSaveStatus = estadoAutoSave();
-    // A3 do plano E1: o estoque local precisa do id de fabricante atual para
-    // a interseção por id no servidor.
-    relinkStockManufacturers(manufacturers);
     modo = 'editor';
   }
 
@@ -1299,7 +1302,12 @@
     if (!inicio) return;
     inicio.computing = true;
     try {
-      const resp = await suggestRecipeForColor(inicio.r, inicio.g, inicio.b, universoDaRegiao(inicio, ctx));
+      const universo = universoDaRegiao(inicio, ctx);
+      if (universo.useStockOnly) {
+        await estoqueAssentado();
+        universo.stock = stock.paints;
+      }
+      const resp = await suggestRecipeForColor(inicio.r, inicio.g, inicio.b, universo);
       if (ep !== aberturaSeq) return;
       const agora = alvo();
       if (!agora) return;

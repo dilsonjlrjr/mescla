@@ -18,21 +18,24 @@ var (
 	ErrPaintTypeDuplicate = errors.New("nome de tipo de tinta repetido")
 )
 
-// PaintTypeInUseError recusa a exclusão: tinta do catálogo usa o tipo.
-type PaintTypeInUseError struct{ Paints int }
+// PaintTypeInUseError recusa a exclusão: tinta do catálogo ou do estoque do
+// servidor usa o tipo (rf-17: Stock passou a contar também).
+type PaintTypeInUseError struct{ Paints, Stock int }
 
 func (e *PaintTypeInUseError) Error() string {
-	return fmt.Sprintf("O tipo de tinta é usado por %d tintas do catálogo e não pode ser excluído.", e.Paints)
+	return fmt.Sprintf("O tipo de tinta é usado por %d tintas do catálogo e %d no estoque e não pode ser excluído.", e.Paints, e.Stock)
 }
 
 type PaintTypeDTO struct {
-	ID         int64  `json:"id"`
-	Name       string `json:"name"`
-	PaintCount int    `json:"paintCount"`
+	ID             int64  `json:"id"`
+	Name           string `json:"name"`
+	PaintCount     int    `json:"paintCount"`
+	UserPaintCount int    `json:"userPaintCount"`
 }
 
 const paintTypeSelect = `
-	SELECT t.id, t.name, (SELECT COUNT(*) FROM paints p WHERE p.paint_type_id = t.id)
+	SELECT t.id, t.name, (SELECT COUNT(*) FROM paints p WHERE p.paint_type_id = t.id),
+	       (SELECT COUNT(*) FROM user_paints up WHERE up.paint_type_id = t.id)
 	FROM paint_types t`
 
 // ensurePaintTypeDefaults semeia Acrílica e Wash e marca o catálogo inteiro
@@ -96,7 +99,7 @@ func (s *PaintService) GetPaintTypes() ([]PaintTypeDTO, error) {
 	result := []PaintTypeDTO{}
 	for rows.Next() {
 		var t PaintTypeDTO
-		if err := rows.Scan(&t.ID, &t.Name, &t.PaintCount); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.PaintCount, &t.UserPaintCount); err != nil {
 			return nil, err
 		}
 		result = append(result, t)
@@ -106,7 +109,7 @@ func (s *PaintService) GetPaintTypes() ([]PaintTypeDTO, error) {
 
 func (s *PaintService) paintTypeByID(id int64) (PaintTypeDTO, error) {
 	var t PaintTypeDTO
-	err := s.db.QueryRow(paintTypeSelect+` WHERE t.id = ?`, id).Scan(&t.ID, &t.Name, &t.PaintCount)
+	err := s.db.QueryRow(paintTypeSelect+` WHERE t.id = ?`, id).Scan(&t.ID, &t.Name, &t.PaintCount, &t.UserPaintCount)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PaintTypeDTO{}, ErrPaintTypeNotFound
 	}
@@ -144,7 +147,7 @@ func (s *PaintService) paintTypeWriteError(err error, id int64) error {
 		if lookupErr != nil {
 			return lookupErr
 		}
-		return &PaintTypeInUseError{Paints: t.PaintCount}
+		return &PaintTypeInUseError{Paints: t.PaintCount, Stock: t.UserPaintCount}
 	}
 	return err
 }
@@ -193,17 +196,20 @@ func (s *PaintService) UpdatePaintType(id int64, name string) (PaintTypeDTO, err
 	return s.paintTypeByID(id)
 }
 
-// DeletePaintType exclui um tipo que nenhuma tinta do catálogo usa. O DELETE é
-// condicional num comando só: tinta que ganhe o tipo no meio impede a
-// exclusão em vez de ficar apontando para um tipo que não existe.
+// DeletePaintType exclui um tipo que nenhuma tinta do catálogo nem do estoque
+// do servidor usa (rf-17). O DELETE é condicional num comando só: tinta que
+// ganhe o tipo no meio impede a exclusão em vez de ficar apontando para um
+// tipo que não existe.
 func (s *PaintService) DeletePaintType(id int64) error {
 	if _, err := s.paintTypeByID(id); err != nil {
 		return err
 	}
 	res, err := s.db.Exec(`
 		DELETE FROM paint_types
-		WHERE id = ? AND NOT EXISTS (SELECT 1 FROM paints WHERE paint_type_id = ?)
-	`, id, id)
+		WHERE id = ?
+		  AND NOT EXISTS (SELECT 1 FROM paints WHERE paint_type_id = ?)
+		  AND NOT EXISTS (SELECT 1 FROM user_paints WHERE paint_type_id = ?)
+	`, id, id, id)
 	if err != nil {
 		return s.paintTypeWriteError(err, id)
 	}
@@ -216,7 +222,7 @@ func (s *PaintService) DeletePaintType(id int64) error {
 		if err != nil {
 			return err
 		}
-		return &PaintTypeInUseError{Paints: t.PaintCount}
+		return &PaintTypeInUseError{Paints: t.PaintCount, Stock: t.UserPaintCount}
 	}
 	return nil
 }

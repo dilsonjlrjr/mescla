@@ -36,6 +36,9 @@ async function send<T>(method: string, path: string, body?: unknown): Promise<T>
     throw new ApiError(e instanceof Error ? e.message : String(e), 0);
   }
   if (!res.ok) throw new ApiError(await parseErrorBody(res), res.status);
+  // 204 não tem corpo: `res.json()` lançaria e uma exclusão bem-sucedida
+  // pareceria falha (rf-17, DELETE /user-paints).
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
