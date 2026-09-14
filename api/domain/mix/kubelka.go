@@ -64,10 +64,8 @@ func MisturaSubtrativa(colors []PaintInput, weights []float64) (r, g, b uint8) {
 	}
 
 	var soma float64
-	limpos := make([]float64, len(weights))
-	for i, w := range weights {
+	for _, w := range weights {
 		if w > 0 && !math.IsNaN(w) && !math.IsInf(w, 0) {
-			limpos[i] = w
 			soma += w
 		}
 	}
@@ -83,28 +81,25 @@ func MisturaSubtrativa(colors []PaintInput, weights []float64) (r, g, b uint8) {
 	// clarear com branco é a mistura mais comum na bancada. Com S estimado
 	// pela própria refletância do canal, vermelho com branco volta a dar rosa
 	// em vez de continuar vermelho.
+	//
+	// rf-20 RN6: K e S por byte vêm de tabela (mesma conta, feita uma vez); a
+	// ordem das somas é a de antes, então o resultado é idêntico.
 	var kR, sR, kG, sG, kB, sB float64
 	for i, c := range colors {
-		p := limpos[i] / soma
+		w := weights[i]
+		if !(w > 0) || math.IsInf(w, 0) {
+			continue
+		}
+		p := w / soma
 		if p == 0 {
 			continue
 		}
-		for _, ch := range []struct {
-			valor uint8
-			k, s  *float64
-		}{
-			{c.R, &kR, &sR},
-			{c.G, &kG, &sG},
-			{c.B, &kB, &sB},
-		} {
-			r := float64(ch.valor) / 255
-			if r < refletanciaMinima {
-				r = refletanciaMinima
-			}
-			espalhamento := r
-			*ch.k += p * ksDaRefletancia(r) * espalhamento
-			*ch.s += p * espalhamento
-		}
+		kR += p * tabelaKS[c.R].k
+		sR += p * tabelaKS[c.R].s
+		kG += p * tabelaKS[c.G].k
+		sG += p * tabelaKS[c.G].s
+		kB += p * tabelaKS[c.B].k
+		sB += p * tabelaKS[c.B].s
 	}
 
 	ksR := razao(kR, sR)
@@ -113,6 +108,20 @@ func MisturaSubtrativa(colors []PaintInput, weights []float64) (r, g, b uint8) {
 
 	return canal(refletanciaDoKS(ksR)), canal(refletanciaDoKS(ksG)), canal(refletanciaDoKS(ksB))
 }
+
+// tabelaKS guarda, por valor de canal, K (ks·espalhamento) e S (espalhamento)
+// como MisturaSubtrativa calculava a cada chamada.
+var tabelaKS = func() (t [256]struct{ k, s float64 }) {
+	for v := range t {
+		r := float64(v) / 255
+		if r < refletanciaMinima {
+			r = refletanciaMinima
+		}
+		t[v].k = ksDaRefletancia(r) * r
+		t[v].s = r
+	}
+	return
+}()
 
 // razao devolve K/S protegendo contra espalhamento nulo.
 func razao(k, s float64) float64 {

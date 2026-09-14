@@ -17,10 +17,14 @@ import (
 // minIngredients força um piso de tintas: com 1, aceita "use só a tinta X"
 // (equivalência 1:1, boa entre marcas diferentes); com 2, obriga mistura de
 // verdade (usado dentro da mesma marca, onde devolver ~100% de uma tinta é
-// inútil). maxIngredients <= 0 significa SEM TETO.
+// inútil). maxIngredients <= 0 usa o teto padrão de 4 tintas (rf-20 RN1).
 func SuggestBestSubset(target [3]float64, candidates []PaintInput, minIngredients, maxIngredients int) Recipe {
 	if len(candidates) == 0 {
 		return Recipe{Method: "none"}
+	}
+	// rf-20 RN1: o teto padrão vale também para a mistura forçada abaixo.
+	if maxIngredients <= 0 {
+		maxIngredients = tetoPadraoDeTintas
 	}
 
 	engine := NewEngine()

@@ -39,7 +39,7 @@ func RGBToHSV(r, g, b uint8) (h, s, v float64) {
 
 	switch max {
 	case rf:
-		h = 60 * (math.Mod(((gf-bf)/delta), 6))
+		h = 60 * (math.Mod(((gf - bf) / delta), 6))
 	case gf:
 		h = 60 * (((bf - rf) / delta) + 2)
 	case bf:
@@ -118,7 +118,7 @@ func RGBToHSL(r, g, b uint8) (h, s, l float64) {
 
 	switch max {
 	case rf:
-		h = 60 * (math.Mod(((gf-bf)/delta), 6))
+		h = 60 * (math.Mod(((gf - bf) / delta), 6))
 	case gf:
 		h = 60 * (((bf - rf) / delta) + 2)
 	case bf:
@@ -179,14 +179,10 @@ func HSLToRGB(h, s, l float64) (r, g, b uint8) {
 
 // RGBToXYZ converte RGB (0-255) para XYZ (D65 illuminant)
 func RGBToXYZ(r, g, b uint8) (x, y, z float64) {
-	rf := float64(r) / 255
-	gf := float64(g) / 255
-	bf := float64(b) / 255
-
-	// Inverse sRGB companding
-	rf = linearize(rf)
-	gf = linearize(gf)
-	bf = linearize(bf)
+	// Inverse sRGB companding, por tabela (mesma conta de linearize).
+	rf := canalLinear[r]
+	gf := canalLinear[g]
+	bf := canalLinear[b]
 
 	// sRGB to XYZ (D65)
 	x = 0.4124564*rf + 0.3575761*gf + 0.1804375*bf
@@ -270,6 +266,15 @@ func LCHToLab(l, c, h float64) (l2, a, b float64) {
 	return
 }
 
+// canalLinear guarda linearize(v/255) para cada byte: RGBToXYZ é chamada
+// milhões de vezes pelo motor de mistura, e math.Pow dominava o tempo.
+var canalLinear = func() (t [256]float64) {
+	for v := range t {
+		t[v] = linearize(float64(v) / 255)
+	}
+	return
+}()
+
 // linearize aplica inverse sRGB companding
 func linearize(v float64) float64 {
 	if v <= 0.04045 {
@@ -290,7 +295,7 @@ func delinearize(v float64) float64 {
 func labF(t float64) float64 {
 	const delta = 6.0 / 29.0
 	if t > delta*delta*delta {
-		return math.Pow(t, 1.0/3.0)
+		return math.Cbrt(t)
 	}
 	return t/(3*delta*delta) + 4.0/29.0
 }

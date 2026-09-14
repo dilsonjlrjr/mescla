@@ -56,8 +56,8 @@ func DeltaE2000(lab1, lab2 [3]float64) float64 {
 	c2 := math.Sqrt(a2*a2 + b2*b2)
 	cab := (c1 + c2) / 2
 
-	cab7 := math.Pow(cab, 7)
-	g := 0.5 * (1 - math.Sqrt(cab7/(cab7+math.Pow(25, 7))))
+	cab7 := pot7(cab)
+	g := 0.5 * (1 - math.Sqrt(cab7/(cab7+vinteECincoA7)))
 
 	a1p := a1 * (1 + g)
 	a2p := a2 * (1 + g)
@@ -126,9 +126,9 @@ func DeltaE2000(lab1, lab2 [3]float64) float64 {
 	sc := 1 + 0.045*cp
 	sh := 1 + 0.015*cp*t
 
-	cp7 := math.Pow(cp, 7)
-	rt := -2 * math.Sqrt(cp7/(cp7+math.Pow(25, 7))) *
-		math.Sin(60*math.Exp(-math.Pow((hp-275)/25, 2))*math.Pi/180)
+	cp7 := pot7(cp)
+	rt := -2 * math.Sqrt(cp7/(cp7+vinteECincoA7)) *
+		math.Sin(60*math.Exp(-quad((hp-275)/25))*math.Pi/180)
 
 	// Weighting factors
 	const kL = 1.0
@@ -136,8 +136,20 @@ func DeltaE2000(lab1, lab2 [3]float64) float64 {
 	const kH = 1.0
 
 	return math.Sqrt(
-		math.Pow(dl/(kL*sl), 2) +
-			math.Pow(dc/(kC*sc), 2) +
-			math.Pow(dh/(kH*sh), 2) +
+		quad(dl/(kL*sl)) +
+			quad(dc/(kC*sc)) +
+			quad(dh/(kH*sh)) +
 			rt*(dc/(kC*sc))*(dh/(kH*sh)))
+}
+
+// vinteECincoA7 é 25^7, constante do termo G e do RT do ΔE00.
+const vinteECincoA7 = 6103515625.0
+
+// quad e pot7 trocam math.Pow por multiplicação: o ΔE00 é chamado milhões de
+// vezes pelo motor de mistura (rf-20 RN6) e math.Pow dominava o tempo.
+func quad(x float64) float64 { return x * x }
+
+func pot7(x float64) float64 {
+	x2 := x * x
+	return x2 * x2 * x2 * x
 }

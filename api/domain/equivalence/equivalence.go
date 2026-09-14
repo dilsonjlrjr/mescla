@@ -41,7 +41,7 @@ type Result struct {
 //   - Reproducible reflete MaxViableDeltaE.
 //
 // maxIngredients é o teto repassado direto a mix.SuggestBestSubset (rf-13
-// RN5): <= 0 significa sem teto.
+// RN5): <= 0 usa o teto padrão de 4 tintas (rf-20 RN1).
 func Suggest(source mix.PaintInput, sourceManufacturer, targetManufacturer string, candidates []mix.PaintInput, maxIngredients int) (Result, error) {
 	kept := make([]mix.PaintInput, 0, len(candidates))
 	for _, c := range candidates {
