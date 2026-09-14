@@ -9,6 +9,9 @@
     id: number;
     name: string;
     hint?: string;
+    /** rf-18 RN1: texto de busca alternativo (ex.: nome + código + marca).
+     *  Ausente = busca por `name`, como antes. */
+    searchText?: string;
   }
 
   interface Props {
@@ -76,7 +79,7 @@
   let filtered = $derived.by(() => {
     const q = norm(search.trim());
     if (!q) return options;
-    return options.filter((o) => norm(o.name).includes(q));
+    return options.filter((o) => norm(o.searchText ?? o.name).includes(q));
   });
 
   let visible = $derived(filtered.slice(0, MAX_VISIBLE));

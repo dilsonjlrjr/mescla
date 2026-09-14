@@ -39,6 +39,9 @@ export interface RegiaoRascunho {
   faixa?: string;
   method?: string;
   ingredients?: IngredienteRascunho[];
+  /** rf-18: tinta escolhida à mão e cor lida da foto antes de uma correção. */
+  regionManual?: boolean;
+  sampleHex?: string;
 }
 
 export interface IngredienteRascunho {
@@ -145,6 +148,8 @@ function normalizarRegiao(r: unknown): RegiaoRascunho | null {
     resultB: corOuNulo(o.resultB),
     faixa: typeof o.faixa === 'string' && FAIXAS_VALIDAS.includes(o.faixa) ? o.faixa : '',
     method: typeof o.method === 'string' ? o.method.slice(0, 60) : '',
+    regionManual: normalizarBooleano(o.regionManual),
+    sampleHex: typeof o.sampleHex === 'string' && /^#[0-9a-f]{6}$/i.test(o.sampleHex) ? o.sampleHex.toLowerCase() : '',
     ingredients: (Array.isArray(o.ingredients) ? o.ingredients : [])
       .map(normalizarIngrediente)
       .filter((i): i is IngredienteRascunho => i !== null)

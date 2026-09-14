@@ -20,10 +20,10 @@
     fitView, toImage, toScreen, zoomAround, zoomPercent, type View,
   } from '../planner/viewport';
   import {
-    suggestRecipeForColor, melhorDeltaE, ehUniversoVazio,
-    type EquivalentRecipe, type UniversoBusca,
+    suggestRecipeForColor, melhorDeltaE, ehUniversoVazio, recipeForChosenPaint,
+    type EquivalentRecipe, type UniversoBusca, type StockPaint,
   } from '../services/engine';
-  import { allManufacturers } from '../services/catalog';
+  import { allManufacturers, allPaints, paintById } from '../services/catalog';
   import { stock, estoqueAssentado } from '../services/stock.svelte';
   import { verdictKeys } from '../ui';
   import { t, decimal, type DictKey } from '../i18n.svelte';
@@ -64,6 +64,10 @@
     calcSeq: number;
     /** rf-16 RN20: motivo de universo vazio desta região. */
     vazioMotivo: string | null;
+    /** rf-18 RN1-RN5: tinta escolhida à mão — fora de todo recálculo automático. */
+    manual: boolean;
+    /** rf-18 RN6/RN7: cor lida da foto antes de uma correção; `''` = nunca corrigida. */
+    sampleHex: string;
   }
 
   interface RegiaoSalva {
@@ -132,8 +136,22 @@
   let selectedId: number | null = $state(null);
 
   let view: View = $state({ zoom: 1, panX: 0, panY: 0 });
-  let touchStartDist = 0;
-  let touchStartZoom = 1;
+
+  // ── rf-18 RN10-RN14: ferramenta mão e Pointer Events ──
+  let ferramenta = $state<'marcar' | 'mover'>('marcar');
+  let arrastando = $state(false);
+  /** Ponteiros ativos — não é `$state`: só orienta o cálculo do gesto a cada
+   *  evento, nunca é lido pelo template. */
+  const ponteiros = new Map<number, { x: number; y: number }>();
+  /** Registro do gesto corrente (não reativo, mesmo motivo). */
+  const gesto = {
+    multi: false,
+    startX: 0,
+    startY: 0,
+    maxDist: 0,
+    lastDist: 0,
+    lastMid: { x: 0, y: 0 },
+  };
 
   let manufacturers = $derived(allManufacturers());
   let manufacturerId: number | null = $state(null);
@@ -218,6 +236,7 @@
     selectedId = aba.selectedId;
     view = aba.view;
     regiaoNoDialogo = null;
+    limparPonteiros();
   }
 
   function switchTab(i: number): void {
@@ -375,7 +394,39 @@
     if (renomeandoTitulo) tituloInputEl?.focus();
   });
 
+  // Achado 9 do guardrail: `{#if hasImage}` desmonta o <canvas> — um dedo no
+  // chão nesse instante deixaria o id velho no mapa de ponteiros.
+  $effect(() => {
+    if (!hasImage) limparPonteiros();
+  });
+
   let selectedRegion = $derived(regions.find(r => r.id === selectedId) ?? null);
+
+  // ── rf-18 RN6/RN7: correção da cor da região selecionada ──
+  let corTexto = $state('');
+  let corInvalida = $state(false);
+  $effect(() => {
+    const reg = selectedRegion;
+    corInvalida = false;
+    corTexto = reg ? reg.hex : '';
+  });
+
+  // ── rf-18 RN1: opções do Combobox "Escolher a tinta eu mesmo" ──
+  let opcoesTintaManual = $derived.by(() => {
+    const doEstoque = stock.paints.map(p => ({
+      id: p.id,
+      name: p.name,
+      hint: `${p.manufacturer} · ${p.code} · ${t('paintHintHave')}`,
+      searchText: `${p.name} ${p.code} ${p.manufacturer}`,
+    }));
+    const doCatalogo = allPaints().map(p => ({
+      id: p.id,
+      name: p.name,
+      hint: `${p.manufacturer} · ${p.code}`,
+      searchText: `${p.name} ${p.code} ${p.manufacturer}`,
+    }));
+    return [...doEstoque, ...doCatalogo];
+  });
   let totalRegionsCount = $derived(tabs.reduce((acc, _a, i) => acc + tabRegions(i).length, 0));
   let paintedCount = $derived(
     tabs.reduce((acc, _a, i) => acc + tabRegions(i).filter(r => r.painted).length, 0)
@@ -650,42 +701,109 @@
     zoomBy(e.deltaY < 0 ? 1.12 : 1 / 1.12, { x: mx, y: my });
   }
 
-  function getTouchDist(tl: TouchList): number {
-    if (tl.length < 2) return 0;
-    return Math.hypot(tl[0].clientX - tl[1].clientX, tl[0].clientY - tl[1].clientY);
+  /** RN11/RN13: a região só nasce/seleciona no `pointerup`, e só se o gesto
+   *  não passou de 1 ponteiro nem de 6px CSS de distância máxima. */
+  function onPointerDown(e: PointerEvent) {
+    if (!canvasEl || !image) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    canvasEl.setPointerCapture?.(e.pointerId);
+    ponteiros.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ponteiros.size <= 1) {
+      gesto.multi = false;
+      gesto.startX = e.clientX;
+      gesto.startY = e.clientY;
+      gesto.maxDist = 0;
+    } else if (ponteiros.size === 2) {
+      gesto.multi = true;
+      reinitGestoPinca();
+    }
   }
 
-  function onTouchStart(e: TouchEvent) {
+  /** Achado 8 do guardrail: recalcula `lastDist`/`lastMid` a partir do par
+   *  ATUAL de ponteiros sempre que a contagem vira exatamente 2 — no
+   *  `pointerdown` (1→2) e no `pointerup`/`pointercancel` (3→2). Sem isso, o
+   *  próximo `pointermove` compara a distância do par novo com a do trio
+   *  anterior e o zoom salta. */
+  function reinitGestoPinca(): void {
+    const pts = [...ponteiros.values()];
+    gesto.lastDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    gesto.lastMid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+  }
+
+  /** RN12: pinça (zoom + deslocamento pelo meio dos dedos) com 2+ ponteiros;
+   *  RN13: com 1 ponteiro, "mover" arrasta a foto e "marcar" só acumula a
+   *  distância máxima do gesto. */
+  function onPointerMove(e: PointerEvent) {
     if (!canvasEl || !image) return;
-    e.preventDefault();
-    if (e.touches.length === 2) {
-      touchStartDist = getTouchDist(e.touches);
-      touchStartZoom = view.zoom;
+    const anterior = ponteiros.get(e.pointerId);
+    if (!anterior) return;
+    ponteiros.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (ponteiros.size >= 2) {
+      const pts = [...ponteiros.values()];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+      if (gesto.lastDist > 0 && dist > 0) {
+        const { mx, my } = canvasPos(mid.x, mid.y);
+        view = zoomAround(view, dist / gesto.lastDist, { x: mx, y: my });
+      }
+      view = { ...view, panX: view.panX + (mid.x - gesto.lastMid.x), panY: view.panY + (mid.y - gesto.lastMid.y) };
+      gesto.lastDist = dist;
+      gesto.lastMid = mid;
+      draw();
       return;
     }
-    if (e.touches.length === 1) {
-      const tt = e.touches[0];
-      handlePoint(tt.clientX, tt.clientY);
-    }
-  }
 
-  function onTouchMove(e: TouchEvent) {
-    if (!canvasEl || !image) return;
-    e.preventDefault();
-    if (e.touches.length === 2 && touchStartDist > 0) {
-      const dist = getTouchDist(e.touches);
-      const alvo = touchStartZoom * (dist / touchStartDist);
-      const meio = canvasPos(
-        (e.touches[0].clientX + e.touches[1].clientX) / 2,
-        (e.touches[0].clientY + e.touches[1].clientY) / 2,
-      );
-      view = zoomAround(view, alvo / view.zoom, { x: meio.mx, y: meio.my });
+    // Gesto que chegou a ter 2 ponteiros: o dedo que sobra não move a foto
+    // até todos soltarem (observação de construção do rf-18).
+    if (gesto.multi) return;
+
+    const dist = Math.hypot(e.clientX - gesto.startX, e.clientY - gesto.startY);
+    if (dist > gesto.maxDist) gesto.maxDist = dist;
+    if (ferramenta === 'mover') {
+      view = { ...view, panX: view.panX + (e.clientX - anterior.x), panY: view.panY + (e.clientY - anterior.y) };
+      arrastando = true;
       draw();
     }
   }
 
-  function onCanvasClick(e: MouseEvent) {
-    handlePoint(e.clientX, e.clientY);
+  function onPointerUp(e: PointerEvent) {
+    const tinha = ponteiros.has(e.pointerId);
+    ponteiros.delete(e.pointerId);
+    if (ponteiros.size === 0) {
+      if (tinha && !gesto.multi && ferramenta === 'marcar' && gesto.maxDist <= 6) {
+        handlePoint(e.clientX, e.clientY);
+      }
+      gesto.multi = false;
+      gesto.maxDist = 0;
+      arrastando = false;
+    } else if (ponteiros.size === 2) {
+      reinitGestoPinca();
+    }
+  }
+
+  /** Também usado em `onlostpointercapture` (achado 8): mesmo tratamento —
+   *  tira o id do mapa sem tentar criar/mover nada. */
+  function onPointerCancel(e: PointerEvent) {
+    ponteiros.delete(e.pointerId);
+    if (ponteiros.size === 0) {
+      gesto.multi = false;
+      gesto.maxDist = 0;
+      arrastando = false;
+    } else if (ponteiros.size === 2) {
+      reinitGestoPinca();
+    }
+  }
+
+  /** Achado 9 do guardrail: zera ponteiros e o gesto corrente por inteiro —
+   *  usado ao desmontar o canvas (aba sem foto), trocar de aba e entrar no
+   *  editor, para que um id de ponteiro velho nunca sobreviva e faça o
+   *  próximo toque parecer multi (sem criar região). */
+  function limparPonteiros(): void {
+    ponteiros.clear();
+    gesto.multi = false;
+    gesto.maxDist = 0;
+    arrastando = false;
   }
 
   function handlePoint(clientX: number, clientY: number) {
@@ -715,7 +833,37 @@
     tmp.height = image.height;
     const tctx = tmp.getContext('2d')!;
     tctx.drawImage(image, 0, 0);
-    const [r, g, b] = Array.from(tctx.getImageData(ix, iy, 1, 1).data);
+    // RN9: média de uma janela 5×5 (3×3 no canto), recortada nas bordas da foto.
+    const x0 = Math.max(0, ix - 2);
+    const y0 = Math.max(0, iy - 2);
+    const x1 = Math.min(image.width - 1, ix + 2);
+    const y1 = Math.min(image.height - 1, iy + 2);
+    const ww = x1 - x0 + 1;
+    const hh = y1 - y0 + 1;
+    const janela = tctx.getImageData(x0, y0, ww, hh).data;
+    // Achado 3 do guardrail: pixel transparente (alfa 0) não conta na média —
+    // e pesa pelo alfa os que só são parcialmente transparentes — senão um
+    // ponto opaco a 1px de uma borda transparente do PNG lê cinza em vez da
+    // própria cor.
+    let somaR = 0, somaG = 0, somaB = 0, somaAlfa = 0;
+    const n = ww * hh;
+    for (let k = 0; k < n; k++) {
+      const a = janela[k * 4 + 3] / 255;
+      somaR += janela[k * 4] * a;
+      somaG += janela[k * 4 + 1] * a;
+      somaB += janela[k * 4 + 2] * a;
+      somaAlfa += a;
+    }
+    let r: number, g: number, b: number;
+    if (somaAlfa > 0) {
+      r = Math.round(somaR / somaAlfa);
+      g = Math.round(somaG / somaAlfa);
+      b = Math.round(somaB / somaAlfa);
+    } else {
+      // Janela inteira transparente: usa o pixel central, como antes da média.
+      const centro = tctx.getImageData(ix, iy, 1, 1).data;
+      r = centro[0]; g = centro[1]; b = centro[2];
+    }
     const hex = `#${[r, g, b].map(n => n.toString(16).padStart(2, '0')).join('')}`;
 
     const region: PlannerRegion = {
@@ -732,6 +880,8 @@
       regionUseStockOnly: false,
       calcSeq: 0,
       vazioMotivo: null,
+      manual: false,
+      sampleHex: '',
     };
     regions = [...regions, region];
     selectRegion(region.id, true);
@@ -810,7 +960,7 @@
    *  figuras. Região ajustada mantém fornecedor, interruptor e mistura. */
   async function recalcularRegioesDoProjeto(): Promise<void> {
     await Promise.all(
-      tabs.flatMap((aba, i) => tabRegions(i).filter(r => !r.override).map(r => computeRegion(r.id, aba.uid))),
+      tabs.flatMap((aba, i) => tabRegions(i).filter(r => !r.override && !r.manual).map(r => computeRegion(r.id, aba.uid))),
     );
   }
 
@@ -930,8 +1080,9 @@
       agora.vazioMotivo = null;
       agora.result = resp;
       agora.salvo = salvoDoResultado(resp);
-      // RN23: o diálogo de fallback é só de quem segue o projeto.
-      if (resp.faixa === 'nao-encontrei' && !agora.override && saidaAutorizada === null) {
+      // RN23/RN5: o diálogo de fallback é só de quem segue o projeto — nunca
+      // por uma região manual, nem por uma conta automática que estava em voo.
+      if (resp.faixa === 'nao-encontrei' && !agora.override && !agora.manual && saidaAutorizada === null) {
         void abrirDialogoDeFallback(id, inicio.r, inicio.g, inicio.b);
       }
     } catch (e) {
@@ -999,7 +1150,218 @@
 
   async function recalcularUmaRegiao(id: number): Promise<void> {
     const tabUid = tabs[activeTabIndex].uid;
+    // RN3: região manual não recalcula — nem por "Recalcular", nem por ajuste
+    // de fornecedor/estoque (o controle já fica desabilitado na tela).
+    if (regiaoDaAba(tabUid, id)?.manual) return;
     await recalcularComMarcacao(() => computeRegion(id, tabUid));
+  }
+
+  // ── rf-18 RN2/RN15: tinta escolhida à mão ──
+  /** `id` é o que vai no corpo do POST de `recipeForChosenPaint` (sempre
+   *  <=0, como o servidor espera para uma tinta escolhida à mão); `appId` é
+   *  como o resto do app representa a tinta — estoque negativo como está,
+   *  catálogo positivo (`plans.ts:52`). Achados 1/6 do guardrail: gravar o
+   *  `id` do POST direto no ingrediente colidia com a linha de estoque do
+   *  id oposto. */
+  type TintaEscolhidaAMao = Pick<StockPaint, 'manufacturerId' | 'manufacturer' | 'name' | 'code' | 'r' | 'g' | 'b'> & {
+    id: number;
+    appId: number;
+  };
+
+  /** Sobe o `calcSeq` da região ANTES de chamar o servidor — a mesma guarda
+   *  de `computeRegion` (`:904-909`): uma conta automática em voo chega com
+   *  época velha e é descartada, sem trocar `result`/`salvo` nem abrir
+   *  fallback (RN15/CAN3). Escolher A e logo B termina com B (CAN2).
+   *
+   *  Achado 2 do guardrail: marca `manual = true` OTIMISTICAMENTE, antes do
+   *  POST — RN3 já exclui a região de recálculos automáticos disparados em
+   *  voo (troca de fabricante/estoque, saída do fallback). Falha (throw,
+   *  `universoVazio` ou época velha não causada por uma escolha manual mais
+   *  nova) restaura o retrato anterior de manual/result/salvo/vazioMotivo.
+   *  Devolve `true` só quando a nova mistura foi gravada — quem corrige a
+   *  cor da peça usa isso para saber se também precisa desfazer a cor
+   *  (achado 4). */
+  async function escolherTintaManual(reg: PlannerRegion, tinta: TintaEscolhidaAMao): Promise<boolean> {
+    const ep = aberturaSeq;
+    const tabUid = tabs[activeTabIndex].uid;
+    const seq = ++reg.calcSeq;
+    const antes = { manual: reg.manual, result: reg.result, salvo: reg.salvo, vazioMotivo: reg.vazioMotivo };
+    reg.manual = true;
+    reg.computing = true;
+    // Ignora a época de abertura: usado para restaurar o retrato mesmo se o
+    // editor foi reaberto em voo, contanto que nenhuma escolha manual mais
+    // nova tenha subido `calcSeq` de novo (CAN2 — essa vence, sem restauro).
+    const porSeq = (): PlannerRegion | null => {
+      const agora = regiaoDaAba(tabUid, reg.id);
+      return agora && agora.calcSeq === seq ? agora : null;
+    };
+    const vigente = (): PlannerRegion | null => (ep === aberturaSeq ? porSeq() : null);
+    const desfazer = (): void => {
+      const agora = porSeq();
+      if (!agora) return;
+      agora.manual = antes.manual;
+      agora.result = antes.result;
+      agora.salvo = antes.salvo;
+      agora.vazioMotivo = antes.vazioMotivo;
+    };
+    try {
+      const resp = await recipeForChosenPaint(reg.r, reg.g, reg.b, tinta);
+      const agora = vigente();
+      if (!agora) return false;
+      if (ehUniversoVazio(resp)) {
+        desfazer();
+        toast(t('errManualCalc'), 'error');
+        return false;
+      }
+      agora.vazioMotivo = null;
+      // Achado 1/6 do guardrail: reescreve a marca e o id do único
+      // ingrediente ANTES de guardar — `targetManufacturerId: 0` no corpo
+      // (RN2) volta `targetManufacturer`/`manufacturerId` vazios do
+      // servidor, e o `id` do corpo (sempre <=0) colide com uma linha de
+      // estoque de id oposto quando a tinta é do catálogo.
+      resp.targetManufacturer = tinta.manufacturer;
+      for (const ing of resp.ingredients ?? []) {
+        ing.manufacturer = tinta.manufacturer;
+        ing.manufacturerId = tinta.manufacturerId;
+        ing.paintId = tinta.appId;
+      }
+      agora.result = resp;
+      agora.salvo = salvoDoResultado(resp);
+      return true;
+    } catch (e) {
+      console.error('Erro ao calcular tinta manual:', e);
+      desfazer();
+      toast(t('errManualCalc'), 'error');
+      return false;
+    } finally {
+      const agora = porSeq();
+      if (agora) agora.computing = false;
+      draw();
+    }
+  }
+
+  /** RN1: escolha vinda do Combobox — id negativo é tinta do estoque (como
+   *  está); id positivo é do catálogo, e vai negativado no corpo (RN2). */
+  async function onEscolherTintaManual(r: PlannerRegion, id: number): Promise<void> {
+    let tinta: TintaEscolhidaAMao | null = null;
+    if (id < 0) {
+      const p = stock.paints.find(sp => sp.id === id);
+      if (p) tinta = { id: p.id, appId: p.id, manufacturerId: p.manufacturerId, manufacturer: p.manufacturer, name: p.name, code: p.code, r: p.r, g: p.g, b: p.b };
+    } else {
+      const p = paintById(id);
+      if (p) tinta = { id: -p.id, appId: p.id, manufacturerId: p.manufacturerId, manufacturer: p.manufacturer, name: p.name, code: p.code, r: p.r, g: p.g, b: p.b };
+    }
+    if (!tinta) return;
+    const tintaEscolhida = tinta;
+    await recalcularComMarcacao(async () => {
+      await escolherTintaManual(r, tintaEscolhida);
+    });
+  }
+
+  /** RN4: desfaz o manual e recalcula com o universo da região. Achado 7 do
+   *  guardrail: limpa `salvo` antes de recalcular — um recálculo vazio ou
+   *  com falha (que só zera `result`) não pode deixar a tinta escolhida à
+   *  mão gravada como se fosse sugestão da Mescla. */
+  async function voltarSugestaoMescla(r: PlannerRegion): Promise<void> {
+    r.manual = false;
+    r.salvo = null;
+    await recalcularUmaRegiao(r.id);
+  }
+
+  // ── rf-18 RN6/RN7: correção da cor da peça ──
+  function parseHexCor(hex: string): { r: number; g: number; b: number; hex: string } | null {
+    const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim());
+    if (!m) return null;
+    const h = m[1].toLowerCase();
+    return {
+      r: parseInt(h.slice(0, 2), 16),
+      g: parseInt(h.slice(2, 4), 16),
+      b: parseInt(h.slice(4, 6), 16),
+      hex: `#${h}`,
+    };
+  }
+
+  /** Não manual: recalcula (RN6) — `recalcularUmaRegiao`/`computeRegion` não
+   *  devolve sinal de falha (acha 4 do guardrail: sem isso, não dá pra saber
+   *  se deve desfazer a cor); mantém a cor nova, como já era. Manual: refaz
+   *  só a conta da RN2 com a mesma tinta, remontada do ingrediente salvo
+   *  (achado 5 — `manufacturerId` real, não mais 0). Sem ingrediente salvo,
+   *  só a cor muda. Devolve `true` quando não há nada a desfazer. */
+  async function recalcularAposCorrecao(r: PlannerRegion): Promise<boolean> {
+    if (!r.manual) {
+      await recalcularUmaRegiao(r.id);
+      return true;
+    }
+    const ing = r.salvo?.ingredients?.[0];
+    if (!ing) {
+      marcarAlteracao();
+      return true;
+    }
+    // Achado 1/6: `ing.paintId` já é o id como o app representa a tinta
+    // (estoque negativo, catálogo positivo); o POST precisa dele <=0.
+    const appId = ing.paintId ?? 0;
+    const tinta: TintaEscolhidaAMao = {
+      id: appId > 0 ? -appId : appId,
+      appId,
+      manufacturerId: ing.manufacturerId,
+      manufacturer: ing.manufacturer,
+      name: ing.name,
+      code: ing.code,
+      r: ing.r,
+      g: ing.g,
+      b: ing.b,
+    };
+    let ok = true;
+    await recalcularComMarcacao(async () => {
+      ok = await escolherTintaManual(r, tinta);
+    });
+    return ok;
+  }
+
+  /** RN6: hex inválido não muda nada; hex válido muda `r/g/b/hex` (minúsculas,
+   *  como `addRegion`) e guarda `sampleHex` na primeira correção. Achado 4 do
+   *  guardrail: guarda a cor anterior antes de aplicar e, se o recálculo
+   *  manual falhar (`escolherTintaManual` já mostra o toast), restaura
+   *  `r/g/b/hex/sampleHex` — sem isso a cor nova fica com o ΔE/faixa da
+   *  tinta antiga (CA11 offline). */
+  async function corrigirCorDaRegiao(r: PlannerRegion, hexEntrada: string): Promise<void> {
+    const cor = parseHexCor(hexEntrada);
+    if (!cor) {
+      corInvalida = true;
+      return;
+    }
+    corInvalida = false;
+    const antes = { r: r.r, g: r.g, b: r.b, hex: r.hex, sampleHex: r.sampleHex };
+    if (!r.sampleHex) r.sampleHex = r.hex;
+    r.r = cor.r; r.g = cor.g; r.b = cor.b; r.hex = cor.hex;
+    corTexto = cor.hex;
+    draw();
+    const ok = await recalcularAposCorrecao(r);
+    if (!ok) {
+      r.r = antes.r; r.g = antes.g; r.b = antes.b; r.hex = antes.hex; r.sampleHex = antes.sampleHex;
+      corTexto = antes.hex;
+      draw();
+    }
+  }
+
+  /** RN7: volta à cor lida e limpa `sampleHex`. Mesmo restauro do achado 4
+   *  se o recálculo manual falhar. */
+  async function usarCorLidaDaFoto(r: PlannerRegion): Promise<void> {
+    if (!r.sampleHex) return;
+    const cor = parseHexCor(r.sampleHex);
+    if (!cor) return;
+    const antes = { r: r.r, g: r.g, b: r.b, hex: r.hex, sampleHex: r.sampleHex };
+    r.r = cor.r; r.g = cor.g; r.b = cor.b; r.hex = cor.hex;
+    r.sampleHex = '';
+    corTexto = cor.hex;
+    corInvalida = false;
+    draw();
+    const ok = await recalcularAposCorrecao(r);
+    if (!ok) {
+      r.r = antes.r; r.g = antes.g; r.b = antes.b; r.hex = antes.hex; r.sampleHex = antes.sampleHex;
+      corTexto = antes.hex;
+      draw();
+    }
   }
 
   // ── rf-07/rf-16: mapeamento tela → rascunho/DTO ──
@@ -1024,6 +1386,7 @@
       regionUseStockOnly: r.override && r.regionUseStockOnly,
       resultR: d.resultR, resultG: d.resultG, resultB: d.resultB,
       faixa: d.faixa, method: d.method, ingredients: d.ingredients,
+      regionManual: r.manual, sampleHex: r.sampleHex,
     };
   }
 
@@ -1038,6 +1401,7 @@
       regionUseStockOnly: r.override && r.regionUseStockOnly ? 1 : 0,
       resultR: d.resultR, resultG: d.resultG, resultB: d.resultB,
       faixa: d.faixa, method: d.method, ingredients: d.ingredients,
+      regionManual: r.manual ? 1 : 0, sampleHex: r.sampleHex,
     };
   }
 
@@ -1145,6 +1509,8 @@
     draftBannerVisible = comRascunho;
     alteracaoSeqSalva = alteracaoSeq;
     autoSaveStatus = estadoAutoSave();
+    ferramenta = 'marcar';
+    limparPonteiros();
     modo = 'editor';
   }
 
@@ -1240,6 +1606,7 @@
           regionUseStockOnly: rr.regionUseStockOnly ? 1 : 0,
           resultR: rr.resultR ?? null, resultG: rr.resultG ?? null, resultB: rr.resultB ?? null,
           faixa: rr.faixa ?? '', method: rr.method ?? '', ingredients: rr.ingredients ?? [],
+          regionManual: rr.regionManual ? 1 : 0, sampleHex: rr.sampleHex ?? '',
         })),
       }));
       await applyLoadedPlan(
@@ -1300,6 +1667,8 @@
     const alvo = () => aba.regions.find(r => r.id === id) ?? null;
     const inicio = alvo();
     if (!inicio) return;
+    // RN3: restauração nunca recalcula região manual, mesmo sem mistura salva.
+    if (inicio.manual) return;
     inicio.computing = true;
     try {
       const universo = universoDaRegiao(inicio, ctx);
@@ -1373,6 +1742,8 @@
           regionUseStockOnly: rd.regionUseStockOnly === 1,
           calcSeq: 0,
           vazioMotivo: null,
+          manual: rd.regionManual === 1,
+          sampleHex: rd.sampleHex ?? '',
         };
       });
       const img = abaDTO.imageData ? await loadImageBitmap(abaDTO.imageData) : null;
@@ -1395,7 +1766,7 @@
     // consulta o servidor (CA8 do rf-07).
     if (recalcular) {
       await Promise.all(
-        novasAbas.flatMap(aba => aba.regions.filter(r => !r.salvo?.faixa).map(r => computeRegionInAba(aba, r.id, ctx, ep))),
+        novasAbas.flatMap(aba => aba.regions.filter(r => !r.manual && !r.salvo?.faixa).map(r => computeRegionInAba(aba, r.id, ctx, ep))),
       );
     }
     if (ep !== aberturaSeq) return;
@@ -1704,15 +2075,17 @@
     <div style="position: relative; border-right: 1px solid var(--color-line); overflow: hidden;">
       <div
         bind:this={boxEl}
-        style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: repeating-conic-gradient(var(--color-panel) 0% 25%, var(--color-bg) 0% 50%) 0 0 / 40px 40px; cursor: crosshair;"
+        style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: repeating-conic-gradient(var(--color-panel) 0% 25%, var(--color-bg) 0% 50%) 0 0 / 40px 40px; cursor: {ferramenta === 'mover' ? (arrastando ? 'grabbing' : 'grab') : 'crosshair'};"
       >
         {#if hasImage}
           <canvas
             bind:this={canvasEl}
-            style="width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair;"
-            ontouchstart={onTouchStart}
-            ontouchmove={onTouchMove}
-            onclick={onCanvasClick}
+            style="width: 100%; height: 100%; display: block; touch-action: none; cursor: {ferramenta === 'mover' ? (arrastando ? 'grabbing' : 'grab') : 'crosshair'};"
+            onpointerdown={onPointerDown}
+            onpointermove={onPointerMove}
+            onpointerup={onPointerUp}
+            onpointercancel={onPointerCancel}
+            onlostpointercapture={onPointerCancel}
             onwheel={onWheel}
           ></canvas>
         {:else}
@@ -1734,6 +2107,31 @@
         <div
           style="display: flex; align-items: center; gap: 6px; padding: 6px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: rgba(22,24,38,0.92); backdrop-filter: blur(8px);"
         >
+          <button
+            class="t2-icon-btn"
+            aria-label={t('toolMark')}
+            title={t('toolMark')}
+            aria-pressed={ferramenta === 'marcar'}
+            disabled={!hasImage}
+            onclick={() => (ferramenta = 'marcar')}
+            style="background: {ferramenta === 'marcar' ? 'var(--color-accent-panel)' : 'transparent'}; color: {ferramenta === 'marcar' ? 'var(--color-accent-400)' : 'var(--color-neutral-300)'};"
+          >
+            <i class="ph ph-crosshair" style="font-size: 18px;"></i>
+          </button>
+          <button
+            class="t2-icon-btn"
+            aria-label={t('toolMove')}
+            title={t('toolMove')}
+            aria-pressed={ferramenta === 'mover'}
+            disabled={!hasImage}
+            onclick={() => (ferramenta = 'mover')}
+            style="background: {ferramenta === 'mover' ? 'var(--color-accent-panel)' : 'transparent'}; color: {ferramenta === 'mover' ? 'var(--color-accent-400)' : 'var(--color-neutral-300)'};"
+          >
+            <i class="ph ph-hand" style="font-size: 18px;"></i>
+          </button>
+
+          <div aria-hidden="true" style="width: 1px; align-self: stretch; margin: 4px 2px; background: var(--color-neutral-800);"></div>
+
           <button class="t2-icon-btn t2-zoom-btn" aria-label={t('zoomOut')} title={t('zoomOut')} disabled={!hasImage} onclick={() => zoomBy(1 / 1.25)}>
             <i class="ph ph-minus" style="font-size: 18px;"></i>
           </button>
@@ -1932,6 +2330,9 @@
                 <span style="display: flex; flex-direction: column; flex: 1; min-width: 0;">
                   <span style="font-size: 16px; font-weight: 500; color: var(--color-text);">{regionName(i)}</span>
                   <span class="font-mono" style="font-size: 12.5px; color: var(--color-neutral-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{regionMatchText(r)}</span>
+                  {#if r.manual}
+                    <span style="align-self: flex-start; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--color-accent-panel); color: var(--color-accent-400);">{t('regionManualBadge')}</span>
+                  {/if}
                   {#if seloDaFaixa(r)}
                     {@const selo = seloDaFaixa(r)}
                     <span style="font-size: 11.5px; font-weight: 600; color: {selo?.cor};">{selo?.texto}</span>
@@ -2027,9 +2428,63 @@
                     {origemDaRegiao(r)}{#if r.result?.foraDoUniverso} · {t('foraDoUniversoLabel')}{/if}
                   </p>
 
+                  <!-- rf-18 RN6/RN7: correção da cor da peça. -->
+                  <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--color-line);">
+                    <p class="section-label" style="margin: 0;">{t('regionColorTitle')}</p>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <input
+                        type="color"
+                        value={r.hex}
+                        aria-label={t('regionColorTitle')}
+                        onchange={(e) => void corrigirCorDaRegiao(r, e.currentTarget.value)}
+                        style="width: 44px; height: 44px; padding: 0; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; cursor: pointer; flex-shrink: 0;"
+                      />
+                      <input
+                        type="text"
+                        bind:value={corTexto}
+                        aria-label={t('regionColorTitle')}
+                        maxlength="7"
+                        class="font-mono"
+                        style="flex: 1; min-width: 0; height: 44px; padding: 0 10px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-field); color: var(--color-text); font-size: 14px;"
+                      />
+                      <button class="t2-secondary-btn" onclick={() => void corrigirCorDaRegiao(r, corTexto)}>{t('regionColorApply')}</button>
+                    </div>
+                    {#if corInvalida}
+                      <p role="alert" style="margin: 0; font-size: 12.5px; color: var(--color-danger, #D1495B);">{t('regionColorInvalid')}</p>
+                    {/if}
+                    {#if r.sampleHex}
+                      <button class="t2-secondary-btn" style="align-self: flex-start;" onclick={() => void usarCorLidaDaFoto(r)}>
+                        <i class="ph ph-arrow-counter-clockwise" style="font-size: 16px;"></i>{t('regionColorRestore')}
+                      </button>
+                    {/if}
+                  </div>
+
+                  <!-- rf-18 RN1/RN4: tinta escolhida à mão. -->
+                  <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--color-line);">
+                    <p class="section-label" style="margin: 0;">{t('regionManualTitle')}</p>
+                    <Combobox
+                      options={opcoesTintaManual}
+                      value={null}
+                      onchange={(id) => { if (id != null) void onEscolherTintaManual(r, id); }}
+                      placeholder={t('regionManualTitle')}
+                      searchPlaceholder={t('phFindPaint')}
+                      emptyText={t('noPaintFound')}
+                      ariaLabel={t('regionManualTitle')}
+                      moreText={(n) => t('comboMore', { n })}
+                    />
+                    {#if r.manual}
+                      <button class="t2-secondary-btn" style="align-self: flex-start;" onclick={() => void voltarSugestaoMescla(r)}>
+                        <i class="ph ph-arrow-counter-clockwise" style="font-size: 16px;"></i>{t('regionBackToSuggestion')}
+                      </button>
+                    {/if}
+                  </div>
+
                   <!-- rf-16 RN19: ajuste de fornecedor só desta região. -->
                   <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--color-line);">
                     <p class="section-label" style="margin: 0;">{t('regionAdjustTitle')}</p>
+                    {#if r.manual}
+                      <p style="margin: 0; font-size: 12px; color: var(--color-neutral-500);">{t('regionManualNote')}</p>
+                    {/if}
                     <Combobox
                       options={manufacturers}
                       value={r.override ? r.regionManufacturerId : null}
@@ -2040,12 +2495,13 @@
                       emptyText={t('noMakerFound')}
                       ariaLabel={t('regionAdjustTitle')}
                       moreText={(n) => t('comboMore', { n })}
+                      disabled={r.manual}
                     />
-                    <label style="display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 13.5px; color: {r.override ? 'var(--color-neutral-300)' : 'var(--color-neutral-600)'}; cursor: {r.override ? 'pointer' : 'default'};">
+                    <label style="display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 13.5px; color: {r.override && !r.manual ? 'var(--color-neutral-300)' : 'var(--color-neutral-600)'}; cursor: {r.override && !r.manual ? 'pointer' : 'default'};">
                       <input
                         type="checkbox"
                         role="switch"
-                        disabled={!r.override}
+                        disabled={!r.override || r.manual}
                         checked={r.override ? r.regionUseStockOnly : useStockOnly}
                         onchange={(e) => void ajustarEstoqueDaRegiao(r, e.currentTarget.checked)}
                         style="width: 20px; height: 20px; accent-color: var(--color-accent);"
@@ -2053,7 +2509,7 @@
                       {t('onlyMyStock')}
                     </label>
                     <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                      <button class="t2-secondary-btn" disabled={r.computing} onclick={() => void recalcularUmaRegiao(r.id)}>
+                      <button class="t2-secondary-btn" disabled={r.computing || r.manual} onclick={() => void recalcularUmaRegiao(r.id)}>
                         <i class="ph ph-arrows-clockwise" style="font-size: 16px;"></i>{t('regionRecalcBtn')}
                       </button>
                       <button class="t2-secondary-btn" onclick={removeSelected}>

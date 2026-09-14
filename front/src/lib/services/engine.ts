@@ -236,6 +236,38 @@ export async function suggestRecipeForColor(
   return apiGet<EquivalentRecipe | UniversoVazio>(`/recipes/by-color?${paramsDoUniverso(r, g, b, universo)}`);
 }
 
+/** rf-18 RN2: conta da tinta escolhida à mão — universo de uma tinta só,
+ *  sem respeitar a marca "ignorar no cálculo de mistura" (rf-19), porque a
+ *  tinta foi escolhida direto pelo pintor. O chamador já manda `tinta.id`
+ *  negativo (estoque) ou `-id` (catálogo), como no corpo do rf-16/rf-19. */
+export async function recipeForChosenPaint(
+  r: number,
+  g: number,
+  b: number,
+  tinta: Pick<StockPaint, 'id' | 'manufacturerId' | 'manufacturer' | 'name' | 'code' | 'r' | 'g' | 'b'>,
+): Promise<EquivalentRecipe | UniversoVazio> {
+  return apiPost<EquivalentRecipe | UniversoVazio>('/recipes/by-color', {
+    r,
+    g,
+    b,
+    targetManufacturerId: 0,
+    foraDoUniverso: false,
+    maxIngredients: 0,
+    respeitarIgnorados: false,
+    stock: [{
+      id: tinta.id,
+      manufacturerId: tinta.manufacturerId,
+      manufacturer: tinta.manufacturer,
+      name: tinta.name,
+      code: tinta.code,
+      r: tinta.r,
+      g: tinta.g,
+      b: tinta.b,
+      ignoreInMix: false,
+    }],
+  });
+}
+
 /** Atalho para quem só quer o fabricante: T1/T3 usam o universo simples de uma
  *  marca, sem os interruptores do plano de peça. Nunca devolve universo vazio —
  *  uma marca do catálogo sempre tem tintas com cor. */

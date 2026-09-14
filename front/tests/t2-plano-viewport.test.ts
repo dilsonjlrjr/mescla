@@ -206,10 +206,12 @@ describe('D-002b — clique na foto', () => {
       if (canvas.width === 300) throw new Error('canvas ainda no tamanho padrao');
     }, { timeout: 2000 });
 
-    // Toque no meio da foto: cria a região e dispara o cálculo.
-    canvas.dispatchEvent(
-      new MouseEvent('click', { bubbles: true, clientX: 450, clientY: 300 }),
-    );
+    // Toque no meio da foto: cria a região e dispara o cálculo. rf-18
+    // RN11/RN13: o canvas troca clique por Pointer Events — o tap vira
+    // pointerdown + pointerup no mesmo ponto (dentro do limiar de 6px).
+    const pointerOpts = { bubbles: true, clientX: 450, clientY: 300, pointerId: 1, isPrimary: true };
+    canvas.dispatchEvent(new PointerEvent('pointerdown', pointerOpts));
+    canvas.dispatchEvent(new PointerEvent('pointerup', pointerOpts));
 
     // O solver mockado responde na hora — a região TEM de sair de "calculando".
     await findAllByText(/ΔE/, undefined, { timeout: 2000 });

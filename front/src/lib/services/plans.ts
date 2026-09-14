@@ -42,6 +42,11 @@ export interface RegiaoDTO {
   faixa?: string;
   method?: string;
   ingredients?: IngredienteDTO[];
+  /** rf-18 RN1-RN7: tinta escolhida à mão (1 = fora de todo recálculo
+   *  automático) e cor lida da foto antes de uma correção (`''` = nunca
+   *  corrigida). */
+  regionManual?: 0 | 1;
+  sampleHex?: string;
 }
 
 /** rf-16: um pote da mistura salva. `paintId` negativo é tinta do estoque

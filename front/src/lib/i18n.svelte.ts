@@ -175,6 +175,13 @@ export const dict = {
     badgeOutOfMix: 'fora da mistura', markSaved: 'Marca salva',
     errMarkPartial: 'A tinta foi salva, mas a marca não chegou ao catálogo — tente salvar de novo',
     errMarkWrite: 'Não foi possível salvar a marca — tente de novo',
+    toolMark: 'Marcar região', toolMove: 'Mover a foto',
+    regionManualTitle: 'Escolher a tinta eu mesmo', noPaintFound: 'Nenhuma tinta encontrada.',
+    paintHintHave: 'tenho', regionManualBadge: 'à mão', regionManualNote: 'Tinta escolhida à mão',
+    regionBackToSuggestion: 'Voltar à sugestão da Mescla',
+    errManualCalc: 'Não consegui calcular com essa tinta — tente de novo',
+    regionColorTitle: 'Cor da peça', regionColorApply: 'Aplicar', regionColorInvalid: 'Cor inválida',
+    regionColorRestore: 'Usar a cor lida da foto'
   },
   en: {
     _name: 'English (US)', _dec: '.',
@@ -347,6 +354,13 @@ export const dict = {
     badgeOutOfMix: 'out of the mix', markSaved: 'Flag saved',
     errMarkPartial: 'The paint was saved, but the flag didn’t reach the catalog — try saving again',
     errMarkWrite: 'Could not save the flag — try again',
+    toolMark: 'Mark region', toolMove: 'Move the photo',
+    regionManualTitle: 'Pick the paint myself', noPaintFound: 'No paint found.',
+    paintHintHave: 'have it', regionManualBadge: 'by hand', regionManualNote: 'Paint picked by hand',
+    regionBackToSuggestion: 'Back to Mescla’s suggestion',
+    errManualCalc: 'Couldn’t calculate with that paint — try again',
+    regionColorTitle: 'Piece color', regionColorApply: 'Apply', regionColorInvalid: 'Invalid color',
+    regionColorRestore: 'Use the color read from the photo'
   },
   es: {
     _name: 'Español', _dec: ',',
@@ -519,6 +533,13 @@ export const dict = {
     badgeOutOfMix: 'fuera de la mezcla', markSaved: 'Marca guardada',
     errMarkPartial: 'La pintura se guardó, pero la marca no llegó al catálogo — inténtalo de nuevo',
     errMarkWrite: 'No se pudo guardar la marca — inténtalo de nuevo',
+    toolMark: 'Marcar región', toolMove: 'Mover la foto',
+    regionManualTitle: 'Elegir la pintura yo mismo', noPaintFound: 'No se encontró ninguna pintura.',
+    paintHintHave: 'tengo', regionManualBadge: 'a mano', regionManualNote: 'Pintura elegida a mano',
+    regionBackToSuggestion: 'Volver a la sugerencia de Mescla',
+    errManualCalc: 'No pude calcular con esa pintura — inténtalo de nuevo',
+    regionColorTitle: 'Color de la pieza', regionColorApply: 'Aplicar', regionColorInvalid: 'Color inválido',
+    regionColorRestore: 'Usar el color leído de la foto'
   },
   fr: {
     _name: 'Français', _dec: ',',
@@ -691,6 +712,13 @@ export const dict = {
     badgeOutOfMix: 'hors mélange', markSaved: 'Marque enregistrée',
     errMarkPartial: 'La peinture a été enregistrée, mais la marque n’est pas arrivée au catalogue — réessayez',
     errMarkWrite: 'Impossible d’enregistrer la marque — réessayez',
+    toolMark: 'Marquer une région', toolMove: 'Déplacer la photo',
+    regionManualTitle: 'Choisir la peinture moi-même', noPaintFound: 'Aucune peinture trouvée.',
+    paintHintHave: 'j’en ai', regionManualBadge: 'à la main', regionManualNote: 'Peinture choisie à la main',
+    regionBackToSuggestion: 'Revenir à la suggestion de Mescla',
+    errManualCalc: 'Impossible de calculer avec cette peinture — réessayez',
+    regionColorTitle: 'Couleur de la pièce', regionColorApply: 'Appliquer', regionColorInvalid: 'Couleur invalide',
+    regionColorRestore: 'Utiliser la couleur lue sur la photo'
   }
 } as const;
 

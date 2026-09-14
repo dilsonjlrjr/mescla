@@ -122,8 +122,12 @@ async function loadPhoto(container: HTMLElement): Promise<HTMLCanvasElement> {
   }, { timeout: 2000 });
 }
 
+// rf-18 RN11/RN13: o canvas trocou clique/toque por Pointer Events — um tap
+// vira pointerdown + pointerup no mesmo ponto (dentro do limiar de 6px).
 function clickCanvas(canvas: HTMLCanvasElement, x: number, y: number) {
-  canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+  const opts = { bubbles: true, clientX: x, clientY: y, pointerId: 1, isPrimary: true };
+  canvas.dispatchEvent(new PointerEvent('pointerdown', opts));
+  canvas.dispatchEvent(new PointerEvent('pointerup', opts));
 }
 
 /** A seção "Tintas da peça" — o `<div>` logo depois do rótulo `t('piecePaints')`. */

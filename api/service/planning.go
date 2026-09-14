@@ -116,6 +116,16 @@ func ensurePlanningSchema(db *sql.DB) error {
 		return err
 	}
 
+	// rf-18 T2: tinta escolhida à mão e cor da peça corrigida — 2 colunas
+	// aditivas. region_manual=0 (padrão) preserva o comportamento de hoje;
+	// sample_hex='' significa "nunca corrigida".
+	if err := addColumnIfMissing(db, "painting_regions", "region_manual", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := addColumnIfMissing(db, "painting_regions", "sample_hex", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+
 	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS painting_region_ingredients (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -464,6 +474,13 @@ type PaintingRegionDTO struct {
 	ResultB *int   `json:"resultB"`
 	Faixa   string `json:"faixa"`
 	Method  string `json:"method"`
+
+	// Campos aditivos do rf-18 T2 — tinta escolhida à mão e cor da peça
+	// corrigida. RegionManual=1 tira a região de todo recálculo automático;
+	// SampleHex='' significa "nunca corrigida" (cor lida ainda vigente).
+	RegionManual int    `json:"regionManual"`
+	SampleHex    string `json:"sampleHex"`
+
 	// Ingredients nunca é null na resposta (sempre array, mesmo vazio).
 	Ingredients []PaintingIngredientDTO `json:"ingredients"`
 }
@@ -607,6 +624,8 @@ func validateAndNormalizeTabs(tabs []PaintingTabDTO) ([]PaintingTabDTO, error) {
 			if r.RegionManufacturerID != nil && *r.RegionManufacturerID <= 0 {
 				r.RegionManufacturerID = nil
 			}
+			r.RegionManual = normalizePainted(r.RegionManual)
+			r.SampleHex = normalizeSampleHex(r.SampleHex)
 		}
 
 		normalized[i] = t
@@ -739,12 +758,13 @@ func (s *PaintService) SavePlan(plan PaintingPlanDTO) (PaintingPlanDTO, error) {
 			regionRes, err := tx.Exec(
 				`INSERT INTO painting_regions
 				 (tab_id, x, y, r, g, b, hex, region_name, note, paint_id, paint_brand, paint_name, paint_code, delta_e, sort_order, painted, fora_do_universo,
-				  region_override, region_manufacturer_id, region_use_stock_only, result_r, result_g, result_b, faixa, method)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				  region_override, region_manufacturer_id, region_use_stock_only, result_r, result_g, result_b, faixa, method, region_manual, sample_hex)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				tabID, r.X, r.Y, r.R, r.G, r.B, r.Hex, r.RegionName, r.Note,
 				nullableInt64(r.PaintID), r.PaintBrand, r.PaintName, r.PaintCode, r.DeltaE, ri, painted, foraDoUniverso,
 				r.RegionOverride, nullableInt64Ptr(r.RegionManufacturerID), r.RegionUseStockOnly,
 				nullableIntPtr(r.ResultR), nullableIntPtr(r.ResultG), nullableIntPtr(r.ResultB), r.Faixa, r.Method,
+				r.RegionManual, r.SampleHex,
 			)
 			if err != nil {
 				return PaintingPlanDTO{}, fmt.Errorf("inserindo região %d da aba %q: %w", ri+1, t.Name, err)
@@ -826,6 +846,22 @@ func normalizePainted(v int) int {
 // regra de normalizePainted (CAN10).
 func normalizeUseStockOnly(v int) int {
 	return normalizePainted(v)
+}
+
+// normalizeSampleHex garante que sampleHex só grave "" ou um hex de 6
+// dígitos em minúsculas (rf-18 RN6/CAN1) — fora disso, normalização (não
+// erro): grava "".
+func normalizeSampleHex(v string) string {
+	if len(v) != 7 || v[0] != '#' {
+		return ""
+	}
+	for _, c := range v[1:] {
+		isHex := (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+		if !isHex {
+			return ""
+		}
+	}
+	return strings.ToLower(v)
 }
 
 // ListPlans lista todos os planos (resumo: sem fotos, sem regiões completas).
@@ -965,7 +1001,8 @@ func (s *PaintService) loadTabRegions(tabID int64) ([]PaintingRegionDTO, error) 
 		       COALESCE(paint_name, ''), COALESCE(paint_code, ''),
 		       COALESCE(delta_e, 0), COALESCE(painted, 0), COALESCE(fora_do_universo, 0),
 		       COALESCE(region_override, 0), region_manufacturer_id, COALESCE(region_use_stock_only, 0),
-		       result_r, result_g, result_b, COALESCE(faixa, ''), COALESCE(method, '')
+		       result_r, result_g, result_b, COALESCE(faixa, ''), COALESCE(method, ''),
+		       COALESCE(region_manual, 0), COALESCE(sample_hex, '')
 		FROM painting_regions
 		WHERE tab_id = ?
 		ORDER BY sort_order
@@ -985,6 +1022,7 @@ func (s *PaintService) loadTabRegions(tabID int64) ([]PaintingRegionDTO, error) 
 			&r.Painted, &r.ForaDoUniverso,
 			&r.RegionOverride, &regionManufacturerID, &r.RegionUseStockOnly,
 			&resultR, &resultG, &resultB, &r.Faixa, &r.Method,
+			&r.RegionManual, &r.SampleHex,
 		); err != nil {
 			return nil, err
 		}
