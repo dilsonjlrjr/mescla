@@ -22,7 +22,8 @@ func newUniversoTestService(t *testing.T) *PaintService {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			manufacturer_id INTEGER NOT NULL,
 			name TEXT NOT NULL,
-			code TEXT DEFAULT ''
+			code TEXT DEFAULT '',
+			ignore_in_mix INTEGER NOT NULL DEFAULT 0
 		);
 		CREATE TABLE paint_colors (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -169,7 +169,12 @@ export const dict = {
     errStockWrite: 'Não foi possível gravar a tinta — tente de novo', errStockGone: 'Essa tinta não existe mais no servidor',
     errStockInvalid: 'Os dados da tinta não foram aceitos',
     motivoLinhaInvalida: 'linha ilegível', motivoLinhaRepetida: 'linha repetida', motivoFabricante: 'fabricante não encontrado',
-    motivoNome: 'sem nome', motivoTexto: 'texto longo demais', motivoCor: 'cor inválida', motivoQuantidade: 'quantidade inválida'
+    motivoNome: 'sem nome', motivoTexto: 'texto longo demais', motivoCor: 'cor inválida', motivoQuantidade: 'quantidade inválida',
+    ignoreInMixLabel: 'Ignorar no cálculo de mistura',
+    ignoreInMixNote: 'Metálicas, washes, vernizes e médiums: a Mescla não usa esta tinta em sugestões. Ela continua na busca e pode ser escolhida à mão.',
+    badgeOutOfMix: 'fora da mistura', markSaved: 'Marca salva',
+    errMarkPartial: 'A tinta foi salva, mas a marca não chegou ao catálogo — tente salvar de novo',
+    errMarkWrite: 'Não foi possível salvar a marca — tente de novo',
   },
   en: {
     _name: 'English (US)', _dec: '.',
@@ -336,7 +341,12 @@ export const dict = {
     errStockWrite: 'Could not save the paint — try again', errStockGone: 'This paint no longer exists on the server',
     errStockInvalid: 'The paint data was not accepted',
     motivoLinhaInvalida: 'unreadable row', motivoLinhaRepetida: 'repeated row', motivoFabricante: 'manufacturer not found',
-    motivoNome: 'no name', motivoTexto: 'text too long', motivoCor: 'invalid color', motivoQuantidade: 'invalid quantity'
+    motivoNome: 'no name', motivoTexto: 'text too long', motivoCor: 'invalid color', motivoQuantidade: 'invalid quantity',
+    ignoreInMixLabel: 'Ignore in mix calculation',
+    ignoreInMixNote: 'Metallics, washes, varnishes and mediums: Mescla won’t use this paint in suggestions. It stays in search and can still be picked by hand.',
+    badgeOutOfMix: 'out of the mix', markSaved: 'Flag saved',
+    errMarkPartial: 'The paint was saved, but the flag didn’t reach the catalog — try saving again',
+    errMarkWrite: 'Could not save the flag — try again',
   },
   es: {
     _name: 'Español', _dec: ',',
@@ -503,7 +513,12 @@ export const dict = {
     errStockWrite: 'No se pudo guardar la pintura — inténtalo de nuevo', errStockGone: 'Esa pintura ya no existe en el servidor',
     errStockInvalid: 'Los datos de la pintura no fueron aceptados',
     motivoLinhaInvalida: 'fila ilegible', motivoLinhaRepetida: 'fila repetida', motivoFabricante: 'fabricante no encontrado',
-    motivoNome: 'sin nombre', motivoTexto: 'texto demasiado largo', motivoCor: 'color inválido', motivoQuantidade: 'cantidad inválida'
+    motivoNome: 'sin nombre', motivoTexto: 'texto demasiado largo', motivoCor: 'color inválido', motivoQuantidade: 'cantidad inválida',
+    ignoreInMixLabel: 'Ignorar en el cálculo de mezcla',
+    ignoreInMixNote: 'Metálicas, aguadas, barnices y médiums: Mescla no usa esta pintura en las sugerencias. Sigue en la búsqueda y se puede elegir a mano.',
+    badgeOutOfMix: 'fuera de la mezcla', markSaved: 'Marca guardada',
+    errMarkPartial: 'La pintura se guardó, pero la marca no llegó al catálogo — inténtalo de nuevo',
+    errMarkWrite: 'No se pudo guardar la marca — inténtalo de nuevo',
   },
   fr: {
     _name: 'Français', _dec: ',',
@@ -670,7 +685,12 @@ export const dict = {
     errStockWrite: 'Impossible d’enregistrer la peinture — réessayez', errStockGone: 'Cette peinture n’existe plus sur le serveur',
     errStockInvalid: 'Les données de la peinture n’ont pas été acceptées',
     motivoLinhaInvalida: 'ligne illisible', motivoLinhaRepetida: 'ligne répétée', motivoFabricante: 'fabricant introuvable',
-    motivoNome: 'sans nom', motivoTexto: 'texte trop long', motivoCor: 'couleur invalide', motivoQuantidade: 'quantité invalide'
+    motivoNome: 'sans nom', motivoTexto: 'texte trop long', motivoCor: 'couleur invalide', motivoQuantidade: 'quantité invalide',
+    ignoreInMixLabel: 'Ignorer dans le calcul du mélange',
+    ignoreInMixNote: 'Métalliques, lavis, vernis et médiums : Mescla n’utilise pas cette peinture dans les suggestions. Elle reste dans la recherche et peut être choisie à la main.',
+    badgeOutOfMix: 'hors mélange', markSaved: 'Marque enregistrée',
+    errMarkPartial: 'La peinture a été enregistrée, mais la marque n’est pas arrivée au catalogue — réessayez',
+    errMarkWrite: 'Impossible d’enregistrer la marque — réessayez',
   }
 } as const;
 

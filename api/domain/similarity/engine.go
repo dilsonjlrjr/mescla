@@ -147,7 +147,7 @@ func (e *Engine) loadPaints(opts SearchOptions) ([]paintRow, error) {
 		FROM paints p
 		JOIN manufacturers m ON m.id = p.manufacturer_id
 		LEFT JOIN paint_colors pc ON pc.paint_id = p.id
-		WHERE pc.rgb_r IS NOT NULL
+		WHERE pc.rgb_r IS NOT NULL AND p.ignore_in_mix = 0
 	`
 
 	args := []interface{}{}

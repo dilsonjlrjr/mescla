@@ -109,6 +109,7 @@ func (s *PaintService) catalogoInteiroComCor() ([]mix.PaintInput, error) {
 		FROM paints p
 		JOIN paint_colors pc ON pc.paint_id = p.id
 		JOIN manufacturers m ON m.id = p.manufacturer_id
+		WHERE p.ignore_in_mix = 0
 	`)
 	if err != nil {
 		return nil, err
@@ -134,7 +135,7 @@ func (s *PaintService) estoqueDoFabricante(fabricanteID int64) ([]mix.PaintInput
 		SELECT up.id, up.name, COALESCE(up.code, ''), up.rgb_r, up.rgb_g, up.rgb_b, up.manufacturer_id, m.name
 		FROM user_paints up
 		JOIN manufacturers m ON m.id = up.manufacturer_id
-		WHERE up.manufacturer_id = ?
+		WHERE up.manufacturer_id = ? AND up.ignore_in_mix = 0
 	`, fabricanteID)
 	if err != nil {
 		return nil, err
@@ -220,6 +221,9 @@ type DeviceStockItemInput struct {
 	Name           string
 	Code           string
 	R, G, B        int
+	// IgnoreInMix (rf-19, RN2): item marcado é descartado antes de montar o
+	// pool, a menos que respeitarIgnorados seja false (RN3, escolha à mão).
+	IgnoreInMix bool
 }
 
 // ResolverCorComEstoqueDoAparelho é o caminho novo do rf-16 T2: o universo
@@ -232,13 +236,26 @@ type DeviceStockItemInput struct {
 // nunca por nome, igual ao rf-14 RN5). Estoque vazio, ou pool vazio sem
 // fabricante, respondem "Seu estoque neste aparelho está vazio"; interseção
 // vazia responde "Você não tem tintas «marca» neste aparelho".
-func (s *PaintService) ResolverCorComEstoqueDoAparelho(r, g, b uint8, targetManufacturerID int64, foraDoUniverso bool, maxIngredients int, itensEstoque []DeviceStockItemInput) (EquivalentRecipeDTO, error) {
+//
+// respeitarIgnorados (rf-19, RN2/RN3) descarta os itens com IgnoreInMix antes
+// de montar o pool; false (escolha à mão) mantém todos.
+func (s *PaintService) ResolverCorComEstoqueDoAparelho(r, g, b uint8, targetManufacturerID int64, foraDoUniverso bool, maxIngredients int, itensEstoque []DeviceStockItemInput, respeitarIgnorados bool) (EquivalentRecipeDTO, error) {
 	var nomeFabricante string
 	if targetManufacturerID > 0 {
 		if err := s.db.QueryRow("SELECT name FROM manufacturers WHERE id = ?", targetManufacturerID).
 			Scan(&nomeFabricante); err != nil {
 			return EquivalentRecipeDTO{}, fmt.Errorf("fabricante não encontrado")
 		}
+	}
+
+	if respeitarIgnorados {
+		semIgnoradas := make([]DeviceStockItemInput, 0, len(itensEstoque))
+		for _, it := range itensEstoque {
+			if !it.IgnoreInMix {
+				semIgnoradas = append(semIgnoradas, it)
+			}
+		}
+		itensEstoque = semIgnoradas
 	}
 
 	if len(itensEstoque) == 0 {

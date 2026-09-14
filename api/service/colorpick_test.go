@@ -37,6 +37,7 @@ func newColorPickTestService(t *testing.T) *PaintService {
 			product_line_id INTEGER NOT NULL DEFAULT 1,
 			code TEXT NOT NULL DEFAULT '',
 			name TEXT NOT NULL,
+			ignore_in_mix INTEGER NOT NULL DEFAULT 0,
 			paint_type_id INTEGER DEFAULT 1,
 			finish_type_id INTEGER DEFAULT 1,
 			coverage_type_id INTEGER DEFAULT 1,

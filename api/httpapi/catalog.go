@@ -1,6 +1,11 @@
 package httpapi
 
 import (
+	"encoding/json"
+	"errors"
+	"log"
+	"strconv"
+
 	"github.com/valyala/fasthttp"
 
 	"paint-match-ai/api/service"
@@ -82,6 +87,42 @@ func handleCompareColors(svc *service.PaintService) fasthttp.RequestHandler {
 			return
 		}
 		writeJSON(ctx, fasthttp.StatusOK, results)
+	}
+}
+
+// handlePaintIgnoreInMix atende PUT /paints/{id}/ignore-in-mix (rf-19,
+// RN11) — rota nova, sem autenticação (risco aceito), só este campo. id
+// parseado direto com strconv (não pathInt64, que ecoa o valor bruto no erro)
+// para a mensagem de erro ficar fixa e sem eco.
+func handlePaintIgnoreInMix(svc *service.PaintService) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		raw, _ := ctx.UserValue("id").(string)
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || id <= 0 {
+			writeError(ctx, fasthttp.StatusBadRequest, "id inválido")
+			return
+		}
+
+		var body struct {
+			IgnoreInMix *bool `json:"ignoreInMix"`
+		}
+		if err := json.Unmarshal(ctx.PostBody(), &body); err != nil || body.IgnoreInMix == nil {
+			writeError(ctx, fasthttp.StatusBadRequest, "pedido inválido")
+			return
+		}
+
+		name, err := svc.SetPaintIgnoreInMix(id, *body.IgnoreInMix)
+		if err != nil {
+			if errors.Is(err, service.ErrPaintNotFound) {
+				writeError(ctx, fasthttp.StatusNotFound, "tinta não encontrada")
+				return
+			}
+			log.Printf("[paints] ignore-in-mix: %v", err)
+			writeError(ctx, fasthttp.StatusInternalServerError, "não foi possível gravar a marca")
+			return
+		}
+		log.Printf("[paints] ignore-in-mix id=%d name=%q ignoreInMix=%v", id, name, *body.IgnoreInMix)
+		writeJSON(ctx, fasthttp.StatusOK, map[string]any{"id": id, "ignoreInMix": *body.IgnoreInMix})
 	}
 }
 

@@ -32,6 +32,9 @@ type Paint struct {
 	B              uint8  `json:"b"`
 	Volume         string `json:"volume"`
 	Notes          string `json:"notes"`
+	// IgnoreInMix (rf-19): item marcado é descartado do pool de sugestão antes
+	// de ToMixInputs. Não viaja no CSV (ToCSV/ParseCSV ficam de fora).
+	IgnoreInMix bool `json:"ignoreInMix"`
 }
 
 // Manufacturer é o mínimo que o parser precisa para validar/resolver o

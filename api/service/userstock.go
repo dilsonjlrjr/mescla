@@ -56,6 +56,10 @@ func ensureUserSchema(db *sql.DB) error {
 	if err := addColumnIfMissing(db, "user_paints", "catalog_id", "INTEGER"); err != nil {
 		return err
 	}
+	// rf-19: coluna aditiva — tinta de estoque existente nasce sem a marca.
+	if err := addColumnIfMissing(db, "user_paints", "ignore_in_mix", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
 
 	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS user_paint_origins (
@@ -101,6 +105,9 @@ type UserPaintDTO struct {
 	Quantity       *int   `json:"quantity"`
 	PaintTypeID    *int64 `json:"paintTypeId"`
 	CatalogID      *int64 `json:"catalogId"`
+	// IgnoreInMix (rf-19, RN17): ausente mantém o valor no PUT e vale false no
+	// POST. Na resposta vem sempre preenchido.
+	IgnoreInMix *bool `json:"ignoreInMix"`
 }
 
 // CSVImportResultDTO resume uma importação: quantas tintas entraram e os erros
@@ -136,7 +143,7 @@ const userPaintSelect = `
 	       up.name, COALESCE(up.code, ''),
 	       up.rgb_r, up.rgb_g, up.rgb_b,
 	       COALESCE(up.volume, ''), COALESCE(up.notes, ''),
-	       up.quantity, pt.id, ca.id
+	       up.quantity, pt.id, ca.id, up.ignore_in_mix
 	FROM user_paints up
 	JOIN manufacturers m ON m.id = up.manufacturer_id
 	LEFT JOIN paint_types pt ON pt.id = up.paint_type_id
@@ -148,10 +155,11 @@ func scanUserPaint(sc rowScanner) (UserPaintDTO, error) {
 	var p UserPaintDTO
 	var quantity int
 	var paintTypeID, catalogID sql.NullInt64
+	var ignoreInMix bool
 	if err := sc.Scan(
 		&p.ID, &p.ManufacturerID, &p.Manufacturer,
 		&p.Name, &p.Code, &p.R, &p.G, &p.B, &p.Volume, &p.Notes,
-		&quantity, &paintTypeID, &catalogID,
+		&quantity, &paintTypeID, &catalogID, &ignoreInMix,
 	); err != nil {
 		return UserPaintDTO{}, err
 	}
@@ -162,6 +170,7 @@ func scanUserPaint(sc rowScanner) (UserPaintDTO, error) {
 	if catalogID.Valid {
 		p.CatalogID = &catalogID.Int64
 	}
+	p.IgnoreInMix = &ignoreInMix
 	return p, nil
 }
 
@@ -248,6 +257,16 @@ func resolveQuantity(existing int, in *int) (int, error) {
 	return *in, nil
 }
 
+// resolveIgnoreInMix aplica RN17 (rf-19) à marca "ignorar no cálculo de
+// mistura": ausente (nil) mantém existing — que já vem como false no
+// caminho do POST, já que não há linha gravada ainda.
+func resolveIgnoreInMix(existing bool, in *bool) bool {
+	if in == nil {
+		return existing
+	}
+	return *in
+}
+
 // resolvePaintTypeID aplica RN17: ausente mantém existing (NULL no POST); 0
 // limpa para NULL; qualquer outro valor precisa existir em paint_types.
 func (s *PaintService) resolvePaintTypeID(existing sql.NullInt64, in *int64) (sql.NullInt64, error) {
@@ -309,14 +328,23 @@ func (s *PaintService) AddUserPaint(p UserPaintDTO) (UserPaintDTO, error) {
 	if err != nil {
 		return UserPaintDTO{}, err
 	}
+	// A marca é do produto (rf-19 RN9): sem o campo, a cópia de uma tinta do
+	// catálogo herda a marca dela — vale para qualquer cliente, não só o "Tenho".
+	padraoIgnore := false
+	if p.IgnoreInMix == nil && catalogID.Valid {
+		if err := s.db.QueryRow(`SELECT ignore_in_mix FROM paints WHERE id = ?`, catalogID.Int64).Scan(&padraoIgnore); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return UserPaintDTO{}, err
+		}
+	}
+	ignoreInMix := resolveIgnoreInMix(padraoIgnore, p.IgnoreInMix)
 	if _, err := s.validateManufacturer(p.ManufacturerID); err != nil {
 		return UserPaintDTO{}, err
 	}
 
 	res, err := s.db.Exec(`
-		INSERT INTO user_paints (manufacturer_id, name, code, rgb_r, rgb_g, rgb_b, volume, notes, quantity, paint_type_id, catalog_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, p.ManufacturerID, p.Name, p.Code, p.R, p.G, p.B, p.Volume, p.Notes, quantity, paintTypeID, catalogID)
+		INSERT INTO user_paints (manufacturer_id, name, code, rgb_r, rgb_g, rgb_b, volume, notes, quantity, paint_type_id, catalog_id, ignore_in_mix)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, p.ManufacturerID, p.Name, p.Code, p.R, p.G, p.B, p.Volume, p.Notes, quantity, paintTypeID, catalogID, ignoreInMix)
 	if err != nil {
 		return UserPaintDTO{}, err
 	}
@@ -329,13 +357,13 @@ func (s *PaintService) AddUserPaint(p UserPaintDTO) (UserPaintDTO, error) {
 
 // userPaintEditableFields lê os 3 campos aditivos da linha atual — base da
 // resolução em memória do PUT parcial (Decisões de E1).
-func (s *PaintService) userPaintEditableFields(id int64) (quantity int, paintTypeID, catalogID sql.NullInt64, err error) {
-	err = s.db.QueryRow(`SELECT quantity, paint_type_id, catalog_id FROM user_paints WHERE id = ?`, id).
-		Scan(&quantity, &paintTypeID, &catalogID)
+func (s *PaintService) userPaintEditableFields(id int64) (quantity int, paintTypeID, catalogID sql.NullInt64, ignoreInMix bool, err error) {
+	err = s.db.QueryRow(`SELECT quantity, paint_type_id, catalog_id, ignore_in_mix FROM user_paints WHERE id = ?`, id).
+		Scan(&quantity, &paintTypeID, &catalogID, &ignoreInMix)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, sql.NullInt64{}, sql.NullInt64{}, ErrUserPaintNotFound
+		return 0, sql.NullInt64{}, sql.NullInt64{}, false, ErrUserPaintNotFound
 	}
-	return quantity, paintTypeID, catalogID, err
+	return quantity, paintTypeID, catalogID, ignoreInMix, err
 }
 
 // UpdateUserPaint edita uma tinta do estoque. Lê a linha, resolve os campos
@@ -344,7 +372,7 @@ func (s *PaintService) UpdateUserPaint(p UserPaintDTO) (UserPaintDTO, error) {
 	if err := normalizeUserPaintFields(&p); err != nil {
 		return UserPaintDTO{}, err
 	}
-	existingQty, existingType, existingCatalog, err := s.userPaintEditableFields(p.ID)
+	existingQty, existingType, existingCatalog, existingIgnoreInMix, err := s.userPaintEditableFields(p.ID)
 	if err != nil {
 		return UserPaintDTO{}, err
 	}
@@ -360,6 +388,7 @@ func (s *PaintService) UpdateUserPaint(p UserPaintDTO) (UserPaintDTO, error) {
 	if err != nil {
 		return UserPaintDTO{}, err
 	}
+	ignoreInMix := resolveIgnoreInMix(existingIgnoreInMix, p.IgnoreInMix)
 	if _, err := s.validateManufacturer(p.ManufacturerID); err != nil {
 		return UserPaintDTO{}, err
 	}
@@ -368,10 +397,10 @@ func (s *PaintService) UpdateUserPaint(p UserPaintDTO) (UserPaintDTO, error) {
 		UPDATE user_paints
 		SET manufacturer_id = ?, name = ?, code = ?, rgb_r = ?, rgb_g = ?, rgb_b = ?,
 		    volume = ?, notes = ?, quantity = ?, paint_type_id = ?, catalog_id = ?,
-		    updated_at = CURRENT_TIMESTAMP
+		    ignore_in_mix = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
 	`, p.ManufacturerID, p.Name, p.Code, p.R, p.G, p.B, p.Volume, p.Notes,
-		quantity, paintTypeID, catalogID, p.ID)
+		quantity, paintTypeID, catalogID, ignoreInMix, p.ID)
 	if err != nil {
 		return UserPaintDTO{}, err
 	}
@@ -512,6 +541,7 @@ func (s *PaintService) loadStockAsMixInputs() ([]mix.PaintInput, error) {
 		SELECT up.id, up.name, COALESCE(up.code, ''), up.rgb_r, up.rgb_g, up.rgb_b, up.manufacturer_id, m.name
 		FROM user_paints up
 		JOIN manufacturers m ON m.id = up.manufacturer_id
+		WHERE up.ignore_in_mix = 0
 	`)
 	if err != nil {
 		return nil, err

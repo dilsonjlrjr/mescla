@@ -28,6 +28,7 @@ func NewRouter(svc *service.PaintService) *router.Router {
 	r.GET("/paints", handlePaints(svc))
 	r.GET("/paints/{id}", handlePaintByID(svc))
 	r.GET("/paints/{id}/equivalences", handleEquivalences(svc))
+	r.PUT("/paints/{id}/ignore-in-mix", handlePaintIgnoreInMix(svc))
 	r.POST("/paints/compare", handleCompareColors(svc))
 	r.POST("/query", handleQuery(svc))
 

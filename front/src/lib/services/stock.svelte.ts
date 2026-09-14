@@ -55,6 +55,9 @@ interface UserPaintDTO {
   quantity: number;
   paintTypeId: number | null;
   catalogId: number | null;
+  /** rf-19: tinta que não entra no cálculo de mistura. Ausente no PUT mantém
+   *  o valor no servidor; a resposta sempre traz booleano. */
+  ignoreInMix?: boolean;
 }
 
 function doServidor(d: UserPaintDTO): StockPaint {
@@ -70,6 +73,7 @@ function doServidor(d: UserPaintDTO): StockPaint {
     catalogId: d.catalogId ?? undefined,
     paintTypeId: d.paintTypeId ?? undefined,
     quantity: normalizeQuantity(d.quantity),
+    ignoreInMix: d.ignoreInMix === true,
   };
 }
 
@@ -85,6 +89,7 @@ function paraServidor(p: Omit<StockPaint, 'id'>) {
     quantity: normalizeQuantity(p.quantity),
     paintTypeId: p.paintTypeId ?? 0,
     catalogId: p.catalogId ?? 0,
+    ignoreInMix: p.ignoreInMix ?? false,
   };
 }
 

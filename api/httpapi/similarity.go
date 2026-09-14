@@ -88,8 +88,8 @@ func queryManufacturerID(ctx *fasthttp.RequestCtx) (id int64, valido bool) {
 	return v, true
 }
 
-// queryMaxIngredients lê maxIngredients (rf-13 RN5): ausente é 0, sem teto —
-// preserva o comportamento de T2/T3. Presente fora de 0-8, ou não numérico, é
+// queryMaxIngredients lê maxIngredients (rf-13 RN5): ausente é 0, que o motor
+// trata como o teto padrão de 4 tintas (rf-20 RN1). Presente fora de 0-8, ou não numérico, é
 // inválido (CAN2).
 func queryMaxIngredients(ctx *fasthttp.RequestCtx) (n int, valido bool) {
 	raw := strings.TrimSpace(string(ctx.QueryArgs().Peek("maxIngredients")))
@@ -170,6 +170,9 @@ type recipeByColorStockItem struct {
 	R              int    `json:"r"`
 	G              int    `json:"g"`
 	B              int    `json:"b"`
+	// IgnoreInMix (rf-19, RN2): opcional, padrão false — o cliente monta o
+	// item a partir de GET /user-paints.
+	IgnoreInMix bool `json:"ignoreInMix"`
 }
 
 // recipeByColorRequest é o corpo de POST /recipes/by-color (rf-16 T2, RN14):
@@ -183,6 +186,9 @@ type recipeByColorRequest struct {
 	ForaDoUniverso       bool                     `json:"foraDoUniverso"`
 	MaxIngredients       int                      `json:"maxIngredients"`
 	Stock                []recipeByColorStockItem `json:"stock"`
+	// RespeitarIgnorados (rf-19, RN3): opcional, padrão true. false é a
+	// escolha à mão (rf-18) — passa por cima da marca do estoque do corpo.
+	RespeitarIgnorados *bool `json:"respeitarIgnorados"`
 }
 
 // handleRecipeByColorFromDeviceStock atende POST /recipes/by-color (rf-16
@@ -231,12 +237,18 @@ func handleRecipeByColorFromDeviceStock(svc *service.PaintService) fasthttp.Requ
 			itens = append(itens, service.DeviceStockItemInput{
 				ID: it.ID, ManufacturerID: it.ManufacturerID, Manufacturer: it.Manufacturer,
 				Name: it.Name, Code: it.Code, R: it.R, G: it.G, B: it.B,
+				IgnoreInMix: it.IgnoreInMix,
 			})
 		}
+
+		// respeitarIgnorados (rf-19, RN3): ausente ou true aplica o filtro da
+		// RN2; só false (escolha à mão, rf-18) libera item marcado no corpo.
+		respeitarIgnorados := req.RespeitarIgnorados == nil || *req.RespeitarIgnorados
 
 		recipe, err := svc.ResolverCorComEstoqueDoAparelho(
 			uint8(req.R), uint8(req.G), uint8(req.B),
 			req.TargetManufacturerID, req.ForaDoUniverso, req.MaxIngredients, itens,
+			respeitarIgnorados,
 		)
 		if err != nil {
 			var vazio service.ErrUniversoVazio

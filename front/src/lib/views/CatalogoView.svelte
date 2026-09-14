@@ -52,6 +52,7 @@
     MAX_MANUFACTURER_NAME,
     allPaintTypes, reloadPaintTypes, createPaintType, updatePaintType, deletePaintType,
     MAX_PAINT_TYPE_NAME, type PaintType,
+    paintById, marcarIgnorarNaMistura,
   } from '../services/catalog';
   import {
     stock, sortedStock, addStockPaint, updateStockPaint, removeStockPaint, carregarEstoque,
@@ -191,6 +192,7 @@
             r: p.r, g: p.g, b: p.b,
             volume: '',
             notes: '',
+            ignoreInMix: p.ignoreInMix === true,
           }),
     );
   }
@@ -240,6 +242,7 @@
     name: string;
     meta: string;
     hex: string;
+    ignore: boolean;
     toggle: () => void;
     edit: () => void;
     del?: () => void;
@@ -252,6 +255,7 @@
       name: p.name,
       meta: `${p.code || '—'} · ${p.manufacturer}${typeSuffix(p.paintTypeId)}${p.volume ? ` · ${p.volume}` : ''}${(p.quantity ?? 1) > 1 ? ` · ${t('qtyPots', { n: p.quantity ?? 1 })}` : ''}`,
       hex: rgbToHex(p.r, p.g, p.b),
+      ignore: p.ignoreInMix === true,
       // Desmarcar tinta do catálogo só devolve a linha ao catálogo; tinta
       // cadastrada à mão sumiria de vez, então passa pela confirmação.
       toggle: () => {
@@ -270,6 +274,7 @@
           name: p.name,
           meta: `${p.code} · ${p.manufacturer}${typeSuffix(p.paintTypeId)}`,
           hex: hexOf(p),
+          ignore: p.ignoreInMix === true,
           toggle: () => toggleHave(p),
           edit: () => openEditCatalog(p),
         });
@@ -299,6 +304,13 @@
   let fHex = $state('#8a8a8a');
   let fVolume = $state('');
   let fQty = $state(1);
+  // rf-19: marca "ignorar no cálculo de mistura".
+  let fIgnoreInMix = $state(false);
+  // RN8: preenchimento inicial do formulário aberto por "Editar" numa linha
+  // do catálogo — soAMarcaMudou() compara com isto antes de salvar.
+  let editCatalogSnapshot: {
+    name: string; code: string; manufacturerId: number; type: number; hex: string; volume: string; qty: number; ignore: boolean;
+  } | null = $state(null);
   // Toggle visual "Tenho este pote agora" (fiel ao mockup) — o estoque local
   // não tem coluna `have` própria: estar na lista já É "tenho" (RG-17). Sem
   // essa coluna, desmarcar aqui não muda o que saveForm() grava; é limitação
@@ -428,9 +440,12 @@
   }
 
   function openAdd() {
+    // Gravação em curso: outro formulário não pode herdar o estado dela.
+    if (saving) return;
     closeOtherModals();
     editingId = null;
     editingCatalogId = null;
+    editCatalogSnapshot = null;
     fMfr = mfrFilter ?? '';
     fPType = defaultPTypeId() ?? '';
     fName = '';
@@ -439,14 +454,18 @@
     fVolume = '';
     fQty = 1;
     fHave = true;
+    fIgnoreInMix = false;
     formOpen = true;
     void resetFormScroll();
   }
 
   function openEdit(p: StockPaint) {
+    // Gravação em curso: outro formulário não pode herdar o estado dela.
+    if (saving) return;
     closeOtherModals();
     editingId = p.id;
     editingCatalogId = null;
+    editCatalogSnapshot = null;
     const m = allMfrs.find(x => x.name === p.manufacturer);
     fMfr = m?.id ?? '';
     fPType = p.paintTypeId ?? '';
@@ -456,11 +475,14 @@
     fVolume = p.volume;
     fQty = p.quantity ?? 1;
     fHave = true;
+    fIgnoreInMix = p.ignoreInMix === true;
     formOpen = true;
     void resetFormScroll();
   }
 
   function openEditCatalog(p: Paint) {
+    // Gravação em curso: outro formulário não pode herdar o estado dela.
+    if (saving) return;
     closeOtherModals();
     editingId = null;
     editingCatalogId = p.id;
@@ -472,6 +494,17 @@
     fVolume = '';
     fQty = 1;
     fHave = true;
+    fIgnoreInMix = p.ignoreInMix === true;
+    editCatalogSnapshot = {
+      name: p.name.trim(),
+      code: p.code.trim(),
+      manufacturerId: p.manufacturerId,
+      type: p.paintTypeId || 0,
+      hex: fHex,
+      volume: '',
+      qty: 1,
+      ignore: fIgnoreInMix,
+    };
     formOpen = true;
     void resetFormScroll();
   }
@@ -507,20 +540,75 @@
       volume: fVolume.trim(),
       quantity: Number(fQty),
       notes: '',
+      ignoreInMix: fIgnoreInMix,
     };
     try {
       if (editingId !== null) {
-        // A origem sai do registro ANTES da troca: código e fabricante podem
-        // mudar agora e o casamento por chave se perderia.
+        // A origem sai do registro ANTES da troca (RN7): código e fabricante
+        // podem mudar agora e o casamento por chave se perderia.
         const prev = stock.paints.find(x => x.id === editingId);
-        await updateStockPaint({ ...base, id: editingId, catalogId: prev ? catalogOriginOf(prev) : undefined });
+        const origem = prev ? catalogOriginOf(prev) : undefined;
+        await updateStockPaint({ ...base, id: editingId, catalogId: origem });
+        // A marca é do produto (RN7): sobe ao catálogo só quando o pintor
+        // mudou a marca desta linha e ela difere do catálogo — editar só a
+        // quantidade de uma cópia divergente não desmarca o produto. Gravação
+        // independente da do estoque; o formulário só fecha depois dela.
+        const mudouAMarca = (prev?.ignoreInMix === true) !== fIgnoreInMix;
+        if (mudouAMarca && origem != null && (paintById(origem)?.ignoreInMix === true) !== fIgnoreInMix) {
+          try {
+            await marcarIgnorarNaMistura(origem, fIgnoreInMix);
+          } catch {
+            toast(t('errMarkPartial'), 'error');
+            return;
+          }
+        }
+        formOpen = false;
+        toast(t('saveChanges'));
       } else if (editingCatalogId !== null) {
-        await addStockPaint({ ...base, catalogId: editingCatalogId });
+        const catalogId = editingCatalogId;
+        const snap = editCatalogSnapshot;
+        const norm = (v: number | '') => (v === '' ? 0 : Number(v));
+        const soAMarca = !!snap
+          && fName.trim() === snap.name
+          && fCode.trim() === snap.code
+          && Number(fMfr) === snap.manufacturerId
+          && norm(fPType) === norm(snap.type)
+          && fHex.trim().toLowerCase() === snap.hex.toLowerCase()
+          && fVolume.trim() === snap.volume
+          && Number(fQty) === snap.qty
+          && fIgnoreInMix !== snap.ignore;
+        if (soAMarca) {
+          // RN8: só a marca mudou — grava só ela, sem cópia no estoque.
+          try {
+            await marcarIgnorarNaMistura(catalogId, fIgnoreInMix);
+            formOpen = false;
+            toast(t('markSaved'));
+          } catch {
+            toast(t('errMarkWrite'), 'error');
+          }
+        } else {
+          const salvo = await addStockPaint({ ...base, catalogId });
+          if ((paintById(catalogId)?.ignoreInMix === true) !== fIgnoreInMix) {
+            try {
+              await marcarIgnorarNaMistura(catalogId, fIgnoreInMix);
+            } catch {
+              // A cópia já existe no estoque: o formulário, ainda aberto,
+              // passa a editar ELA (PUT na próxima tentativa, não outro POST
+              // duplicando a linha).
+              editingId = salvo.id;
+              editingCatalogId = null;
+              toast(t('errMarkPartial'), 'error');
+              return;
+            }
+          }
+          formOpen = false;
+          toast(t('saveChanges'));
+        }
       } else {
         await addStockPaint(base);
+        formOpen = false;
+        toast(t('saveChanges'));
       }
-      formOpen = false;
-      toast(t('saveChanges'));
     } catch (e) {
       // D-018: a falha aparece e o formulário continua aberto com os dados.
       avisarErroDeEstoque(e);
@@ -1010,7 +1098,12 @@
                     </button>
                     <span style="width: 42px; height: 42px; border-radius: 4px; border: 1px solid var(--color-neutral-800); background: {r.hex}; flex-shrink: 0;"></span>
                     <span style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0;">
-                      <span style="font-size: 16px; font-weight: 500; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{r.name}</span>
+                      <span style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                        <span style="font-size: 16px; font-weight: 500; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{r.name}</span>
+                        {#if r.ignore}
+                          <span style="flex-shrink: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--color-neutral-700); color: var(--color-neutral-400); white-space: nowrap;">{t('badgeOutOfMix')}</span>
+                        {/if}
+                      </span>
                       <span style="font-size: 13px; color: var(--color-neutral-500);">{r.meta}</span>
                     </span>
                     <button class="t4-hover-ghost" onclick={r.edit} style="height: 48px; padding: 0 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('edit')}</button>
@@ -1220,6 +1313,22 @@
             </button>
           </div>
         </div>
+
+        <!-- rf-19 RN6: metálicas, washes, vernizes e médiums saem das sugestões. -->
+        <button
+          type="button"
+          onclick={() => (fIgnoreInMix = !fIgnoreInMix)}
+          aria-pressed={fIgnoreInMix}
+          style="display: flex; align-items: center; gap: 12px; width: 100%; height: 60px; padding: 0 14px; border: 1px solid {fIgnoreInMix ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 8px; background: {fIgnoreInMix ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'transparent'}; color: var(--color-text); font-family: inherit; font-size: 15px; text-align: left; cursor: pointer;"
+        >
+          <span style="display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid {fIgnoreInMix ? 'var(--color-accent)' : 'var(--color-neutral-800)'}; border-radius: 4px; flex-shrink: 0;">
+            <i class="ph-bold ph-check" style="font-size: 15px; color: {fIgnoreInMix ? 'var(--color-accent)' : 'transparent'};"></i>
+          </span>
+          <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+            <span style="font-weight: 500;">{t('ignoreInMixLabel')}</span>
+            <span style="font-size: 12.5px; color: var(--color-neutral-500); text-wrap: pretty;">{t('ignoreInMixNote')}</span>
+          </span>
+        </button>
       </div>
     </div>
 

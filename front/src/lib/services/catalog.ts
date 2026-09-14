@@ -17,6 +17,8 @@ export interface Paint {
   b: number;
   /** Tipo de tinta (rf-15); 0 = sem tipo. */
   paintTypeId: number;
+  /** rf-19: tinta que não entra em nenhuma sugestão de mistura (metálica, wash…). */
+  ignoreInMix?: boolean;
 }
 
 export interface Manufacturer {
@@ -51,6 +53,7 @@ interface PaintResponse {
   r: number;
   g: number;
   b: number;
+  ignoreInMix?: boolean;
 }
 
 let paints: Paint[] = [];
@@ -100,6 +103,7 @@ export function loadCatalog(): Promise<void> {
         r: p.r,
         g: p.g,
         b: p.b,
+        ignoreInMix: p.ignoreInMix === true,
       }));
       byId = new Map(paints.map(p => [p.id, p]));
       codeIndex = paints.map(p => compactCode(p.code));
@@ -119,6 +123,21 @@ export function allManufacturers(): Manufacturer[] {
 
 export function paintById(id: number): Paint | undefined {
   return byId.get(id);
+}
+
+// ── Marca "ignorar no cálculo de mistura" (rf-19) ──
+
+/** RN10: grava a marca na tinta do catálogo e atualiza o objeto em memória
+ *  (mesma referência usada pela lista e por `byId`) — sem recarregar o
+ *  catálogo. Lança `ApiError` em caso de falha; quem chama decide o toast. */
+export async function marcarIgnorarNaMistura(id: number, valor: boolean): Promise<boolean> {
+  const resp = await apiPut<{ id: number; ignoreInMix: boolean }>(`/paints/${id}/ignore-in-mix`, {
+    ignoreInMix: valor,
+  });
+  const p = byId.get(id);
+  if (p) p.ignoreInMix = resp.ignoreInMix;
+  catalogRev.n++;
+  return resp.ignoreInMix;
 }
 
 // ── Fabricantes no servidor (rf-14) ──

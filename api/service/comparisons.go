@@ -85,6 +85,11 @@ func (s *PaintService) BestBrandsFor(paintID int64) ([]BrandBestDTO, error) {
 		if p.ID == source.ID {
 			continue
 		}
+		// rf-19 RN1: GetAllPaints segue sem filtro (T4 continua listando tudo);
+		// o corte fica aqui, só na sugestão.
+		if p.IgnoreInMix {
+			continue
+		}
 		l, a, b := color.RGBToLab(p.R, p.G, p.B)
 		delta := color.DeltaE2000(sourceLab, [3]float64{l, a, b})
 		cur, seen := best[p.Manufacturer]
@@ -140,7 +145,16 @@ func (s *PaintService) SuggestEquivalentFromPool(sourcePaintID int64, pool []sto
 		return EquivalentRecipeDTO{}, fmt.Errorf("tinta de origem não possui dados de cor cadastrados")
 	}
 
-	mixPool := stock.ToMixInputs(pool)
+	// rf-19 RN2: item marcado é descartado antes de virar candidato — sem
+	// exceção nesta rota (respeitarIgnorados é só de POST /recipes/by-color).
+	semIgnoradas := make([]stock.Paint, 0, len(pool))
+	for _, p := range pool {
+		if !p.IgnoreInMix {
+			semIgnoradas = append(semIgnoradas, p)
+		}
+	}
+
+	mixPool := stock.ToMixInputs(semIgnoradas)
 	if len(mixPool) == 0 {
 		return EquivalentRecipeDTO{}, fmt.Errorf("estoque vazio — cadastre tintas primeiro")
 	}

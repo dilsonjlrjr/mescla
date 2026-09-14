@@ -403,6 +403,7 @@ func (r *Retrieval) loadAllPaints() ([]PaintInfo, error) {
 		LEFT JOIN coverage_types ct ON ct.id = p.coverage_type_id
 		LEFT JOIN opacity_types ot ON ot.id = p.opacity_type_id
 		WHERE pc.rgb_r IS NOT NULL
+		  AND p.ignore_in_mix = 0 -- rf-19: sugestão de mistura da IA pula tinta marcada
 	`
 
 	rows, err := r.db.Query(query)

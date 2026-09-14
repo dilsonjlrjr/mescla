@@ -94,6 +94,8 @@ export interface StockPaint {
   paintTypeId?: number;
   /** Quantos potes iguais o pintor tem. Estoque anterior ao campo vira 1 na abertura de T4. */
   quantity?: number;
+  /** rf-19: tinta que não entra no cálculo de mistura (metálica, wash…). */
+  ignoreInMix?: boolean;
 }
 
 export interface StockRowError {
@@ -138,7 +140,7 @@ export async function findSimilar(
 
 /** rf-13: targetManufacturerId agora é opcional — ausente ou 0 = catálogo inteiro
  *  (cross-brand real, RG-13). maxIngredients é o teto de ingredientes da fórmula
- *  (ausente ou 0 = sem teto, comportamento anterior de T2/T3). */
+ *  (ausente ou 0 = teto padrão de 4 tintas do motor, rf-20). */
 export async function suggestEquivalentRecipe(
   paintId: number,
   targetManufacturerId?: number,
@@ -162,12 +164,16 @@ export interface UniversoBusca {
   useStockOnly?: boolean;
   /** Só depois de o usuário autorizar a saída no diálogo de fallback. */
   foraDoUniverso?: boolean;
-  /** rf-13 RN5: teto de ingredientes da receita. Ausente ou 0 = sem teto. */
+  /** rf-13 RN5: teto de ingredientes da receita. Ausente ou 0 = teto padrão de 4 tintas (rf-20). */
   maxIngredients?: number;
   /** rf-16 RN14: o estoque vive no aparelho (`stock.svelte.ts`), não no
    *  servidor. Com `useStockOnly` e esta lista, o cálculo vai por POST com o
    *  estoque no corpo; sem ela, o GET antigo (que lê `user_paints`). */
   stock?: StockPaint[];
+  /** rf-19 RN3: `false` só na escolha à mão (rf-18) — passa por cima da marca
+   *  "ignorar no cálculo de mistura" do estoque enviado no corpo. Ausente ou
+   *  `true` filtra normalmente. */
+  respeitarIgnorados?: boolean;
 }
 
 /** Resposta possível quando o universo escolhido não tem tinta nenhuma. Não é
@@ -199,6 +205,11 @@ export async function suggestRecipeForColor(
   universo: UniversoBusca,
 ): Promise<EquivalentRecipe | UniversoVazio> {
   if (universo.useStockOnly && universo.stock) {
+    // rf-19 RN2/RN3: sem `respeitarIgnorados: false` (escolha à mão, rf-18), o
+    // cliente já não manda a tinta marcada — o servidor não sabe a marca de
+    // um item que só existe no corpo (id negado).
+    const respeitar = universo.respeitarIgnorados ?? true;
+    const stockFiltrado = respeitar ? universo.stock.filter(p => p.ignoreInMix !== true) : universo.stock;
     // Campo a campo, nunca spread: quantidade, notas e ids de catálogo do
     // estoque local não interessam ao motor.
     return apiPost<EquivalentRecipe | UniversoVazio>('/recipes/by-color', {
@@ -208,7 +219,8 @@ export async function suggestRecipeForColor(
       targetManufacturerId: universo.targetManufacturerId ?? 0,
       foraDoUniverso: universo.foraDoUniverso ?? false,
       maxIngredients: universo.maxIngredients ?? 0,
-      stock: universo.stock.map(p => ({
+      respeitarIgnorados: respeitar,
+      stock: stockFiltrado.map(p => ({
         id: p.id,
         manufacturerId: p.manufacturerId,
         manufacturer: p.manufacturer,
@@ -217,6 +229,7 @@ export async function suggestRecipeForColor(
         r: p.r,
         g: p.g,
         b: p.b,
+        ignoreInMix: p.ignoreInMix === true,
       })),
     });
   }
@@ -260,7 +273,11 @@ export async function suggestFromStock(
   sourcePaintId: number,
   stock: StockPaint[],
 ): Promise<EquivalentRecipe> {
-  return apiPost<EquivalentRecipe>('/stock/suggest-recipe', { sourcePaintId, stock });
+  // rf-19 RN2: item marcado não entra na sugestão; o campo viaja mesmo assim
+  // nos que sobram (o servidor não tem como consultar a marca de um item que
+  // só existe no corpo).
+  const stockFiltrado = stock.filter(p => p.ignoreInMix !== true).map(p => ({ ...p, ignoreInMix: false }));
+  return apiPost<EquivalentRecipe>('/stock/suggest-recipe', { sourcePaintId, stock: stockFiltrado });
 }
 
 /** Valida um CSV de importação contra os fabricantes do catálogo (mesma

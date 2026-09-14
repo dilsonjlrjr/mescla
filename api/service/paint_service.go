@@ -106,6 +106,18 @@ func openPaintService(dbPath string) (*PaintService, error) {
 	if err := ensurePaintTypeDefaults(db); err != nil {
 		return nil, fmt.Errorf("preparando tipos de tinta: %w", err)
 	}
+	// rf-19: coluna aditiva — tinta existente nasce sem a marca (0/false).
+	// Mesma guarda de ensurePaintTypeDefaults: banco de teste sem catálogo
+	// (só testando pragma/conexão) não tem "paints" ainda, e não é erro.
+	var temPaints int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'paints'`).Scan(&temPaints); err != nil {
+		return nil, fmt.Errorf("verificando tabela paints: %w", err)
+	}
+	if temPaints > 0 {
+		if err := addColumnIfMissing(db, "paints", "ignore_in_mix", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+			return nil, fmt.Errorf("preparando marca de ignorar na mistura: %w", err)
+		}
+	}
 
 	return &PaintService{
 		db:  db,
@@ -140,6 +152,9 @@ type PaintDTO struct {
 	Coverage       string `json:"coverage"`
 	Opacity        string `json:"opacity"`
 	Volume         string `json:"volume"`
+	// IgnoreInMix (rf-19): tinta marcada não entra em nenhuma sugestão de
+	// mistura, mas continua na busca e em GET /paints.
+	IgnoreInMix bool `json:"ignoreInMix"`
 }
 
 type SearchResultDTO struct {
@@ -312,7 +327,8 @@ func (s *PaintService) GetAllPaints() ([]PaintDTO, error) {
 			   COALESCE(p.thumbnail_path, ''), COALESCE(p.image_path, ''),
 			   COALESCE(ft.name, ''), COALESCE(pt.name, ''), COALESCE(p.paint_type_id, 0),
 			   COALESCE(ct.name, ''), COALESCE(ot.name, ''),
-			   COALESCE(p.volume_ml || 'ml', '')
+			   COALESCE(p.volume_ml || 'ml', ''),
+			   p.ignore_in_mix
 		FROM paints p
 		JOIN manufacturers m ON m.id = p.manufacturer_id
 		LEFT JOIN product_lines pl ON pl.id = p.product_line_id
@@ -341,6 +357,7 @@ func (s *PaintService) GetAllPaints() ([]PaintDTO, error) {
 			&p.FinishType, &p.PaintType, &p.PaintTypeID,
 			&p.Coverage, &p.Opacity,
 			&p.Volume,
+			&p.IgnoreInMix,
 		); err != nil {
 			return nil, err
 		}
@@ -371,7 +388,8 @@ func (s *PaintService) SearchPaints(query string) ([]PaintDTO, error) {
 			   COALESCE(p.thumbnail_path, ''), COALESCE(p.image_path, ''),
 			   COALESCE(ft.name, ''), COALESCE(pt.name, ''), COALESCE(p.paint_type_id, 0),
 			   COALESCE(ct.name, ''), COALESCE(ot.name, ''),
-			   COALESCE(p.volume_ml || 'ml', '')
+			   COALESCE(p.volume_ml || 'ml', ''),
+			   p.ignore_in_mix
 		FROM paints p
 		JOIN manufacturers m ON m.id = p.manufacturer_id
 		LEFT JOIN product_lines pl ON pl.id = p.product_line_id
@@ -410,6 +428,7 @@ func (s *PaintService) SearchPaints(query string) ([]PaintDTO, error) {
 			&p.FinishType, &p.PaintType, &p.PaintTypeID,
 			&p.Coverage, &p.Opacity,
 			&p.Volume,
+			&p.IgnoreInMix,
 		); err != nil {
 			return nil, err
 		}
@@ -427,7 +446,8 @@ func (s *PaintService) GetPaintByID(id int64) (PaintDTO, error) {
 			   COALESCE(p.thumbnail_path, ''), COALESCE(p.image_path, ''),
 			   COALESCE(ft.name, ''), COALESCE(pt.name, ''), COALESCE(p.paint_type_id, 0),
 			   COALESCE(ct.name, ''), COALESCE(ot.name, ''),
-			   COALESCE(p.volume_ml || 'ml', '')
+			   COALESCE(p.volume_ml || 'ml', ''),
+			   p.ignore_in_mix
 		FROM paints p
 		JOIN manufacturers m ON m.id = p.manufacturer_id
 		LEFT JOIN product_lines pl ON pl.id = p.product_line_id
@@ -448,6 +468,7 @@ func (s *PaintService) GetPaintByID(id int64) (PaintDTO, error) {
 		&p.FinishType, &p.PaintType, &p.PaintTypeID,
 		&p.Coverage, &p.Opacity,
 		&p.Volume,
+		&p.IgnoreInMix,
 	)
 	return p, err
 }
@@ -515,7 +536,7 @@ func (s *PaintService) FindEquivalences(paintID int64) ([]SearchResultDTO, error
 // de ajuste em texto.
 //
 // targetManufacturerID == 0 (rf-13) abre o pool para o catálogo inteiro —
-// cross-brand real, RG-13. maxIngredients <= 0 é sem teto (RN5).
+// cross-brand real, RG-13. maxIngredients <= 0 usa o teto padrão de 4 tintas (rf-20 RN1).
 func (s *PaintService) SuggestEquivalentRecipe(sourcePaintID int64, targetManufacturerID int64, maxIngredients int) (EquivalentRecipeDTO, error) {
 	source, err := s.GetPaintByID(sourcePaintID)
 	if err != nil {
@@ -645,7 +666,7 @@ func (s *PaintService) loadPaintsByManufacturerID(manufacturerID int64) ([]mix.P
 		FROM paints p
 		JOIN paint_colors pc ON pc.paint_id = p.id
 		JOIN manufacturers m ON m.id = p.manufacturer_id
-		WHERE p.manufacturer_id = ?
+		WHERE p.manufacturer_id = ? AND p.ignore_in_mix = 0
 	`
 	rows, err := s.db.Query(query, manufacturerID)
 	if err != nil {
@@ -662,6 +683,33 @@ func (s *PaintService) loadPaintsByManufacturerID(manufacturerID int64) ([]mix.P
 		paints = append(paints, p)
 	}
 	return paints, rows.Err()
+}
+
+// ErrPaintNotFound é a sentinela de "tinta do catálogo não encontrada" — o
+// handler HTTP faz errors.Is nela para responder 404, nunca casando por texto.
+var ErrPaintNotFound = errors.New("tinta não encontrada")
+
+// SetPaintIgnoreInMix grava a marca "ignorar no cálculo de mistura" (rf-19,
+// RN11) e devolve o nome da tinta, para o log do chamador.
+func (s *PaintService) SetPaintIgnoreInMix(id int64, ignoreInMix bool) (string, error) {
+	var name string
+	if err := s.db.QueryRow("SELECT name FROM paints WHERE id = ?", id).Scan(&name); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrPaintNotFound
+		}
+		return "", err
+	}
+	v := 0
+	if ignoreInMix {
+		v = 1
+	}
+	if _, err := s.db.Exec(
+		"UPDATE paints SET ignore_in_mix = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		v, id,
+	); err != nil {
+		return "", err
+	}
+	return name, nil
 }
 
 func (s *PaintService) ProcessQuery(text string) (ai.Response, error) {

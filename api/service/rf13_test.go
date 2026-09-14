@@ -35,6 +35,7 @@ func newRF13TestService(t *testing.T, seedSQL string) *PaintService {
 			product_line_id INTEGER,
 			code TEXT NOT NULL DEFAULT '',
 			name TEXT NOT NULL,
+			ignore_in_mix INTEGER NOT NULL DEFAULT 0,
 			paint_type_id INTEGER,
 			finish_type_id INTEGER,
 			coverage_type_id INTEGER,
