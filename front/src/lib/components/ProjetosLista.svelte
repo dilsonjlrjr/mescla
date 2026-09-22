@@ -27,6 +27,14 @@
 
   let busca = $state('');
 
+  /** Card que o usuário clicou: só ele mostra o giro da marca enquanto o
+   *  projeto abre. Uma abertura que falha devolve `abrindo` a false, e o
+   *  efeito apaga o giro — sem isso o card ficava girando para sempre. */
+  let abrindoKey: string | null = $state(null);
+  $effect(() => {
+    if (!abrindo) abrindoKey = null;
+  });
+
   let filtrados = $derived.by(() => {
     const q = norm(busca.trim());
     return q ? planos.filter(p => norm(p.name).includes(q)) : planos;
@@ -100,17 +108,27 @@
     <div class="t2l-grid">
       {#if mostrarCardRascunho && rascunho}
         <div class="t2l-card" style="border-color: var(--color-accent-700); background: var(--color-accent-panel);">
-          <button class="t2l-open" disabled={abrindo} onclick={onabrirRascunho}>
+          <button class="t2l-open" disabled={abrindo} onclick={() => { abrindoKey = 'rascunho'; onabrirRascunho(); }}>
             <span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent-400);">{t('projectNewUnsaved')}</span>
             <span class="t2l-name">{rascunho.nome.trim() || t('projectNoName')}</span>
           </button>
+          {#if abrindo && abrindoKey === 'rascunho'}
+            <div class="t2l-abrindo" role="status">
+              <Spinner size={26} label={t('projectOpening')} />{t('projectOpening')}
+            </div>
+          {/if}
         </div>
       {/if}
 
       {#each filtrados as p (p.id)}
         {@const comRascunho = rascunhoNaLista && rascunho?.planId === p.id}
         <div class="t2l-card">
-          <button class="t2l-open" disabled={abrindo} onclick={() => (comRascunho ? onabrirRascunho() : onabrir(p))} aria-label={t('openProjectAria', { name: p.name })}>
+          <button
+            class="t2l-open"
+            disabled={abrindo}
+            onclick={() => { abrindoKey = String(p.id); if (comRascunho) onabrirRascunho(); else onabrir(p); }}
+            aria-label={t('openProjectAria', { name: p.name })}
+          >
             {#if comRascunho}
               <span style="align-self: flex-start; padding: 2px 8px; border: 1px solid var(--color-accent-700); border-radius: 999px; font-size: 11.5px; color: var(--color-accent-400);">{t('projectUnsavedBadge')}</span>
             {/if}
@@ -125,6 +143,11 @@
             title={t('deleteProjectBtn')}
             onclick={() => onexcluir(p)}
           ><i class="ph ph-trash-simple" style="font-size: 17px;"></i></button>
+          {#if abrindo && abrindoKey === String(p.id)}
+            <div class="t2l-abrindo" role="status">
+              <Spinner size={26} label={t('projectOpening')} />{t('projectOpening')}
+            </div>
+          {/if}
         </div>
       {/each}
     </div>
@@ -150,6 +173,19 @@
     border: 1px solid var(--color-neutral-800);
     border-radius: 14px;
     background: var(--color-panel);
+  }
+
+  .t2l-abrindo {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    border-radius: 14px;
+    background: var(--color-panel);
+    font-size: 13.5px;
+    color: var(--color-neutral-300);
   }
 
   .t2l-card:hover {

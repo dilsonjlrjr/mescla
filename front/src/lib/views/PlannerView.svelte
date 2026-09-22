@@ -86,17 +86,6 @@
     method: string;
   }
 
-  /** rf-09/RN7: chave de dedup é marca+código+nome — `paintId` colapsaria
-   *  misturas diferentes (CA11). `tabs` cita os nomes das abas onde a tinta
-   *  aparece (CA10). */
-  interface ShoppingItem {
-    key: string;
-    name: string;
-    code: string;
-    manufacturer: string;
-    tabs: string[];
-  }
-
   /** rf-09 — estado de uma aba (figura). `regions`, `image`, `hasImage`,
    *  `imageDataUrl`, `nextId`, `selectedId` e `view` só pertencem à aba ATIVA
    *  nas variáveis de topo (abaixo); o resto do tempo moram aqui. `uid` é a
@@ -164,9 +153,6 @@
   let dialogoMelhorTodos: number | null = $state(null);
   let dialogoElemento: HTMLDivElement | undefined = $state();
   let dialogoDisparador: HTMLElement | null = null;
-
-  // Checklist local de "tenho"/"comprar" das tintas do PLANO INTEIRO.
-  let ownedPaints: Set<string> = $state(new Set());
 
   // ── rf-16: lista de projetos e abertura ──
   let modo: 'lista' | 'editor' = $state('lista');
@@ -448,34 +434,20 @@
   let rascunhoPendente = $derived(draftBannerVisible || alteracaoSeq !== alteracaoSeqSalva);
   let exportDisabled = $derived(planId == null || rascunhoPendente || reportGenerating);
 
-  function paintKey(brand: string, code: string, name: string): string {
-    return `${brand} ${code} ${name}`;
+  /** rf-17: a tinta do ingrediente está em "Minhas tintas"? O mesmo pote
+   *  chega de três formas — id negativo do estoque, id de catálogo de onde a
+   *  linha do estoque nasceu, ou só marca + código (tinta do catálogo que o
+   *  pintor também tem). Sem o terceiro caso, uma receita calculada no
+   *  catálogo inteiro marcava "não tenho" em pote que está na estante. */
+  function temEmEstoque(ing: IngredienteDTO): boolean {
+    const cod = ing.code.trim().toLowerCase();
+    const nom = ing.name.trim().toLowerCase();
+    return stock.paints.some(p =>
+      p.id === ing.paintId ||
+      (p.catalogId != null && p.catalogId === ing.paintId) ||
+      (p.manufacturerId === ing.manufacturerId &&
+        (cod !== '' ? p.code.trim().toLowerCase() === cod : p.name.trim().toLowerCase() === nom)));
   }
-
-  let shoppingItems = $derived.by((): ShoppingItem[] => {
-    const map = new Map<string, ShoppingItem>();
-    tabs.forEach((aba, i) => {
-      const abaNome = displayTabName(aba, i);
-      tabRegions(i).forEach((r) => {
-        const desc = descritorDaRegiao(r);
-        if (!desc.paintBrand && !desc.paintCode && !desc.paintName) return;
-        const key = paintKey(desc.paintBrand, desc.paintCode, desc.paintName);
-        const existente = map.get(key);
-        if (existente) {
-          if (!existente.tabs.includes(abaNome)) existente.tabs.push(abaNome);
-        } else {
-          map.set(key, {
-            key,
-            name: desc.paintName,
-            code: desc.paintCode,
-            manufacturer: desc.paintBrand,
-            tabs: [abaNome],
-          });
-        }
-      });
-    });
-    return [...map.values()];
-  });
 
   function regionName(i: number): string {
     return t('regionLabel', { n: i + 1 });
@@ -520,13 +492,6 @@
     const marca = saidaAutorizada === 'todos' ? t('allMakers') : nomeFabricante(manufacturerId) || t('allMakers');
     const base = t('regionOriginProject', { marca });
     return useStockOnly && saidaAutorizada === null ? `${base}, ${t('regionOriginStock')}` : base;
-  }
-
-  function toggleOwned(key: string) {
-    const next = new Set(ownedPaints);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    ownedPaints = next;
   }
 
   function token(name: string, fallback: string): string {
@@ -1116,10 +1081,6 @@
     });
   }
 
-  function togglePainted(r: PlannerRegion) {
-    r.painted = !r.painted;
-    marcarAlteracao();
-  }
 
   function removeSelected() {
     if (selectedId == null) return;
@@ -1655,7 +1616,6 @@
     manufacturerId = manufacturers[0]?.id ?? null;
     useStockOnly = false;
     saidaAutorizada = null;
-    ownedPaints = new Set();
     tabs = [emptyAba()];
     activeTabIndex = 0;
     loadTabIntoWorkingState(0);
@@ -1776,7 +1736,6 @@
     manufacturerId = ctx.manufacturerId;
     useStockOnly = ctx.useStockOnly;
     saidaAutorizada = null;
-    ownedPaints = new Set();
     tabs = novasAbas;
     activeTabIndex = Math.min(Math.max(abaAtivaIndex, 0), tabs.length - 1);
     loadTabIntoWorkingState(activeTabIndex);
@@ -2341,15 +2300,6 @@
                     <span style="font-size: 11.5px; color: var(--color-warning, #E4A11B);">{t('foraDoUniversoLabel')}</span>
                   {/if}
                 </span>
-                <button
-                  class="t2-done-btn"
-                  aria-pressed={r.painted}
-                  style="display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid {r.painted ? 'var(--color-accent-700)' : 'var(--color-neutral-800)'}; border-radius: 8px; background: transparent; color: {r.painted ? 'var(--color-accent-400)' : 'var(--color-neutral-400)'}; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; flex-shrink: 0;"
-                  onclick={(e) => { e.stopPropagation(); togglePainted(r); }}
-                  onkeydown={(e) => e.stopPropagation()}
-                >
-                  <i class="ph-bold ph-check" style="font-size: 14px;"></i>{r.painted ? t('painted') : t('toPaint')}
-                </button>
               </div>
 
               {#if selecionada}
@@ -2401,6 +2351,11 @@
                             <span style="display: flex; flex-direction: column; flex: 1; min-width: 0;">
                               <span style="font-size: 14px; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{ing.name}</span>
                               <span style="font-size: 12px; color: var(--color-neutral-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{ing.code}{#if ing.code && ing.manufacturer} · {/if}{ing.manufacturer ?? ''}</span>
+                              {#if temEmEstoque(ing)}
+                                <span style="align-self: flex-start; margin-top: 2px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--color-accent-panel); color: var(--color-accent-400);">{t('ingredientInStock')}</span>
+                              {:else}
+                                <span style="align-self: flex-start; margin-top: 2px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--color-neutral-800); color: var(--color-neutral-500);">{t('ingredientNoStock')}</span>
+                              {/if}
                             </span>
                             <span class="font-mono" style="width: 56px; text-align: right; font-size: 14px; font-weight: 500; color: var(--color-neutral-300); flex-shrink: 0;">{Math.round(ing.percentage)}%</span>
                           </div>
@@ -2523,29 +2478,6 @@
           {/each}
         </div>
 
-        <p class="section-label" style="margin: 26px 0 12px;">{t('piecePaints')}</p>
-        <div style="display: flex; flex-direction: column;">
-          {#each shoppingItems as s (s.key)}
-            {@const owned = ownedPaints.has(s.key)}
-            <div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 2px; border-bottom: 1px solid var(--color-line);">
-              <button
-                aria-pressed={owned}
-                style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: none; background: transparent; cursor: pointer; flex-shrink: 0;"
-                onclick={() => toggleOwned(s.key)}
-              >
-                <span style="display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid {owned ? 'var(--color-accent)' : 'var(--color-field-border)'}; border-radius: 4px; background: {owned ? 'var(--color-accent)' : 'transparent'};">
-                  {#if owned}<i class="ph-bold ph-check" style="font-size: 15px; color: var(--color-accent-100);"></i>{/if}
-                </span>
-              </button>
-              <span style="display: flex; flex-direction: column; flex: 1; min-width: 0;">
-                <span style="font-size: 15px; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{s.name}</span>
-                <span class="font-mono" style="font-size: 12.5px; color: var(--color-neutral-500);">{s.code} · {s.manufacturer}</span>
-                <span style="font-size: 11.5px; color: var(--color-neutral-600);">{t('usedInTabsLabel', { tabs: s.tabs.join(', ') })}</span>
-              </span>
-              <span style="font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: {owned ? 'var(--color-accent-2)' : 'var(--color-neutral-500)'}; flex-shrink: 0;">{owned ? t('tagHave') : t('tagBuy')}</span>
-            </div>
-          {/each}
-        </div>
       </div>
     </div>
   </div>
@@ -2575,10 +2507,6 @@
     outline-offset: 2px;
   }
 
-  .t2-done-btn:hover {
-    border-color: var(--color-accent-700);
-    color: var(--color-accent-400);
-  }
 
   .t2-icon-btn {
     display: inline-flex;
