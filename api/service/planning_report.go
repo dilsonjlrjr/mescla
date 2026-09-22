@@ -39,11 +39,9 @@ type reportRow struct {
 	R, G, B    int
 	PaintLabel string // "Citadel Khorne Red (22-14)" ou "sem equivalente"
 	DeltaE     float64
-	Painted    bool
 	// ForaDoUniverso (rf-11 RN7): a tinta veio de fora do fabricante base ou
-	// do estoque que o usuário havia pedido — aparece marcada na coluna Estado.
+	// do estoque que o usuário havia pedido — aparece marcada na coluna Tinta.
 	ForaDoUniverso bool
-	Note           string
 }
 
 // reportPaintTab é a ocorrência de uma tinta dentro de uma aba específica:
@@ -206,9 +204,7 @@ func buildReportRows(tabName string, regions []PaintingRegionDTO) []reportRow {
 			B:              int(r.B),
 			PaintLabel:     label,
 			DeltaE:         r.DeltaE,
-			Painted:        r.Painted != 0,
 			ForaDoUniverso: r.ForaDoUniverso != 0,
-			Note:           sanitizeText(r.Note),
 		})
 	}
 	return rows
@@ -406,10 +402,10 @@ func renderPDF(ctx context.Context, d reportData) ([]byte, error) {
 	pageW, _ := pdf.GetPageSize()
 	usableW := pageW - 2*margin
 
-	// #, Aba, Região, Cor, Tinta, Delta E00, Estado, Nota
-	widths := []float64{8, 22, 28, 18, 37, 14, 17, 36}
+	// #, Aba, Região, Cor, Tinta, Delta E00
+	widths := []float64{8, 30, 38, 18, 72, 14}
 	// A fonte core do fpdf é cp1252, que não tem Δ — "ΔE00" sairia ".E00".
-	headers := []string{"#", "Aba", "Região", "Cor", "Tinta", "Delta E00", "Estado", "Nota"}
+	headers := []string{"#", "Aba", "Região", "Cor", "Tinta", "Delta E00"}
 
 	drawTableHeader := func() {
 		pdf.SetFont("Arial", "B", 9)
@@ -492,14 +488,12 @@ func renderPDF(ctx context.Context, d reportData) ([]byte, error) {
 				}
 				drawTableHeader()
 			}
-			estado := "a pintar"
-			if row.Painted {
-				estado = "pintada"
-			}
+			// RN7 do rf-11: a lista de compras não pode esconder que essa tinta
+			// veio de fora do que o usuário pediu. O aviso anda junto do nome
+			// da tinta desde que a coluna Estado saiu.
+			tinta := row.PaintLabel
 			if row.ForaDoUniverso {
-				// RN7 do rf-11: a lista de compras não pode esconder que essa
-				// tinta veio de fora do que o usuário pediu.
-				estado += " (fora do pedido)"
+				tinta += " (fora do pedido)"
 			}
 			pdf.CellFormat(widths[0], 7, strconv.Itoa(row.N), "1", 0, "C", false, 0, "")
 			pdf.CellFormat(widths[1], 7, cortar(pdf, tr(row.TabName), widths[1]), "1", 0, "L", false, 0, "")
@@ -511,10 +505,8 @@ func renderPDF(ctx context.Context, d reportData) ([]byte, error) {
 			pdf.SetFillColor(cr, cg, cb)
 			pdf.Rect(corX+1.5, corY+2, 4, 3, "F")
 			pdf.SetFillColor(240, 240, 240)
-			pdf.CellFormat(widths[4], 7, cortar(pdf, tr(row.PaintLabel), widths[4]), "1", 0, "L", false, 0, "")
+			pdf.CellFormat(widths[4], 7, cortar(pdf, tr(tinta), widths[4]), "1", 0, "L", false, 0, "")
 			pdf.CellFormat(widths[5], 7, formatDeltaE(row.DeltaE), "1", 0, "C", false, 0, "")
-			pdf.CellFormat(widths[6], 7, tr(estado), "1", 0, "C", false, 0, "")
-			pdf.CellFormat(widths[7], 7, cortar(pdf, tr(row.Note), widths[7]), "1", 0, "L", false, 0, "")
 			pdf.Ln(-1)
 		}
 	}

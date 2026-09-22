@@ -397,7 +397,7 @@ func renderPNG(ctx context.Context, d reportData) ([]byte, error) {
 		drawLeftText(img, bodyFace, "nenhuma região marcada", pagePadding, cursor+bodyTextSz, color.Black)
 		cursor += lineHeight
 	} else {
-		headers := []string{"Pin", "Aba", "Região", "Cor", "Hex", "Tinta", "ΔE00", "Estado", "Anotação"}
+		headers := []string{"Pin", "Aba", "Região", "Cor", "Hex", "Tinta", "ΔE00"}
 		colX := tableColumnOffsets(innerWidth)
 		for i, h := range headers {
 			drawLeftText(img, bodyFace, h, pagePadding+colX[i], cursor+bodyTextSz, color.Black)
@@ -423,20 +423,16 @@ func renderPNG(ctx context.Context, d reportData) ([]byte, error) {
 			if strings.TrimSpace(paintLabel) == "" {
 				paintLabel = "sem equivalente"
 			}
+			if row.ForaDoUniverso {
+				// RN7 do rf-11: quem lê precisa ver que essa tinta veio de
+				// fora do que pediu. O aviso anda junto do nome da tinta
+				// desde que a coluna Estado saiu — o asterisco de antes não
+				// tinha legenda nenhuma no relatório.
+				paintLabel += " (fora do pedido)"
+			}
 			paintLabel = truncarNaLargura(bodyFace, sanitizeReportText(paintLabel), colX[6]-colX[5]-colGapPx)
 			drawLeftText(img, bodyFace, paintLabel, pagePadding+colX[5], rowY, color.Black)
 			drawLeftText(img, bodyFace, formatDeltaE(row.DeltaE), pagePadding+colX[6], rowY, color.Black)
-			state := "a pintar"
-			if row.Painted {
-				state = "pintada"
-			}
-			if row.ForaDoUniverso {
-				state += "*" // RN7 do rf-11: fora do universo pedido (ver legenda)
-			}
-			state = truncarNaLargura(bodyFace, state, colX[8]-colX[7]-colGapPx)
-			drawLeftText(img, bodyFace, state, pagePadding+colX[7], rowY, color.Black)
-			nota := truncarNaLargura(bodyFace, sanitizeReportText(row.Note), innerWidth-colX[8])
-			drawLeftText(img, bodyFace, nota, pagePadding+colX[8], rowY, color.Black)
 			cursor += tableRowH
 		}
 	}
@@ -465,11 +461,12 @@ func renderPNG(ctx context.Context, d reportData) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func tableColumnOffsets(innerWidth int) [9]int {
-	// proporções fixas somando innerWidth; a anotação leva o excedente.
-	// Pin, Aba, Região, Cor, Hex, Tinta, ΔE00, Estado, Anotação.
-	weights := [9]float64{0.05, 0.09, 0.13, 0.04, 0.09, 0.17, 0.06, 0.09, 0.28}
-	var offsets [9]int
+func tableColumnOffsets(innerWidth int) [7]int {
+	// proporções fixas somando innerWidth; a tinta leva o excedente, porque é
+	// ela que ainda pode crescer com "(fora do pedido)".
+	// Pin, Aba, Região, Cor, Hex, Tinta, ΔE00.
+	weights := [7]float64{0.05, 0.13, 0.18, 0.04, 0.10, 0.42, 0.08}
+	var offsets [7]int
 	acc := 0.0
 	for i, w := range weights {
 		offsets[i] = int(acc * float64(innerWidth))
