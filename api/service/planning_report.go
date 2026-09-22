@@ -403,7 +403,9 @@ func renderPDF(ctx context.Context, d reportData) ([]byte, error) {
 	usableW := pageW - 2*margin
 
 	// #, Aba, Região, Cor, Tinta, Delta E00
-	widths := []float64{8, 30, 38, 18, 72, 14}
+	// "Delta E00" em Arial Bold 9 mede ~16 mm: com menos que isto o cabeçalho
+	// vaza para fora da borda da tabela, agora que a coluna é a última.
+	widths := []float64{8, 30, 38, 18, 68, 18}
 	// A fonte core do fpdf é cp1252, que não tem Δ — "ΔE00" sairia ".E00".
 	headers := []string{"#", "Aba", "Região", "Cor", "Tinta", "Delta E00"}
 
