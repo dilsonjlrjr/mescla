@@ -18,14 +18,16 @@ A web é a referência de interface. O desktop mostra exatamente as mesmas telas
 api/        Motor e dados em Go (módulo paint-match-ai)
   service/    PaintService: catálogo, receitas, estoque, projetos, relatórios
   domain/     color, similarity, mix, equivalence, stock, ai
-  db/         migrações, seeds e o banco embutido
+  db/         migrações e seeds
   httpapi/    rotas HTTP (fasthttp) que a web consome
   cmd/        apiserver (o mescla-api) e seed
 front/      Interface web (Svelte 5 + Vite, PWA)
 wails/      App desktop (Wails v3)
   frontend/   cópia da interface web + ponte para os bindings
+  catalogo/   banco de catálogo que o desktop embute (versionado)
+  cmd/        exportar-catalogo
   build/      ícones e empacotamento por plataforma
-  scripts/    build-all.sh e sincronizar-com-web.sh
+  scripts/    build-all.sh, exportar-catalogo.sh e sincronizar-com-web.sh
 ```
 
 ## Pré-requisitos
@@ -60,8 +62,9 @@ ficam fora do git. Para gerá-los à mão, rode
 
 O `PaintService` usa o banco indicado em `MESCLA_DB_PATH`. Sem essa variável, ele
 procura `data/paint_knowledge.db` e depois `paint_knowledge.db`. Se não achar
-nenhum dos dois, cria o banco em `<config do usuário>/Mescla/` a partir do seed
-embutido.
+nenhum dos dois, cria o banco em `<config do usuário>/Mescla/` a partir do
+catálogo embutido no binário. No desktop, esse catálogo é
+`wails/catalogo/paint_knowledge.db`.
 
 ## Build e deploy
 
@@ -77,6 +80,27 @@ No compose, o `builder` gera o banco e o PWA, o `api` serve o `mescla-api` e o
 `web` (nginx) serve o PWA e encaminha `/api/` para o `api`. Não compile todas as
 imagens em paralelo: o build pode estourar a memória. Compile `api` e
 `builder` um de cada vez e depois rode `up -d`.
+
+## Catálogo do desktop
+
+O desktop embute o catálogo como está cadastrado na web: fabricantes, linhas,
+tintas, cores, tipos de tinta e a marca de ignorar na mistura. O estoque
+(Minhas tintas), os projetos de pintura e as receitas salvas **não** entram.
+
+Para atualizar o catálogo depois de cadastrar algo na web:
+
+```bash
+./wails/scripts/exportar-catalogo.sh            # lê o banco do container mescla-api-1
+./wails/scripts/exportar-catalogo.sh <banco.db> # ou de um arquivo
+```
+
+Depois, faça commit de `wails/catalogo/paint_knowledge.db` e gere o build.
+O `build-all.sh` para se o arquivo não existir.
+
+O catálogo só é instalado no primeiro boot, quando não existe banco em
+`<config do usuário>/Mescla/`. Um desktop já instalado continua com o banco
+que tem. Para receber o catálogo novo, apague esse arquivo. Isso também apaga
+o estoque, os projetos e as receitas guardados naquele desktop.
 
 ## Testes e checagens
 

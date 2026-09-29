@@ -9,7 +9,6 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 
-	apidb "paint-match-ai/api/db"
 	"paint-match-ai/api/service"
 )
 
@@ -24,9 +23,15 @@ var assets embed.FS
 //go:embed build/appicon.png
 var appIcon []byte
 
+// Catálogo que o desktop instala no primeiro boot: fabricantes, tintas, cores
+// e tipos como estão cadastrados na web, sem estoque, projetos nem receitas
+// do usuário. Atualizado por wails/scripts/exportar-catalogo.sh.
+//
+//go:embed catalogo/paint_knowledge.db
+var catalogo []byte
+
 func main() {
-	seed := apidb.EmbeddedSeed()
-	paintService, err := service.NewPaintService(seed)
+	paintService, err := service.NewPaintService(catalogo)
 	if err != nil {
 		log.Fatalf("Erro inicializando PaintService: %v", err)
 	}

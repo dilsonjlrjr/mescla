@@ -38,4 +38,6 @@ Thumbs.db
 # Claude Code local config
 .claude/
 api/db/embedded/*.db
+# Catálogo que o desktop embute (sem dado do usuário) — versionado de propósito.
+!wails/catalogo/paint_knowledge.db
 coverage.out

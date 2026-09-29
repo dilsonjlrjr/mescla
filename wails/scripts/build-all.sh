@@ -38,18 +38,12 @@ build_frontend() {
   ok "wails/frontend/dist pronto"
 }
 
-# Banco de catálogo fresco, embutido no binário — o app instala sozinho
-# no primeiro boot (auto-suficiente, sem passo de seed pro usuário).
-build_database() {
-  say "Banco de catálogo (migração + seed)…"
-  local db="api/db/embedded/paint_knowledge.db"
-  rm -f "$db" "$db-wal" "$db-shm"
-  mkdir -p api/db/embedded
-  sqlite3 "$db" < api/db/migrations/001_initial_schema.sql
-  go run ./api/cmd/seed -db "$db" -import-catalog >/dev/null
-  sqlite3 "$db" "PRAGMA journal_mode=DELETE; VACUUM;" >/dev/null
-  rm -f "$db-wal" "$db-shm"
-  ok "banco embutível pronto ($(du -h "$db" | cut -f1 | tr -d ' '), $(sqlite3 "$db" 'SELECT COUNT(*) FROM paints') tintas)"
+# O catálogo embutido é wails/catalogo/paint_knowledge.db, versionado no git
+# e gerado a partir do banco da web por wails/scripts/exportar-catalogo.sh.
+check_catalogo() {
+  local db="wails/catalogo/paint_knowledge.db"
+  [[ -s "$db" ]] || { echo "✗ $db ausente — rode ./wails/scripts/exportar-catalogo.sh"; exit 1; }
+  ok "catálogo embutido: $db ($(du -h "$db" | cut -f1 | tr -d ' '))"
 }
 
 build_mac() {
@@ -191,7 +185,7 @@ mkdir -p "$DIST"
 
 say "Mescla ${VERSION} → ${TARGET}"
 build_frontend
-build_database
+check_catalogo
 
 case "$TARGET" in
   mac|darwin)  build_mac ;;
