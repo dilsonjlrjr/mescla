@@ -61,6 +61,27 @@
   --brand-6: #8b8fa3;
   --brand-7: #d2cefd;
 
+  /* ── Círculo cromático (rf-21): o disco é um objeto de papel impresso, fiel
+     às fotos de referência — papel claro sobre o tema escuro. Os 12 matizes
+     do anel são DADO (src/lib/color/circulo.ts), como a cor de uma tinta. ── */
+  --wheel-paper: #ebecf4;
+  --wheel-paper-shade: #d9dae4;
+  --wheel-paper-edge: #b9b8c4;
+  --wheel-cardboard: #a88f74;
+  --wheel-ink: #3b3c48;
+  --wheel-ink-soft: #6a6b78;
+  --wheel-ring-text: #ffffff;
+  --wheel-rivet-hi: #f4f4f6;
+  --wheel-rivet-mid: #a7a8b0;
+  --wheel-rivet-lo: #55565e;
+  --wheel-complementar: #7a2331;
+  --wheel-analoga: #d0508a;
+  --wheel-triade: #e07b6a;
+  --wheel-dividido: #5d5a2e;
+  --wheel-tetrade: #4a7bd0;
+  --wheel-dupla: #dca21f;
+  --wheel-mono: #3b3c48;
+
   --font-heading: 'Inter', system-ui, sans-serif;
   --font-body: 'Inter', system-ui, sans-serif;
   --font-heading-weight: 500;

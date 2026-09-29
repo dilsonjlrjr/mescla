@@ -10,6 +10,7 @@
   import PlannerView from './lib/views/PlannerView.svelte';
   import ReceitasView from './lib/views/ReceitasView.svelte';
   import CatalogoView from './lib/views/CatalogoView.svelte';
+  import CirculoView from './lib/views/CirculoView.svelte';
   import { nav, initNav } from './lib/nav.svelte';
   import { loadCatalog, migrateLegacyManufacturers, reloadManufacturers, reloadPaintTypes } from './lib/services/catalog';
   import { engineReady } from './lib/services/engine';
@@ -91,6 +92,7 @@
     <div class="view" class:hidden={nav.tab !== 'plano'}><PlannerView /></div>
     <div class="view" class:hidden={nav.tab !== 'receitas'}><ReceitasView /></div>
     <div class="view" class:hidden={nav.tab !== 'estante'}><CatalogoView /></div>
+    <div class="view" class:hidden={nav.tab !== 'circulo'}><CirculoView /></div>
   </main>
 {/if}
 

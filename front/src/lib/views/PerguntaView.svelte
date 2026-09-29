@@ -1214,6 +1214,12 @@
         style="height: 48px; padding: 0 14px; border: none; border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
         >{t('navTintas')}</button
       >
+      <button
+        class="pressable t1h-nav"
+        onclick={() => switchTab('circulo')}
+        style="display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 14px; border: none; border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
+        ><i class="ph ph-circle-half-tilt" style="font-size: 18px;"></i>{t('navCirculo')}</button
+      >
     </div>
     <div style="height: 108px; min-height: 108px; padding: 0 20px; display: flex; align-items: center; gap: 18px;">
       <span style="flex-shrink: 0; width: 84px; font-size: 12px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-neutral-500); line-height: 1.4;">{t('onTable')}</span>
