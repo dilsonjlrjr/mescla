@@ -18,12 +18,23 @@
     onabrir: (p: ResumoPlanoDTO) => void;
     onabrirRascunho: () => void;
     onnovo: () => void;
+    /** rf-22 RN22: arquivo JSON escolhido para abrir como projeto novo. */
+    onabrirArquivo: (arquivo: File) => void;
     onexcluir: (p: ResumoPlanoDTO) => void;
     onrecarregar: () => void;
   }
 
-  let { planos, carregando, erro, abrindo, rascunho, onabrir, onabrirRascunho, onnovo, onexcluir, onrecarregar }: Props =
+  let { planos, carregando, erro, abrindo, rascunho, onabrir, onabrirRascunho, onnovo, onabrirArquivo, onexcluir, onrecarregar }: Props =
     $props();
+
+  let arquivoInputEl: HTMLInputElement | undefined = $state();
+
+  function onArquivoEscolhido(e: Event): void {
+    const input = e.currentTarget as HTMLInputElement;
+    const arquivo = input.files?.[0];
+    input.value = '';
+    if (arquivo) onabrirArquivo(arquivo);
+  }
 
   let busca = $state('');
 
@@ -64,14 +75,31 @@
 <div style="display: flex; flex-direction: column; height: 100%; min-height: 0;">
   <Header kicker={t('navPlano')} title={t('projectsTitle')}>
     {#snippet actions()}
-      <button
-        class="t2l-new-btn"
-        disabled={abrindo}
-        onclick={onnovo}
-        style="display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 18px; border: 1px solid var(--color-accent-700); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;"
-      >
-        <i class="ph ph-plus" style="font-size: 19px;"></i>{t('newProjectBtn')}
-      </button>
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <button
+          class="t2l-new-btn"
+          disabled={abrindo}
+          onclick={() => arquivoInputEl?.click()}
+          style="display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 18px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-300); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;"
+        >
+          <i class="ph ph-folder-open" style="font-size: 19px;"></i>{t('openFileBtn')}
+        </button>
+        <input
+          type="file"
+          accept=".json,.mesclaplan,application/json"
+          bind:this={arquivoInputEl}
+          onchange={onArquivoEscolhido}
+          style="display: none;"
+        />
+        <button
+          class="t2l-new-btn"
+          disabled={abrindo}
+          onclick={onnovo}
+          style="display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 18px; border: 1px solid var(--color-accent-700); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;"
+        >
+          <i class="ph ph-plus" style="font-size: 19px;"></i>{t('newProjectBtn')}
+        </button>
+      </div>
     {/snippet}
   </Header>
 

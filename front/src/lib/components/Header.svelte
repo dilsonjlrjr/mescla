@@ -8,6 +8,7 @@
   import BrandMark from './BrandMark.svelte';
   import LangSwitch from './LangSwitch.svelte';
   import { switchTab } from '../nav.svelte';
+  import { appState } from '../appState.svelte';
   import { t } from '../i18n.svelte';
 
   interface Props {
@@ -74,6 +75,25 @@
   <span style="flex: 1;"></span>
 
   {#if actions}{@render actions()}{/if}
+
+  <button
+    class="pressable"
+    onclick={() => (appState.guiaAberta = true)}
+    aria-label={t('guiaBtn')}
+    title={t('guiaBtn')}
+    style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer; flex-shrink: 0;"
+  >
+    <i class="ph ph-question" style="font-size: 18px;"></i>
+  </button>
+  <button
+    class="pressable"
+    onclick={() => (appState.paletaAberta = true)}
+    aria-label={t('palAria')}
+    title={t('palAria')}
+    style="display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 13px; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
+  >
+    <i class="ph ph-magnifying-glass" style="font-size: 17px;"></i><span class="font-mono">⌘K</span>
+  </button>
 
   <LangSwitch />
 </div>

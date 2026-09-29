@@ -11,6 +11,7 @@
   import Header from '../components/Header.svelte';
   import PaintBottle from '../components/PaintBottle.svelte';
   import Spinner from '../components/Spinner.svelte';
+  import FaixaFormula from '../components/FaixaFormula.svelte';
   import { recipes, removeRecipe, updateRecipeManufacturer, type Recipe } from '../services/recipes.svelte';
   import { allManufacturers, paintById } from '../services/catalog';
   import { catalogRev } from '../services/catalogRev.svelte';
@@ -225,6 +226,10 @@
       </div>
 
       {#if recipeResolved}
+        <!-- rf-24: faixa proporcional, entre o par alvo/resultado e a lista. -->
+        <div style="margin: -8px 0 18px;">
+          <FaixaFormula ingredientes={recipeResolved.ingredients} />
+        </div>
         <div style="display: flex; flex-direction: column; gap: 10px;">
           {#each recipeResolved.ingredients as ing (ing.paintId)}
             <div style="display: flex; align-items: center; gap: 16px; min-height: 84px; padding: 12px 18px; border: 1px solid var(--color-rule); border-radius: 14px; background: var(--color-panel);">

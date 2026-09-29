@@ -8,12 +8,15 @@
   // A cor-base é um matiz do anel (giro em passos de 30°) ou a cor do usuário
   // (hex ou uma das "Minhas tintas"), que cai no ponto exato da roda e faz a
   // harmonia herdar a saturação e o valor dela.
+  import { untrack } from 'svelte';
   import { fly, scale } from 'svelte/transition';
   import { flip } from 'svelte/animate';
   import { cubicOut, backOut } from 'svelte/easing';
   import Header from '../components/Header.svelte';
   import PaintBottle from '../components/PaintBottle.svelte';
   import CirculoCromatico from '../components/CirculoCromatico.svelte';
+  import GuiaCirculo, { type VerNoDisco } from '../components/GuiaCirculo.svelte';
+  import MisturaHarmonia from '../components/MisturaHarmonia.svelte';
   import {
     WHEEL,
     SCHEMES,
@@ -45,6 +48,7 @@
     type SchemeId,
   } from '../color/circulo';
   import { hintKey, hueKey, schemeKey } from '../circuloTexto';
+  import { deltaIsGood } from '../ui';
   import { stock } from '../services/stock.svelte';
   import { allPaints } from '../services/catalog';
   import { catalogRev } from '../services/catalogRev.svelte';
@@ -144,6 +148,28 @@
   }
 
   let nearestBySwatch = $derived(swatches.map(sw => nearest(sw.rgb)));
+
+  // rf-24: guia do círculo e receita de mistura (folhas). A mistura fecha ao
+  // girar o disco ou trocar a harmonia (RN5); o pedido velho morre junto,
+  // porque a folha desmonta.
+  let guiaAberto = $state(false);
+  let mistura = $state<{ r: number; g: number; b: number; nome: string } | null>(null);
+
+  $effect(() => {
+    void baseHex;
+    void scheme;
+    untrack(() => (mistura = null));
+  });
+
+  function verNoDisco(v: VerNoDisco) {
+    if (v.scheme) scheme = v.scheme;
+    if (v.tab) tab = v.tab;
+  }
+
+  /** RN1: sem tinta pronta = não há tinta mais próxima, ou ΔE00 >= 2. */
+  function semTintaPronta(near: { d: number } | null): boolean {
+    return !near || !deltaIsGood(near.d);
+  }
 
   function useAsBase(sw: HarmonySwatch) {
     if (fromRing) {
@@ -260,6 +286,9 @@
 <div class="t5">
   <Header kicker={t('cwKicker')} title={t('cwTitle')}>
     {#snippet actions()}
+      <button class="t5-toggle pressable" onclick={() => (guiaAberto = true)}>
+        <i class="ph ph-graduation-cap" style="font-size: 18px;"></i>{t('cgOpen')}
+      </button>
       <button class="t5-toggle pressable" class:on={freeSpin} onclick={() => (freeSpin = !freeSpin)} aria-pressed={freeSpin}>
         <i class="ph ph-arrows-clockwise" style="font-size: 18px;"></i>{t('cwFreeSpin')}
       </button>
@@ -442,6 +471,11 @@
                         {t(pool.kind === 'stock' ? 'cwNearest' : 'cwNearestCat', { name: near.name, d: decimal(near.d, 1) })}
                       </span>
                     {/if}
+                    {#if semTintaPronta(near)}
+                      <button class="t5-swmix pressable" onclick={() => (mistura = { r: sw.rgb.r, g: sw.rgb.g, b: sw.rgb.b, nome: t(hueKey(sw.hue.id)) })}>
+                        <i class="ph ph-flask" style="font-size: 16px;"></i>{t('mxBtn')}
+                      </button>
+                    {/if}
                   </div>
                 {/each}
               </div>
@@ -551,6 +585,21 @@
     </section>
   </div>
 </div>
+
+{#if guiaAberto}
+  <GuiaCirculo
+    {base}
+    {baseWheel}
+    {fromRing}
+    matiz={custom ? custom.label : t(hueKey(baseHue.id))}
+    onfechar={() => (guiaAberto = false)}
+    onver={verNoDisco}
+  />
+{/if}
+
+{#if mistura}
+  <MisturaHarmonia r={mistura.r} g={mistura.g} b={mistura.b} nome={mistura.nome} onfechar={() => (mistura = null)} />
+{/if}
 
 <style>
   .t5 {
@@ -1067,6 +1116,23 @@
     margin-top: 2px;
     border-radius: 999px;
     box-shadow: 0 0 0 1px var(--color-neutral-700);
+  }
+
+  .t5-swmix {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--color-accent-700);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-accent-400);
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 500;
+    cursor: pointer;
   }
 
   .t5-mono {

@@ -35,6 +35,11 @@ type Paint struct {
 	// IgnoreInMix (rf-19): item marcado é descartado do pool de sugestão antes
 	// de ToMixInputs. Não viaja no CSV (ToCSV/ParseCSV ficam de fora).
 	IgnoreInMix bool `json:"ignoreInMix"`
+
+	// Line e Raw (rf-23) vêm só do ParseCSV: linha do arquivo e texto cru, para
+	// o relatório da importação. Não viajam em JSON.
+	Line int    `json:"-"`
+	Raw  string `json:"-"`
 }
 
 // Manufacturer é o mínimo que o parser precisa para validar/resolver o
@@ -46,11 +51,24 @@ type Manufacturer struct {
 
 // RowError descreve uma linha do CSV que não passou na crítica. Line é o número
 // da linha no arquivo (1-based, contando o cabeçalho), para o usuário localizar.
+//
+// Motivo (rf-23) é o código estável da recusa, para a web traduzir; Message
+// continua em pt-BR para o desktop.
 type RowError struct {
 	Line    int    `json:"line"`
 	Message string `json:"message"`
+	Motivo  string `json:"motivo"`
 	Raw     string `json:"raw"`
 }
+
+// Códigos estáveis de RowError.Motivo.
+const (
+	MotivoFabricanteEmBranco      = "fabricante-em-branco"
+	MotivoFabricanteNaoEncontrado = "fabricante-nao-encontrado"
+	MotivoNomeObrigatorio         = "nome-obrigatorio"
+	MotivoCorInvalida             = "cor-invalida"
+	MotivoArquivoInvalido         = "arquivo-invalido"
+)
 
 // csvHeader é a ordem canônica das colunas do modelo.
 var csvHeader = []string{"fabricante", "nome", "codigo", "hex", "volume", "notas"}
@@ -111,7 +129,7 @@ func ParseCSV(csvText string, manufacturers []Manufacturer) ([]Paint, []RowError
 
 	records, err := r.ReadAll()
 	if err != nil {
-		return nil, []RowError{{Line: 0, Message: "arquivo CSV inválido: " + err.Error()}}
+		return nil, []RowError{{Line: 0, Message: "arquivo CSV inválido: " + err.Error(), Motivo: MotivoArquivoInvalido}}
 	}
 
 	var paints []Paint
@@ -126,11 +144,13 @@ func ParseCSV(csvText string, manufacturers []Manufacturer) ([]Paint, []RowError
 			continue
 		}
 
-		p, rowErr := parseRow(rec, byName)
+		p, motivo, rowErr := parseRow(rec, byName)
+		raw := strings.Join(rec, ",")
 		if rowErr != "" {
-			errs = append(errs, RowError{Line: lineNo, Message: rowErr, Raw: strings.Join(rec, ",")})
+			errs = append(errs, RowError{Line: lineNo, Message: rowErr, Motivo: motivo, Raw: raw})
 			continue
 		}
+		p.Line, p.Raw = lineNo, raw
 		paints = append(paints, p)
 	}
 	return paints, errs
@@ -138,7 +158,7 @@ func ParseCSV(csvText string, manufacturers []Manufacturer) ([]Paint, []RowError
 
 // parseRow valida e monta uma tinta a partir de um registro do CSV. Devolve uma
 // mensagem não-vazia quando a linha é inválida.
-func parseRow(rec []string, byName map[string]Manufacturer) (Paint, string) {
+func parseRow(rec []string, byName map[string]Manufacturer) (Paint, string, string) {
 	get := func(i int) string {
 		if i < len(rec) {
 			return strings.TrimSpace(rec[i])
@@ -149,18 +169,18 @@ func parseRow(rec []string, byName map[string]Manufacturer) (Paint, string) {
 	mfrName, name, code, hex, volume, notes := get(0), get(1), get(2), get(3), get(4), get(5)
 
 	if mfrName == "" {
-		return Paint{}, "fabricante em branco"
+		return Paint{}, MotivoFabricanteEmBranco, "fabricante em branco"
 	}
 	mfr, ok := byName[normalizeName(mfrName)]
 	if !ok {
-		return Paint{}, fmt.Sprintf("fabricante %q não existe no catálogo", mfrName)
+		return Paint{}, MotivoFabricanteNaoEncontrado, fmt.Sprintf("fabricante %q não existe no catálogo", mfrName)
 	}
 	if name == "" {
-		return Paint{}, "nome da tinta em branco"
+		return Paint{}, MotivoNomeObrigatorio, "nome da tinta em branco"
 	}
 	rgb, ok := ParseHex(hex)
 	if !ok {
-		return Paint{}, fmt.Sprintf("cor %q inválida — use hex como #1c1c1c", hex)
+		return Paint{}, MotivoCorInvalida, fmt.Sprintf("cor %q inválida — use hex como #1c1c1c", hex)
 	}
 
 	return Paint{
@@ -173,7 +193,7 @@ func parseRow(rec []string, byName map[string]Manufacturer) (Paint, string) {
 		B:              rgb.B,
 		Volume:         volume,
 		Notes:          notes,
-	}, ""
+	}, "", ""
 }
 
 // ParseHex aceita "#RRGGBB", "RRGGBB", "#RGB" ou "RGB" e devolve a cor. O

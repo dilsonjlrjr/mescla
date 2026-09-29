@@ -98,17 +98,6 @@ export interface StockPaint {
   ignoreInMix?: boolean;
 }
 
-export interface StockRowError {
-  line: number;
-  message: string;
-  raw: string;
-}
-
-export interface StockCSVResult {
-  paints: StockPaint[];
-  errors: StockRowError[];
-}
-
 let readyPromise: Promise<void> | null = null;
 
 /** Pré-carrega o catálogo em paralelo com o first paint — a UI não espera por
@@ -312,22 +301,9 @@ export async function suggestFromStock(
   return apiPost<EquivalentRecipe>('/stock/suggest-recipe', { sourcePaintId, stock: stockFiltrado });
 }
 
-/** Valida um CSV de importação contra os fabricantes do catálogo (mesma
- *  crítica do desktop, agora do lado do servidor). Devolve as tintas boas e
- *  os erros por linha. */
-export async function parseStockCSV(csvText: string): Promise<StockCSVResult> {
-  const res = await apiPost<StockCSVResult>('/stock/parse-csv', { csv: csvText });
-  return { paints: res.paints ?? [], errors: res.errors ?? [] };
-}
-
 /** Conteúdo do CSV-modelo para download. */
 export async function stockCSVTemplate(): Promise<string> {
   return (await apiGet<{ csv: string }>('/stock/csv-template')).csv;
-}
-
-/** Serializa o estoque no formato de importação (backup/exportação). */
-export async function stockToCSV(stock: StockPaint[]): Promise<string> {
-  return (await apiPost<{ csv: string }>('/stock/to-csv', { stock })).csv;
 }
 
 export async function compareToAnchor(anchorId: number, ids: number[]): Promise<SearchResult[]> {

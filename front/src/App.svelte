@@ -11,6 +11,9 @@
   import ReceitasView from './lib/views/ReceitasView.svelte';
   import CatalogoView from './lib/views/CatalogoView.svelte';
   import CirculoView from './lib/views/CirculoView.svelte';
+  import CompararView from './lib/views/CompararView.svelte';
+  import PaletaComandos from './lib/components/PaletaComandos.svelte';
+  import GuiaPrimeiroUso from './lib/components/GuiaPrimeiroUso.svelte';
   import { nav, initNav } from './lib/nav.svelte';
   import { loadCatalog, migrateLegacyManufacturers, reloadManufacturers, reloadPaintTypes } from './lib/services/catalog';
   import { engineReady } from './lib/services/engine';
@@ -93,7 +96,12 @@
     <div class="view" class:hidden={nav.tab !== 'receitas'}><ReceitasView /></div>
     <div class="view" class:hidden={nav.tab !== 'estante'}><CatalogoView /></div>
     <div class="view" class:hidden={nav.tab !== 'circulo'}><CirculoView /></div>
+    <div class="view" class:hidden={nav.tab !== 'comparar'}><CompararView /></div>
   </main>
+  <!-- rf-23: paleta de comandos (Ctrl+K), uma só para todas as telas. -->
+  <PaletaComandos />
+  <!-- rf-24: guia de primeiro uso; o "?" do cabeçalho e a paleta o reabrem. -->
+  <GuiaPrimeiroUso />
 {/if}
 
 <ToastRegion />

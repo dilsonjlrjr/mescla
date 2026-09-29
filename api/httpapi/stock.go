@@ -213,12 +213,13 @@ func handleImportUserPaintsCSV(svc *service.PaintService) fasthttp.RequestHandle
 		var body struct {
 			CSV string `json:"csv"`
 		}
-		if !readJSON(ctx, &body) {
+		if !decodeUserPaintBody(ctx, &body) {
 			return
 		}
 		result, err := svc.ImportUserPaintsCSV(body.CSV)
 		if err != nil {
-			writeError(ctx, fasthttp.StatusBadRequest, err.Error())
+			log.Printf("[user-paints] import-csv: %v", err)
+			writeError(ctx, fasthttp.StatusInternalServerError, "não foi possível importar o estoque")
 			return
 		}
 		writeJSON(ctx, fasthttp.StatusOK, result)

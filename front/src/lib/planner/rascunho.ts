@@ -260,6 +260,15 @@ function normalizar(bruto: unknown): { rascunho: Rascunho; truncado: boolean } |
   return { rascunho, truncado: truncadoAbas || truncadoRegioes };
 }
 
+/** rf-22 RN21: a mesma normalização defensiva do rascunho, oferecida ao
+ *  arquivo de plano. `truncado` = mais de 10 abas ou de 50 regiões numa aba. */
+export function normalizarRascunhoBruto(bruto: unknown): { rascunho: Rascunho; truncado: boolean } | null {
+  return normalizar(bruto);
+}
+
+export const LIMITE_ABAS = MAX_ABAS;
+export const LIMITE_REGIOES = MAX_REGIOES;
+
 /** Lê o rascunho gravado. JSON inválido apaga a chave e devolve `corrompido:
  *  true` (CAN6); mais de 10 abas ou mais de 50 regiões numa aba corta e
  *  devolve `truncado: true` (CAN5). Rascunho v1 nunca é descartado em

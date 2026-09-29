@@ -12,4 +12,16 @@ export const appState = $state({
   /** Filtro de fabricante pré-aplicado ao entrar na aba Tintas de T4 (vindo
    *  de "Ver tintas" na aba Fabricantes). */
   pendingCatalogMfrId: null as number | null,
+  /** rf-23: id de catálogo que T6 Comparar assume como âncora ao abrir (vindo
+   *  de T4 ou da paleta de comandos). */
+  pendingCompareAnchor: null as number | null,
+  /** rf-23: tinta do catálogo que T4 usa para preencher o formulário de
+   *  cadastro (vindo da paleta, "Adicionar ao meu estoque"). */
+  pendingStockPrefill: null as Paint | null,
+  /** rf-23: paleta de comandos (Ctrl+K) aberta — o botão do cabeçalho liga. */
+  /** rf-23: aba de T4 pedida pela paleta (Fabricantes ou Tipos). */
+  pendingCatalogTab: null as 'fabricantes' | 'tipos' | null,
+  paletaAberta: false,
+  /** rf-24: guia de primeiro uso aberto — o "?" do cabeçalho e a paleta ligam. */
+  guiaAberta: false,
 });

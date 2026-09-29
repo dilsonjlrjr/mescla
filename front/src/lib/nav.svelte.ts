@@ -10,8 +10,8 @@
 // receitas (T3), estante (T4). Os ids antigos (mesclar/catalogo/cor/roda/mais)
 // não existem mais — CorView, MesclarView, MaisView, RodaView e o TabBar
 // foram removidos/consolidados nesta rodada (ver relatório de rf-04).
-// rf-21: T5 círculo cromático.
-export type Tab = 'pergunta' | 'plano' | 'receitas' | 'estante' | 'circulo';
+// rf-21: T5 círculo cromático. rf-23: T6 comparar.
+export type Tab = 'pergunta' | 'plano' | 'receitas' | 'estante' | 'circulo' | 'comparar';
 
 const HOME: Tab = 'pergunta';
 

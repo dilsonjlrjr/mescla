@@ -309,6 +309,9 @@ func handlePickColor(svc *service.PaintService) fasthttp.RequestHandler {
 	}
 }
 
+// maxCompareIDs limita as consultas por pedido (uma por id no service).
+const maxCompareIDs = 20
+
 // handleCompareToAnchor atende GET /compare-to-anchor?anchorId=&ids=1,2,3.
 func handleCompareToAnchor(svc *service.PaintService) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
@@ -316,6 +319,10 @@ func handleCompareToAnchor(svc *service.PaintService) fasthttp.RequestHandler {
 		ids := queryInt64List(ctx, "ids")
 		if anchorID == 0 {
 			writeError(ctx, fasthttp.StatusBadRequest, "anchorId é obrigatório")
+			return
+		}
+		if len(ids) > maxCompareIDs {
+			writeError(ctx, fasthttp.StatusBadRequest, "ids demais")
 			return
 		}
 		results, err := svc.CompareToAnchor(anchorID, ids)

@@ -228,3 +228,49 @@ export function pendentesDoTipo(typeId: number): number {
 export function totalPots(): number {
   return stock.paints.reduce((sum, p) => sum + normalizeQuantity(p.quantity), 0);
 }
+
+// ── CSV do estoque (rf-23) ──
+
+/** Motivos estáveis da recusa de uma linha do CSV (o servidor manda o código,
+ *  a tela traduz — nunca texto do servidor). */
+export type MotivoCSV =
+  | 'fabricante-em-branco' | 'fabricante-nao-encontrado' | 'nome-obrigatorio' | 'cor-invalida'
+  | 'texto-longo' | 'linha-repetida' | 'arquivo-invalido';
+
+export interface LinhaCSV {
+  line: number;
+  status: 'criada' | 'ja-no-estoque' | 'recusada';
+  motivo: string;
+}
+
+export interface ErroLinhaCSV {
+  line: number;
+  motivo: string;
+  raw: string;
+}
+
+export interface ResultadoCSV {
+  criadas: number;
+  jaNoEstoque: number;
+  recusadas: number;
+  results: LinhaCSV[];
+  errors: ErroLinhaCSV[];
+}
+
+/** Estoque atual no formato de importação (mesmo arquivo do modelo). */
+export async function exportarEstoqueCSV(): Promise<string> {
+  return (await apiGet<{ csv: string }>('/user-paints/export-csv')).csv;
+}
+
+/** RN1: o servidor só junta — nenhuma tinta existente muda. Quem chama
+ *  recarrega o estoque depois. */
+export async function importarEstoqueCSV(texto: string): Promise<ResultadoCSV> {
+  const r = await apiPost<Partial<ResultadoCSV> | null>('/user-paints/import-csv', { csv: texto });
+  return {
+    criadas: r?.criadas ?? 0,
+    jaNoEstoque: r?.jaNoEstoque ?? 0,
+    recusadas: r?.recusadas ?? 0,
+    results: r?.results ?? [],
+    errors: r?.errors ?? [],
+  };
+}

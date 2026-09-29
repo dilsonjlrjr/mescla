@@ -19,7 +19,7 @@ func newStockTestService(t *testing.T) *PaintService {
 	if _, err := db.Exec(`
 		CREATE TABLE manufacturers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE);
 		CREATE TABLE paint_types (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE);
-		CREATE TABLE paints (id INTEGER PRIMARY KEY AUTOINCREMENT, manufacturer_id INTEGER NOT NULL REFERENCES manufacturers(id));
+		CREATE TABLE paints (id INTEGER PRIMARY KEY AUTOINCREMENT, manufacturer_id INTEGER NOT NULL REFERENCES manufacturers(id), code TEXT, paint_type_id INTEGER);
 		INSERT INTO manufacturers (id, name) VALUES (1, 'Vallejo'), (2, 'Citadel');
 	`); err != nil {
 		t.Fatalf("seed manufacturers: %v", err)

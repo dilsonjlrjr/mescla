@@ -739,6 +739,24 @@
     </div>
 
     <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+      <button
+        class="pressable"
+        onclick={() => (appState.guiaAberta = true)}
+        aria-label={t('guiaBtn')}
+        title={t('guiaBtn')}
+        style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer; flex-shrink: 0;"
+      >
+        <i class="ph ph-question" style="font-size: 18px;"></i>
+      </button>
+      <button
+        class="pressable"
+        onclick={() => (appState.paletaAberta = true)}
+        aria-label={t('palAria')}
+        title={t('palAria')}
+        style="display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 13px; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
+      >
+        <i class="ph ph-magnifying-glass" style="font-size: 17px;"></i><span class="font-mono">⌘K</span>
+      </button>
       <LangSwitch />
     </div>
   </div>
@@ -1038,7 +1056,11 @@
                 </div>
               </div>
 
-              <div style="display: flex; height: 12px; border-radius: 4px; overflow: hidden; border: 1px solid var(--color-rule);">
+              <div
+                role="img"
+                aria-label={t('faixaAria', { list: formula.ingredients.map((ing, i) => `${ing.code || ing.name} · ${Math.round(pctOf(i))}%`).join(', ') })}
+                style="display: flex; height: 12px; border-radius: 4px; overflow: hidden; border: 1px solid var(--color-rule);"
+              >
                 {#each formula.ingredients as ing, i (ing.paintId)}
                   <span style="height: 12px; width: {pctOf(i)}%; background: rgb({ing.r}, {ing.g}, {ing.b});"></span>
                 {/each}
@@ -1194,7 +1216,7 @@
 
   <!-- Rodapé: navegação (M4) acima do histórico "Na mesa hoje". -->
   <div style="flex-shrink: 0; border-top: 1px solid var(--color-line); background: var(--color-bar);">
-    <div style="display: flex; align-items: center; gap: 10px; height: 64px; min-height: 64px; padding: 0 20px; border-bottom: 1px solid var(--color-line);">
+    <div style="display: flex; align-items: center; gap: 10px; height: 64px; min-height: 64px; padding: 0 20px; border-bottom: 1px solid var(--color-line); overflow-x: auto;">
       <button
         class="pressable t1h-acc"
         onclick={() => switchTab('plano')}
@@ -1219,6 +1241,12 @@
         onclick={() => switchTab('circulo')}
         style="display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 14px; border: none; border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
         ><i class="ph ph-circle-half-tilt" style="font-size: 18px;"></i>{t('navCirculo')}</button
+      >
+      <button
+        class="pressable t1h-nav"
+        onclick={() => switchTab('comparar')}
+        style="display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 14px; border: none; border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
+        ><i class="ph ph-columns" style="font-size: 18px;"></i>{t('navComparar')}</button
       >
     </div>
     <div style="height: 108px; min-height: 108px; padding: 0 20px; display: flex; align-items: center; gap: 18px;">

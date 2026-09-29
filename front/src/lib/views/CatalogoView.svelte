@@ -45,6 +45,8 @@
   import VirtualList from '../components/VirtualList.svelte';
   import Combobox from '../components/Combobox.svelte';
   import Spinner from '../components/Spinner.svelte';
+  import { switchTab } from '../nav.svelte';
+  import { baixarTexto } from '../services/download';
   import { onMount, tick } from 'svelte';
   import {
     allManufacturers, allPaints, hexOf, searchPaints, type Paint, type Manufacturer,
@@ -57,7 +59,9 @@
   import {
     stock, sortedStock, addStockPaint, updateStockPaint, removeStockPaint, carregarEstoque,
     stockCountFor, stockCountForType, pendentesDoFabricante, pendentesDoTipo, type LinhaNaoSubiu,
+    exportarEstoqueCSV, importarEstoqueCSV, type ResultadoCSV,
   } from '../services/stock.svelte';
+  import { stockCSVTemplate } from '../services/engine';
   import {
     migrarEstoqueLocal, dispensarNaoSubiram, importarArquivoDeEstoque, ErroDeImportacao,
     chaveDoMotivo, MAX_ARQUIVO_BYTES,
@@ -65,7 +69,7 @@
   import { catalogRev } from '../services/catalogRev.svelte';
   import type { StockPaint } from '../services/engine';
   import { appState } from '../appState.svelte';
-  import { t } from '../i18n.svelte';
+  import { t, type DictKey } from '../i18n.svelte';
   import { toast } from '../toast.svelte';
 
 
@@ -83,6 +87,26 @@
       appState.pendingCatalogMfrId = null;
       tab = 'tintas';
     }
+  });
+
+  // rf-23: a paleta de comandos leva direto a Fabricantes ou Tipos.
+  $effect(() => {
+    if (appState.pendingCatalogTab) {
+      tab = appState.pendingCatalogTab;
+      appState.pendingCatalogTab = null;
+    }
+  });
+
+  // rf-23: "Adicionar ao meu estoque" na paleta abre o formulário com a tinta
+  // do catálogo (ou a linha do estoque que já a copia, sem duplicar).
+  $effect(() => {
+    const p = appState.pendingStockPrefill;
+    if (!p) return;
+    appState.pendingStockPrefill = null;
+    tab = 'tintas';
+    const minha = stock.paints.find(sp => catalogOriginOf(sp) === p.id);
+    if (minha) openEdit(minha);
+    else openEditCatalog(p);
   });
 
   // Ao abrir T4: fabricantes e tipos vêm do servidor. A subida da lista local
@@ -235,6 +259,84 @@
     }
   }
 
+  // ── CSV do estoque (rf-23) ──
+  let csvSheetOpen = $state(false);
+  let csvBusy = $state(false);
+  let csvInputEl: HTMLInputElement | null = $state(null);
+  let csvRelatorio: ResultadoCSV | null = $state(null);
+  const CSV_MAX_BYTES = 1024 * 1024;
+
+  function openCsvSheet() {
+    if (saving) return;
+    closeOtherModals();
+    csvSheetOpen = true;
+  }
+
+  async function csvBaixarModelo() {
+    if (csvBusy) return;
+    csvBusy = true;
+    try {
+      baixarTexto('modelo-estoque-mescla.csv', await stockCSVTemplate());
+    } catch {
+      toast(t('csvDlFailed'), 'error');
+    } finally {
+      csvBusy = false;
+    }
+  }
+
+  async function csvExportar() {
+    if (csvBusy || stock.paints.length === 0) return;
+    csvBusy = true;
+    try {
+      baixarTexto('meu-estoque-mescla.csv', await exportarEstoqueCSV());
+    } catch {
+      toast(t('csvDlFailed'), 'error');
+    } finally {
+      csvBusy = false;
+    }
+  }
+
+  async function csvAoEscolher(ev: Event) {
+    const input = ev.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || csvBusy) return;
+    if (file.size > CSV_MAX_BYTES) {
+      toast(t('csvTooBig'), 'error');
+      return;
+    }
+    csvBusy = true;
+    try {
+      // BOM do Excel: o servidor não o trata como cabeçalho.
+      const texto = (await file.text()).replace(/^\uFEFF/, '');
+      const r = await importarEstoqueCSV(texto);
+      await carregarEstoque();
+      csvSheetOpen = false;
+      csvRelatorio = r;
+    } catch {
+      toast(t('csvFailed'), 'error');
+    } finally {
+      csvBusy = false;
+    }
+  }
+
+  const MOTIVO_CSV: Record<string, DictKey> = {
+    'fabricante-em-branco': 'csvMFabBranco',
+    'fabricante-nao-encontrado': 'csvMFabNao',
+    'nome-obrigatorio': 'csvMNome',
+    'cor-invalida': 'csvMCor',
+    'texto-longo': 'csvMLongo',
+    'linha-repetida': 'csvMRepetida',
+    'arquivo-invalido': 'csvMArquivo',
+  };
+  function motivoCsv(m: string): string {
+    return t(MOTIVO_CSV[m] ?? 'csvFailed');
+  }
+  function cortar80(s: string): string {
+    const runas = Array.from(s);
+    return runas.length > 80 ? runas.slice(0, 80).join('') + '…' : s;
+  }
+
   // ── Lista única (posse alternável + editar), fiel ao protótipo ──
   interface Row {
     key: string;
@@ -297,6 +399,18 @@
   // Linha do catálogo (ainda não minha) aberta em "Editar" — D-013.
   let editingCatalogId: number | null = $state(null);
   let editing = $derived(editingId !== null || editingCatalogId !== null);
+  // rf-23: só tinta com origem no catálogo se compara (a rota lê o catálogo).
+  let compareCatalogId = $derived.by((): number | null => {
+    if (editingCatalogId !== null) return editingCatalogId;
+    const sp = editingId !== null ? stock.paints.find(x => x.id === editingId) : undefined;
+    return (sp && catalogOriginOf(sp)) ?? null;
+  });
+  function compararComOutra() {
+    if (compareCatalogId === null) return;
+    appState.pendingCompareAnchor = compareCatalogId;
+    closeOtherModals();
+    switchTab('comparar');
+  }
   let fMfr: number | '' = $state('');
   let fPType: number | '' = $state('');
   let fName = $state('');
@@ -437,6 +551,8 @@
     confirmPaintDel = null;
     confirmMakerDel = null;
     confirmPTypeDel = null;
+    csvSheetOpen = false;
+    csvRelatorio = null;
   }
 
   function openAdd() {
@@ -899,13 +1015,15 @@
   }
 
   // ── Modal único (overlay do protótipo cobre um dos conteúdos) ──
-  let modalKind = $derived.by((): 'confirmPaint' | 'confirmMaker' | 'confirmPType' | 'paint' | 'maker' | 'ptype' | null => {
+  let modalKind = $derived.by((): 'confirmPaint' | 'confirmMaker' | 'confirmPType' | 'paint' | 'maker' | 'ptype' | 'csvSheet' | 'csvReport' | null => {
     if (confirmPaintDel) return 'confirmPaint';
     if (confirmMakerDel) return 'confirmMaker';
     if (confirmPTypeDel) return 'confirmPType';
     if (formOpen) return 'paint';
     if (makerFormOpen) return 'maker';
     if (ptypeFormOpen) return 'ptype';
+    if (csvRelatorio) return 'csvReport';
+    if (csvSheetOpen) return 'csvSheet';
     return null;
   });
   function closeModal() {
@@ -915,6 +1033,8 @@
     if (formOpen) { formOpen = false; return; }
     if (makerFormOpen) { makerFormOpen = false; return; }
     if (ptypeFormOpen) { ptypeFormOpen = false; return; }
+    if (csvRelatorio) { csvRelatorio = null; return; }
+    if (csvSheetOpen) { csvSheetOpen = false; return; }
   }
 </script>
 
@@ -940,6 +1060,15 @@
     {/snippet}
     {#snippet actions()}
       <span style="font-size: 14px; color: var(--color-neutral-500); white-space: nowrap;">{headerCount}</span>
+      {#if tab === 'tintas'}
+        <button
+          class="t4-hover-ghost"
+          onclick={openCsvSheet}
+          style="display: inline-flex; align-items: center; gap: 8px; height: 52px; padding: 0 16px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
+        >
+          <i class="ph ph-file-csv" style="font-size: 18px;"></i>{t('csvBtn')}
+        </button>
+      {/if}
       <button
         class="t4-hover-accent"
         onclick={() => (tab === 'tintas' ? openAdd() : tab === 'fabricantes' ? openNewMaker() : openNewPType())}
@@ -1350,12 +1479,77 @@
 
       <div style="display: flex; gap: 10px; margin-top: 6px;">
         <button class="t4-hover-accent" onclick={saveForm} disabled={saving} style="flex: 1; height: 58px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 16px; font-weight: 500; cursor: pointer;">{editing ? t('saveChanges') : t('addPaintBtn')}</button>
+        {#if compareCatalogId !== null}
+          <button class="t4-hover-ghost" onclick={compararComOutra} style="height: 58px; padding: 0 18px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('navComparar')}</button>
+        {/if}
         {#if editingId !== null}
           <button class="t4-hover-ghost" onclick={() => askDeletePaint()} style="height: 58px; padding: 0 18px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('delPaintA')}</button>
         {/if}
       </div>
       <p style="margin: 10px 0 0; font-size: 13px; color: var(--color-neutral-500); text-wrap: pretty;">{t('formNote')}</p>
     </div>
+  </div>
+
+  <!-- rf-23: folha do CSV do estoque (modelo, exportar, importar) -->
+  <div class="t4-modal" role="dialog" aria-modal={modalKind === 'csvSheet' ? 'true' : undefined} aria-label={t('csvSheetT')} style="{modalKind !== 'csvSheet' ? 'display: none; ' : ''}position: relative; width: min(460px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
+    <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px;">
+      <span style="flex: 1; font-size: clamp(16px, 1.8cqi, 21px); font-weight: 500; letter-spacing: -0.01em; color: var(--color-text);">{t('csvSheetT')}</span>
+      <button class="t4-hover-ghost" onclick={closeModal} aria-label={t('ariaClose')} style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); cursor: pointer;">
+        <i class="ph ph-x" style="font-size: 18px;"></i>
+      </button>
+    </div>
+    <input type="file" accept=".csv,text/csv" bind:this={csvInputEl} onchange={csvAoEscolher} tabindex="-1" aria-hidden="true" style="display: none;" />
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <button class="t4-hover-ghost" onclick={csvBaixarModelo} disabled={csvBusy} style="display: flex; align-items: center; gap: 14px; width: 100%; min-height: 64px; padding: 10px 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-text); font-family: inherit; text-align: left; cursor: pointer;">
+        <i class="ph ph-download-simple" style="font-size: 22px; color: var(--color-accent-400); flex-shrink: 0;"></i>
+        <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+          <span style="font-size: 15px; font-weight: 500;">{t('csvTemplateA')}</span>
+          <span style="font-size: 12.5px; color: var(--color-neutral-500); text-wrap: pretty;">{t('csvTemplateN')}</span>
+        </span>
+      </button>
+      <button class="t4-hover-ghost" onclick={csvExportar} disabled={csvBusy || stock.paints.length === 0} style="display: flex; align-items: center; gap: 14px; width: 100%; min-height: 64px; padding: 10px 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-text); font-family: inherit; text-align: left; cursor: pointer;">
+        <i class="ph ph-export" style="font-size: 22px; color: var(--color-accent-400); flex-shrink: 0;"></i>
+        <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+          <span style="font-size: 15px; font-weight: 500;">{t('csvExportA')}</span>
+          <span style="font-size: 12.5px; color: var(--color-neutral-500); text-wrap: pretty;">{t('csvExportN')}</span>
+        </span>
+      </button>
+      <button class="t4-hover-ghost" onclick={() => csvInputEl?.click()} disabled={csvBusy} style="display: flex; align-items: center; gap: 14px; width: 100%; min-height: 64px; padding: 10px 14px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-text); font-family: inherit; text-align: left; cursor: pointer;">
+        <i class="ph ph-upload-simple" style="font-size: 22px; color: var(--color-accent-400); flex-shrink: 0;"></i>
+        <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+          <span style="font-size: 15px; font-weight: 500;">{t('csvImportA')}</span>
+          <span style="font-size: 12.5px; color: var(--color-neutral-500); text-wrap: pretty;">{t('csvImportN')}</span>
+        </span>
+      </button>
+    </div>
+    {#if stock.paints.length === 0}
+      <p style="margin: 12px 0 0; font-size: 13px; color: var(--color-neutral-500);">{t('csvEmpty')}</p>
+    {/if}
+  </div>
+
+  <!-- rf-23: relatório da importação (RN7) -->
+  <div class="t4-modal" role="dialog" aria-modal={modalKind === 'csvReport' ? 'true' : undefined} aria-label={t('csvRepT')} style="display: {modalKind === 'csvReport' ? 'flex' : 'none'}; flex-direction: column; max-height: 100%; position: relative; width: min(520px, 100%); padding: 24px; border: 1px solid var(--color-neutral-800); border-radius: 14px; background: var(--color-modal); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);">
+    <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 12px;">
+      <span style="flex: 1; font-size: clamp(16px, 1.8cqi, 21px); font-weight: 500; letter-spacing: -0.01em; color: var(--color-text);">{t('csvRepT')}</span>
+    </div>
+    {#if csvRelatorio}
+      <p style="margin: 0; font-size: 15px; color: var(--color-text);">{t('csvRepSum', { c: csvRelatorio.criadas, j: csvRelatorio.jaNoEstoque, r: csvRelatorio.recusadas })}</p>
+      {#if csvRelatorio.criadas === 0 && csvRelatorio.recusadas === 0}
+        <p style="margin: 10px 0 0; font-size: 14px; color: var(--color-neutral-400); text-wrap: pretty;">{t('csvRepNone')}</p>
+      {/if}
+      {#if csvRelatorio.errors.length > 0}
+        <p style="margin: 16px 0 8px; font-size: 12px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-neutral-500);">{t('csvRepProblems')}</p>
+        <div style="min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+          {#each csvRelatorio.errors as e, i (i)}
+            <div style="padding: 10px 12px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: var(--color-raised);">
+              <div style="font-size: 13.5px; color: var(--color-text);"><span class="font-mono">{e.line > 0 ? t('csvRepLine', { n: e.line }) : t('csvRepFile')}</span> · {motivoCsv(e.motivo)}</div>
+              {#if e.raw}<div class="font-mono" style="margin-top: 4px; font-size: 12px; color: var(--color-neutral-500); word-break: break-all;">{cortar80(e.raw)}</div>{/if}
+            </div>
+          {/each}
+        </div>
+      {/if}
+    {/if}
+    <button class="t4-hover-accent" onclick={closeModal} style="margin-top: 18px; height: 56px; flex-shrink: 0; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer;">{t('closeBtn')}</button>
   </div>
 
   <!-- Modal novo fabricante -->

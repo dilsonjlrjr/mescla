@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -112,9 +114,24 @@ type UserPaintDTO struct {
 
 // CSVImportResultDTO resume uma importação: quantas tintas entraram e os erros
 // por linha (linhas ruins não bloqueiam as boas).
+//
+// rf-23: imported/errors ficam para o desktop; a web lê criadas, jaNoEstoque,
+// recusadas e results[] (status: criada | ja-no-estoque | recusada; motivo é
+// código estável, vazio fora de "recusada").
 type CSVImportResultDTO struct {
-	Imported int              `json:"imported"`
-	Errors   []stock.RowError `json:"errors"`
+	Imported    int                `json:"imported"`
+	Errors      []stock.RowError   `json:"errors"`
+	Criadas     int                `json:"criadas"`
+	JaNoEstoque int                `json:"jaNoEstoque"`
+	Recusadas   int                `json:"recusadas"`
+	Results     []CSVLineResultDTO `json:"results"`
+}
+
+// CSVLineResultDTO é o resultado de uma linha do CSV importado.
+type CSVLineResultDTO struct {
+	Line   int    `json:"line"`
+	Status string `json:"status"`
+	Motivo string `json:"motivo"`
 }
 
 // ErrUserPaintNotFound é a sentinela de "tinta de estoque não encontrada" —
@@ -474,10 +491,13 @@ func (s *PaintService) ExportUserPaintsCSV() (string, error) {
 
 // ImportUserPaintsCSV importa um lote de tintas de um CSV. A crítica (fabricante
 // precisa existir, hex válido, nome obrigatório) vive em api/domain/stock — a mesma que
-// o app mobile roda via WASM. Linhas válidas são inseridas mesmo se outras
-// falharem; os erros voltam para o usuário corrigir. quantity/paint_type_id/
-// catalog_id ficam de fora do INSERT de propósito — os padrões da coluna
-// (1 / NULL) cobrem.
+// o app mobile roda via WASM. rf-23: a importação só junta, nunca substitui
+// (RN1) — tinta cuja chave (fabricante + nome + código, aparados e sem caixa)
+// já está no estoque, ou que se repete no arquivo, não é gravada (RN2); os
+// limites de tamanho do rf-17 valem aqui também (RN3). Fabricante + código que
+// apontam para uma única tinta do catálogo gravam catalog_id e paint_type_id
+// (RN5). Tudo corre numa transação BEGIN IMMEDIATE (RN6): linha recusada não
+// bloqueia as boas, erro de banco desfaz o lote.
 func (s *PaintService) ImportUserPaintsCSV(csvText string) (CSVImportResultDTO, error) {
 	mfrs, err := s.loadStockManufacturers()
 	if err != nil {
@@ -485,34 +505,158 @@ func (s *PaintService) ImportUserPaintsCSV(csvText string) (CSVImportResultDTO, 
 	}
 
 	paints, rowErrs := stock.ParseCSV(csvText, mfrs)
+	if rowErrs == nil {
+		rowErrs = []stock.RowError{}
+	}
 
-	tx, err := s.db.Begin()
+	ctx := context.Background()
+	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return CSVImportResultDTO{}, err
 	}
-	stmt, err := tx.Prepare(`
-		INSERT INTO user_paints (manufacturer_id, name, code, rgb_r, rgb_g, rgb_b, volume, notes)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`)
-	if err != nil {
-		_ = tx.Rollback()
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(ctx, `BEGIN IMMEDIATE`); err != nil {
 		return CSVImportResultDTO{}, err
 	}
-	defer stmt.Close()
+	committed := false
+	defer func() {
+		if !committed {
+			_, _ = conn.ExecContext(ctx, `ROLLBACK`)
+		}
+	}()
 
-	imported := 0
+	seen, err := loadUserPaintKeys(ctx, conn)
+	if err != nil {
+		return CSVImportResultDTO{}, err
+	}
+
+	results := make([]CSVLineResultDTO, 0, len(paints)+len(rowErrs))
+	criadas, jaNoEstoque := 0, 0
+	recusa := func(p stock.Paint, motivo, msg string) {
+		rowErrs = append(rowErrs, stock.RowError{Line: p.Line, Message: msg, Motivo: motivo, Raw: p.Raw})
+	}
 	for _, p := range paints {
-		if _, err := stmt.Exec(p.ManufacturerID, p.Name, p.Code, p.R, p.G, p.B, p.Volume, p.Notes); err != nil {
-			_ = tx.Rollback()
+		if utf8.RuneCountInString(p.Name) > maxUserPaintNameRunes ||
+			utf8.RuneCountInString(p.Code) > maxUserPaintCodeRunes ||
+			utf8.RuneCountInString(p.Volume) > maxUserPaintVolumeRunes ||
+			utf8.RuneCountInString(p.Notes) > maxUserPaintNotesRunes {
+			recusa(p, csvMotivoTextoLongo, "texto grande demais")
+			continue
+		}
+		key := userPaintKey(p.ManufacturerID, p.Name, p.Code)
+		switch seen[key] {
+		case keyNoEstoque:
+			jaNoEstoque++
+			results = append(results, CSVLineResultDTO{Line: p.Line, Status: "ja-no-estoque"})
+			continue
+		case keyNoArquivo:
+			recusa(p, csvMotivoLinhaRepetida, "linha repetida no arquivo")
+			continue
+		}
+		seen[key] = keyNoArquivo
+
+		paintTypeID, catalogID, err := csvCatalogLink(ctx, conn, p.ManufacturerID, p.Code)
+		if err != nil {
 			return CSVImportResultDTO{}, err
 		}
-		imported++
+		if _, err := conn.ExecContext(ctx, `
+			INSERT INTO user_paints (manufacturer_id, name, code, rgb_r, rgb_g, rgb_b, volume, notes, paint_type_id, catalog_id, ignore_in_mix)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+		`, p.ManufacturerID, p.Name, p.Code, p.R, p.G, p.B, p.Volume, p.Notes, paintTypeID, catalogID); err != nil {
+			return CSVImportResultDTO{}, err
+		}
+		criadas++
+		results = append(results, CSVLineResultDTO{Line: p.Line, Status: "criada"})
 	}
-	if err := tx.Commit(); err != nil {
+	if _, err := conn.ExecContext(ctx, `COMMIT`); err != nil {
 		return CSVImportResultDTO{}, err
 	}
+	committed = true
 
-	return CSVImportResultDTO{Imported: imported, Errors: rowErrs}, nil
+	for _, e := range rowErrs {
+		results = append(results, CSVLineResultDTO{Line: e.Line, Status: "recusada", Motivo: e.Motivo})
+	}
+	sort.SliceStable(results, func(i, j int) bool { return results[i].Line < results[j].Line })
+	sort.SliceStable(rowErrs, func(i, j int) bool { return rowErrs[i].Line < rowErrs[j].Line })
+
+	return CSVImportResultDTO{
+		Imported:    criadas,
+		Errors:      rowErrs,
+		Criadas:     criadas,
+		JaNoEstoque: jaNoEstoque,
+		Recusadas:   len(rowErrs),
+		Results:     results,
+	}, nil
+}
+
+const (
+	csvMotivoTextoLongo    = "texto-longo"
+	csvMotivoLinhaRepetida = "linha-repetida"
+
+	keyNoEstoque = 1
+	keyNoArquivo = 2
+)
+
+// userPaintKey é a chave de identidade da RN2: fabricante + nome + código,
+// aparados e sem distinguir caixa; código vazio vale vazio.
+func userPaintKey(manufacturerID int64, name, code string) string {
+	return strconv.FormatInt(manufacturerID, 10) + "\x00" +
+		strings.ToLower(strings.TrimSpace(name)) + "\x00" +
+		strings.ToLower(strings.TrimSpace(code))
+}
+
+// loadUserPaintKeys lê as chaves do estoque atual dentro da transação.
+func loadUserPaintKeys(ctx context.Context, conn *sql.Conn) (map[string]int, error) {
+	rows, err := conn.QueryContext(ctx, `SELECT manufacturer_id, name, COALESCE(code, '') FROM user_paints`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	keys := map[string]int{}
+	for rows.Next() {
+		var mfrID int64
+		var name, code string
+		if err := rows.Scan(&mfrID, &name, &code); err != nil {
+			return nil, err
+		}
+		keys[userPaintKey(mfrID, name, code)] = keyNoEstoque
+	}
+	return keys, rows.Err()
+}
+
+// csvCatalogLink aplica a RN5: só liga ao catálogo quando fabricante + código
+// apontam para uma única tinta (código real, nem vazio, nem "null"/"null-N").
+func csvCatalogLink(ctx context.Context, conn *sql.Conn, manufacturerID int64, code string) (paintTypeID, catalogID sql.NullInt64, err error) {
+	code = strings.TrimSpace(code)
+	if code == "" || strings.EqualFold(code, "null") || migrateNullCodeRe.MatchString(code) {
+		return sql.NullInt64{}, sql.NullInt64{}, nil
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT id, paint_type_id FROM paints
+		WHERE manufacturer_id = ? AND LOWER(TRIM(code)) = LOWER(?) LIMIT 2
+	`, manufacturerID, code)
+	if err != nil {
+		return sql.NullInt64{}, sql.NullInt64{}, err
+	}
+	defer rows.Close()
+	n := 0
+	var id int64
+	var pt sql.NullInt64
+	for rows.Next() {
+		n++
+		if n == 1 {
+			if err := rows.Scan(&id, &pt); err != nil {
+				return sql.NullInt64{}, sql.NullInt64{}, err
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return sql.NullInt64{}, sql.NullInt64{}, err
+	}
+	if n != 1 {
+		return sql.NullInt64{}, sql.NullInt64{}, nil
+	}
+	return pt, sql.NullInt64{Int64: id, Valid: true}, nil
 }
 
 // loadStockManufacturers carrega os fabricantes no formato mínimo que a crítica
