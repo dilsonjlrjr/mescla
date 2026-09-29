@@ -1,5 +1,5 @@
 {
-  "name": "paint-match-ai-frontend",
+  "name": "mescla-desktop-frontend",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -15,31 +15,15 @@
     "@fontsource-variable/bricolage-grotesque": "^5.2.10",
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource/ibm-plex-mono": "^5.2.7",
-    "@smui/button": "^9.0.1",
-    "@smui/card": "^9.0.1",
-    "@smui/checkbox": "^9.0.1",
-    "@smui/common": "^9.0.1",
-    "@smui/dialog": "^9.0.1",
-    "@smui/drawer": "^9.0.1",
-    "@smui/icon-button": "^9.0.1",
-    "@smui/layout-grid": "^9.0.1",
-    "@smui/linear-progress": "^9.0.1",
-    "@smui/list": "^9.0.1",
-    "@smui/select": "^9.0.1",
-    "@smui/slider": "^9.0.1",
-    "@smui/textfield": "^9.0.1",
-    "@smui/tooltip": "^9.0.1",
-    "@wailsio/runtime": "latest",
-    "lucide-svelte": "^1.0.1",
-    "svelte-material-ui": "^9.0.1"
+    "@phosphor-icons/web": "^2.1.2",
+    "@wailsio/runtime": "latest"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
-    "@tsconfig/svelte": "^5.0.8",
     "svelte": "^5.46.4",
     "svelte-check": "^4.4.8",
     "tslib": "^2.6.2",
-    "typescript": "^5.2.2",
+    "typescript": "~5.2.2",
     "vite": "^6.0.0"
   }
 }

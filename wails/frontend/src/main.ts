@@ -1,14 +1,17 @@
-import { mount } from 'svelte'
-import App from './App.svelte'
-import 'svelte-material-ui/bare.css'
-import '@fontsource-variable/archivo/wdth.css'
-import '@fontsource-variable/archivo/wdth-italic.css'
-import '@fontsource-variable/bricolage-grotesque/standard.css'
-// Nocturne (rf-04): tipografia Inter — self-hosted, o app desktop não depende de rede.
-import '@fontsource-variable/inter/standard.css'
-import '@fontsource/ibm-plex-mono/400.css'
-import '@fontsource/ibm-plex-mono/500.css'
-import '@fontsource/ibm-plex-mono/600.css'
-import './app.css'
+// Desktop: a interface é a da web (front/src), copiada sem alteração. Só este
+// arquivo e src/desktop/ são próprios do Wails — a ponte troca o HTTP /api
+// pelos bindings do PaintService e o download do navegador pelo diálogo nativo.
+import './desktop/instalar';
+import { mount } from 'svelte';
+// D-001: tipografia e iconografia do protótipo Nocturne — Inter (única família)
+// e Phosphor (classes `ph`/`ph-bold`), ambos self-hosted: o app desktop não
+// depende de rede.
+import '@fontsource-variable/inter';
+import '@phosphor-icons/web/regular';
+import '@phosphor-icons/web/bold';
+import './app.css';
+import App from './App.svelte';
 
-mount(App, { target: document.getElementById('app')! })
+const app = mount(App, { target: document.getElementById('app')! });
+
+export default app;

@@ -1,113 +1,173 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import TopBar from './lib/components/TopBar.svelte';
-  import CommandPalette from './lib/components/CommandPalette.svelte';
-  import CatalogView from './lib/components/CatalogView.svelte';
-  import ColorSearchView from './lib/components/ColorSearchView.svelte';
-  import CompareView from './lib/components/CompareView.svelte';
-  import EquivalentRecipeView from './lib/components/EquivalentRecipeView.svelte';
-  import ColorWheelView from './lib/components/ColorWheelView.svelte';
-  import MyStockView from './lib/components/MyStockView.svelte';
-  import RecipesView from './lib/components/RecipesView.svelte';
-  import PlanejadorPintura from './lib/components/PlanejadorPintura.svelte';
+  // rf-04: shell reorganizado em 4 telas (T1 Pergunta/T2 Plano/T3 Receitas/
+  // T4 Minhas tintas), cada uma com seu próprio cabeçalho+rodapé fixos
+  // (Header.svelte é comum; rodapé é por tela). Sem TabBar — a navegação
+  // mora no Header (nc-nav) + a marca leva de volta a T1.
   import ToastRegion from './lib/components/ToastRegion.svelte';
-  import GuideDialog from './lib/components/GuideDialog.svelte';
+  import BrandMark from './lib/components/BrandMark.svelte';
+  import Spinner from './lib/components/Spinner.svelte';
+  import PerguntaView from './lib/views/PerguntaView.svelte';
+  import PlannerView from './lib/views/PlannerView.svelte';
+  import ReceitasView from './lib/views/ReceitasView.svelte';
+  import CatalogoView from './lib/views/CatalogoView.svelte';
+  import CirculoView from './lib/views/CirculoView.svelte';
+  import CompararView from './lib/views/CompararView.svelte';
+  import PaletaComandos from './lib/components/PaletaComandos.svelte';
+  import GuiaPrimeiroUso from './lib/components/GuiaPrimeiroUso.svelte';
+  import { nav, initNav } from './lib/nav.svelte';
+  import { loadCatalog, migrateLegacyManufacturers, reloadManufacturers, reloadPaintTypes } from './lib/services/catalog';
+  import { engineReady } from './lib/services/engine';
+  import { carregarEstoque, definirMigrando } from './lib/services/stock.svelte';
+  import { migrarEstoqueLocal } from './lib/services/estoque-migracao';
+  import { toast } from './lib/toast.svelte';
+  import { t } from './lib/i18n.svelte';
+  import { initPwa } from './lib/pwa.svelte';
 
-  // rf-04: T1 = 'home' (ColorSearchView reorganizada), T2 = 'planner', T3 =
-  // 'receitas' (nova), T4 = 'stock' (MyStockView com abas Tintas/Fabricantes).
-  // 'manufacturers' e as demais telas legadas (mix/compare/wheel/color-search
-  // como ferramenta avulsa) continuam navegáveis — fora do nav principal de
-  // 4 itens, mas sem quebrar quem ainda aponta pra elas (CatalogView, palette).
-  type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock' | 'planner' | 'receitas';
+  let booted = $state(false);
+  let bootError = $state('');
 
-  interface NavOpts {
-    paintId?: number;
-    targetManufacturerId?: number; // mix: re-executar receita salva
-    manufacturer?: string;         // catalog: filtro de marca
-    stockPrefillPaintId?: number;  // stock: abrir form pré-preenchido
-  }
+  initNav();
+  initPwa();
 
-  let currentView: View = $state('home');
-  let recipeSourcePaintId: number | null = $state(null);
-  let recipeTargetMfrId: number | null = $state(null);
-  let catalogManufacturer: string | null = $state(null);
-  let catalogPaintId: number | null = $state(null);
-  let compareAnchorId: number | null = $state(null);
-  let stockPrefillPaintId: number | null = $state(null);
-  let stockInitialTab: 'tintas' | 'fabricantes' = $state('tintas');
-  let guideOpen = $state(false);
-  let paletteOpen = $state(false);
-  // força remontagem da view quando a mesma rota é reaberta com outro contexto
-  let navSeq = $state(0);
+  // O catálogo trava o boot (as listas precisam dele); o motor inicializa
+  // EM PARALELO sem travar — quem precisar dele aguarda via engineReady().
+  void engineReady().catch(e => console.error('Motor de cor não inicializou:', e));
+  loadCatalog()
+    .then(() => {
+      booted = true;
+      void iniciarEstoque();
+    })
+    .catch(e => {
+      console.error('Catálogo não carregou:', e);
+      bootError = 'O catálogo não carregou. Verifique a conexão e recarregue.';
+    });
 
-  function handleNavigate(view: View, opts?: number | NavOpts) {
-    const o: NavOpts = typeof opts === 'number' ? { paintId: opts } : (opts ?? {});
-    recipeSourcePaintId = view === 'mix' ? (o.paintId ?? null) : null;
-    recipeTargetMfrId = view === 'mix' ? (o.targetManufacturerId ?? null) : null;
-    catalogManufacturer = view === 'catalog' ? (o.manufacturer ?? null) : null;
-    catalogPaintId = view === 'catalog' ? (o.paintId ?? null) : null;
-    compareAnchorId = view === 'compare' ? (o.paintId ?? null) : null;
-    stockPrefillPaintId = (view === 'stock' || view === 'manufacturers') ? (o.stockPrefillPaintId ?? null) : null;
-    navSeq++;
-    // 'manufacturers' é um alias de navegação pra T4 já na aba Fabricantes —
-    // CatalogView e a busca global ainda apontam pra esse destino (T2/T4 nota
-    // de construção: sem sobreposição, sem duplicar a tela).
-    currentView = view === 'manufacturers' ? 'stock' : view;
-    stockInitialTab = view === 'manufacturers' ? 'fabricantes' : (view === 'stock' ? 'tintas' : stockInitialTab);
-  }
-
-  // ⌘K / Ctrl+K abre a busca global de qualquer tela.
-  function onKeydown(e: KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-      e.preventDefault();
-      paletteOpen = !paletteOpen;
+  // rf-17: o estoque vive no servidor. A carga começa já (T4 mostra spinner, não
+  // lista vazia); os fabricantes locais antigos sobem antes do estoque local,
+  // senão a migração recusaria tinta de fabricante que só existia no aparelho.
+  async function iniciarEstoque(): Promise<void> {
+    // T1/T2 esperam até o fim deste bloco: a carga paralela voltaria "pronto"
+    // com 0 tintas antes de a migração do navegador enviar as dele.
+    definirMigrando(true);
+    try {
+      void carregarEstoque({ mostrarCarregando: true });
+      try {
+        const pendentes = await migrateLegacyManufacturers();
+        if (pendentes > 0) toast(t('errMakerMigrate'), 'error');
+        await Promise.allSettled([reloadManufacturers(), reloadPaintTypes()]);
+      } catch (e) {
+        console.error('Fabricantes locais não subiram:', e);
+      }
+      await migrarEstoqueLocal();
+      await carregarEstoque();
+    } finally {
+      definirMigrando(false);
     }
   }
 
-  onMount(() => {
-    // Guia abre sozinho só na primeira execução.
-    if (!localStorage.getItem('mescla_guided')) {
-      guideOpen = true;
-    }
+  // RN11/M6: outra janela ou aparelho pode ter mudado o estoque.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !booted) return;
+    void migrarEstoqueLocal().then(() => carregarEstoque());
   });
 
-  function closeGuide() {
-    localStorage.setItem('mescla_guided', '1');
-  }
+  // As 4 telas ficam montadas (display:none) pra preservar estado ao trocar —
+  // troca de idioma ou de aba não perde a resposta atual (US-18, NFR-09).
 </script>
 
-<svelte:window onkeydown={onKeydown} />
-
-<div class="app-layout">
-  <TopBar
-    {currentView}
-    onNavigate={handleNavigate}
-    onSearch={() => (paletteOpen = true)}
-  />
-
-  <main class="app-main">
-    {#key navSeq}
-      {#if currentView === 'home' || currentView === 'color-search'}
-        <ColorSearchView onNavigate={handleNavigate} />
-      {:else if currentView === 'catalog'}
-        <CatalogView onNavigate={handleNavigate} initialManufacturer={catalogManufacturer} initialPaintId={catalogPaintId} />
-      {:else if currentView === 'compare'}
-        <CompareView initialAnchorId={compareAnchorId} />
-      {:else if currentView === 'wheel'}
-        <ColorWheelView />
-      {:else if currentView === 'stock'}
-        <MyStockView prefillPaintId={stockPrefillPaintId} initialTab={stockInitialTab} />
-      {:else if currentView === 'receitas'}
-        <RecipesView />
-      {:else if currentView === 'mix'}
-        <EquivalentRecipeView initialSourcePaintId={recipeSourcePaintId} initialTargetManufacturerId={recipeTargetMfrId} />
-      {:else if currentView === 'planner'}
-        <PlanejadorPintura />
-      {/if}
-    {/key}
+{#if bootError}
+  <div class="boot">
+    <BrandMark size={44} />
+    <p class="boot-error">{bootError}</p>
+    <button class="btn-ghost" onclick={() => location.reload()}>Recarregar</button>
+  </div>
+{:else if !booted}
+  <div class="boot">
+    <Spinner size={52} label="Carregando o catálogo" />
+    <p class="boot-word font-display">Mescla AI</p>
+  </div>
+{:else}
+  <!-- Raiz do protótipo (docs/oficial/Mescla AI.html): container-type:
+       inline-size é o que faz as unidades `cqi` das telas responderem à
+       largura do app, não à viewport (NFR-01, 820–1366px). -->
+  <main class="views animate-rise">
+    <div class="view" class:hidden={nav.tab !== 'pergunta'}><PerguntaView /></div>
+    <div class="view" class:hidden={nav.tab !== 'plano'}><PlannerView /></div>
+    <div class="view" class:hidden={nav.tab !== 'receitas'}><ReceitasView /></div>
+    <div class="view" class:hidden={nav.tab !== 'estante'}><CatalogoView /></div>
+    <div class="view" class:hidden={nav.tab !== 'circulo'}><CirculoView /></div>
+    <div class="view" class:hidden={nav.tab !== 'comparar'}><CompararView /></div>
   </main>
-</div>
+  <!-- rf-23: paleta de comandos (Ctrl+K), uma só para todas as telas. -->
+  <PaletaComandos />
+  <!-- rf-24: guia de primeiro uso; o "?" do cabeçalho e a paleta o reabrem. -->
+  <GuiaPrimeiroUso />
+{/if}
 
-<CommandPalette open={paletteOpen} onClose={() => (paletteOpen = false)} onNavigate={handleNavigate} />
-<GuideDialog bind:open={guideOpen} onClose={closeGuide} />
 <ToastRegion />
+
+<style>
+  .boot {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: var(--color-bg);
+  }
+
+  .boot-word {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--color-text);
+    letter-spacing: -0.01em;
+    line-height: 1;
+    margin-top: 2px;
+  }
+
+  .boot-error {
+    font-size: 14px;
+    color: var(--color-accent-2);
+    max-width: 260px;
+    text-align: center;
+  }
+
+  .views {
+    width: 100%;
+    height: 100dvh;
+    position: relative;
+    overflow: hidden;
+    container-type: inline-size;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.45;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+  }
+
+  /* As 4 telas continuam montadas para preservar estado (US-18/NFR-09), mas a
+     que sai agora some por opacidade em vez de `display: none` — `display`
+     não é animável, e sem isso a troca de aba é um corte seco. `visibility`
+     entra no fim da saída para tirar a tela do foco e do toque. */
+  .view {
+    position: absolute;
+    inset: 0;
+    min-height: 0;
+    opacity: 1;
+    transform: none;
+    transition: opacity 180ms ease, transform 180ms ease;
+  }
+
+  .view.hidden {
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    visibility: hidden;
+    transition: opacity 140ms ease, transform 140ms ease, visibility 0s linear 140ms;
+  }
+</style>

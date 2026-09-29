@@ -27,6 +27,20 @@ func (d *DialogService) SaveFile(title string, filterName string, filterPattern 
 		PromptForSingleSelection()
 }
 
+// SaveFileAs abre o diálogo de salvar já com o nome sugerido. É o destino dos
+// downloads da interface (a mesma da web): o link com `download` vira este
+// diálogo em vez do download do navegador, que a webview não tem.
+func (d *DialogService) SaveFileAs(title string, defaultName string, filterName string, filterPattern string) (string, error) {
+	dlg := application.Get().Dialog.SaveFile().
+		SetMessage(title).
+		SetFilename(defaultName).
+		CanCreateDirectories(true)
+	if filterPattern != "" {
+		dlg = dlg.AddFilter(filterName, filterPattern)
+	}
+	return dlg.PromptForSingleSelection()
+}
+
 func (d *DialogService) OpenFile(title string, filterName string, filterPattern string) (string, error) {
 	return application.Get().Dialog.OpenFile().
 		SetTitle(title).

@@ -1,0 +1,399 @@
+// Rascunho local de T2 (Plano da peça): auto save sem rede, com debounce e
+// escada de cota. Formato v2 (rf-09, várias abas) — migra o v1 (rf-07, uma
+// foto/regiões na raiz) na leitura. O timer do debounce mora aqui, não na tela.
+
+const RASCUNHO_KEY = 'mescla:plano-rascunho';
+const PLANO_ATIVO_KEY = 'mescla:plano-ativo';
+
+const DEBOUNCE_MS = 1500;
+const MAX_REGIOES = 50;
+const MAX_ABAS = 10;
+
+const PREFIXOS_IMAGEM_VALIDOS = ['data:image/png;base64,', 'data:image/jpeg;base64,'];
+
+export interface RegiaoRascunho {
+  x: number;
+  y: number;
+  r: number;
+  g: number;
+  b: number;
+  hex: string;
+  regionName: string;
+  note: string;
+  paintId: number | null;
+  paintBrand: string;
+  paintName: string;
+  paintCode: string;
+  deltaE: number;
+  painted: boolean;
+  /** rf-11 RN7: veio de fora do universo pedido. */
+  foraDoUniverso: boolean;
+  /** rf-16: ajuste da região e mistura salva. Ausentes num rascunho antigo:
+   *  a região segue o projeto e não tem mistura salva. */
+  regionOverride?: boolean;
+  regionManufacturerId?: number | null;
+  regionUseStockOnly?: boolean;
+  resultR?: number | null;
+  resultG?: number | null;
+  resultB?: number | null;
+  faixa?: string;
+  method?: string;
+  ingredients?: IngredienteRascunho[];
+  /** rf-18: tinta escolhida à mão e cor lida da foto antes de uma correção. */
+  regionManual?: boolean;
+  sampleHex?: string;
+}
+
+export interface IngredienteRascunho {
+  paintId: number;
+  manufacturerId: number;
+  manufacturer: string;
+  name: string;
+  code: string;
+  r: number;
+  g: number;
+  b: number;
+  percentage: number;
+}
+
+const FAIXAS_VALIDAS = ['otimo', 'aproximada', 'nao-encontrei'];
+
+function corOuNulo(v: unknown): number | null {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 255 ? v : null;
+}
+
+function normalizarIngrediente(bruto: unknown): IngredienteRascunho | null {
+  if (typeof bruto !== 'object' || bruto === null) return null;
+  const o = bruto as Record<string, unknown>;
+  const r = corOuNulo(o.r);
+  const g = corOuNulo(o.g);
+  const b = corOuNulo(o.b);
+  const pct = Number(o.percentage);
+  if (r === null || g === null || b === null || !Number.isFinite(pct) || pct < 0 || pct > 100) return null;
+  return {
+    paintId: Number.isInteger(o.paintId) ? (o.paintId as number) : 0,
+    manufacturerId: Number.isInteger(o.manufacturerId) ? (o.manufacturerId as number) : 0,
+    manufacturer: typeof o.manufacturer === 'string' ? o.manufacturer : '',
+    name: typeof o.name === 'string' ? o.name : '',
+    code: typeof o.code === 'string' ? o.code : '',
+    r, g, b,
+    percentage: pct,
+  };
+}
+
+export interface AbaRascunho {
+  /** Identidade estável da aba no servidor (achado 2 do guardrail rf-09):
+   *  ausente numa aba nunca salva. Usada para casar a aba do rascunho com a
+   *  do servidor na hidratação — nunca a posição na tira, que pode ter sido
+   *  reordenada depois do último Salvar. */
+  id?: number | null;
+  name: string;
+  imageData: string;
+  regions: RegiaoRascunho[];
+}
+
+// selectedManufacturerId/useStockOnly são do plano inteiro desde a mudança
+// macro de 2026-09-07 — um controle só em T2, valendo para todas as abas.
+// Antes disso eram campos de AbaRascunho.
+export interface Rascunho {
+  v: 2;
+  planId: number | null;
+  name: string;
+  selectedManufacturerId: number | null;
+  useStockOnly: boolean;
+  abaAtiva: number;
+  tabs: AbaRascunho[];
+  salvoEm: string;
+}
+
+export type EstadoAutoSave = 'ligado' | 'sem-foto' | 'desligado';
+
+let timer: ReturnType<typeof setTimeout> | null = null;
+let pendente: Rascunho | null = null;
+let estado: EstadoAutoSave = 'ligado';
+
+function normalizarBooleano(valor: unknown): boolean {
+  return valor === true || valor === 1;
+}
+
+function normalizarImagem(imageData: unknown): string {
+  if (typeof imageData !== 'string') return '';
+  return PREFIXOS_IMAGEM_VALIDOS.some(p => imageData.startsWith(p)) ? imageData : '';
+}
+
+function normalizarRegiao(r: unknown): RegiaoRascunho | null {
+  if (typeof r !== 'object' || r === null) return null;
+  const o = r as Record<string, unknown>;
+  return {
+    x: Number(o.x) || 0,
+    y: Number(o.y) || 0,
+    r: Number(o.r) || 0,
+    g: Number(o.g) || 0,
+    b: Number(o.b) || 0,
+    hex: typeof o.hex === 'string' ? o.hex : '',
+    regionName: typeof o.regionName === 'string' ? o.regionName : '',
+    note: typeof o.note === 'string' ? o.note : '',
+    paintId: typeof o.paintId === 'number' ? o.paintId : null,
+    paintBrand: typeof o.paintBrand === 'string' ? o.paintBrand : '',
+    paintName: typeof o.paintName === 'string' ? o.paintName : '',
+    paintCode: typeof o.paintCode === 'string' ? o.paintCode : '',
+    deltaE: Number(o.deltaE) || 0,
+    painted: normalizarBooleano(o.painted),
+    foraDoUniverso: normalizarBooleano(o.foraDoUniverso),
+    regionOverride: normalizarBooleano(o.regionOverride),
+    regionManufacturerId: idValido(o.regionManufacturerId),
+    regionUseStockOnly: normalizarBooleano(o.regionUseStockOnly),
+    resultR: corOuNulo(o.resultR),
+    resultG: corOuNulo(o.resultG),
+    resultB: corOuNulo(o.resultB),
+    faixa: typeof o.faixa === 'string' && FAIXAS_VALIDAS.includes(o.faixa) ? o.faixa : '',
+    method: typeof o.method === 'string' ? o.method.slice(0, 60) : '',
+    regionManual: normalizarBooleano(o.regionManual),
+    sampleHex: typeof o.sampleHex === 'string' && /^#[0-9a-f]{6}$/i.test(o.sampleHex) ? o.sampleHex.toLowerCase() : '',
+    ingredients: (Array.isArray(o.ingredients) ? o.ingredients : [])
+      .map(normalizarIngrediente)
+      .filter((i): i is IngredienteRascunho => i !== null)
+      .slice(0, 20),
+  };
+}
+
+/** Identificador vindo do rascunho: só inteiro positivo passa. Rascunho
+ *  adulterado com `-7` ou `1.5` viraria `id` no POST (CAN1). */
+function idValido(v: unknown): number | null {
+  return typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : null;
+}
+
+/** Uma aba do rascunho, com o mesmo corte de 50 regiões (CAN5 estende a
+ *  aba). `truncado` sinaliza que a aba tinha mais regiões do que o teto. */
+function normalizarAba(bruto: unknown): { aba: AbaRascunho; truncado: boolean } | null {
+  if (typeof bruto !== 'object' || bruto === null) return null;
+  const o = bruto as Record<string, unknown>;
+
+  const regioesBrutas = Array.isArray(o.regions) ? o.regions : [];
+  const regioesValidas = regioesBrutas
+    .map(normalizarRegiao)
+    .filter((r): r is RegiaoRascunho => r !== null);
+  const truncado = regioesValidas.length > MAX_REGIOES;
+  const regions = truncado ? regioesValidas.slice(0, MAX_REGIOES) : regioesValidas;
+
+  const aba: AbaRascunho = {
+    id: idValido(o.id),
+    name: typeof o.name === 'string' ? o.name : '',
+    imageData: normalizarImagem(o.imageData),
+    regions,
+  };
+  return { aba, truncado };
+}
+
+/** Fabricante base e modo estoque (mudança macro de 07/09/2026) são da raiz
+ *  do rascunho, não da aba. Um rascunho v1 já os guardava na raiz (formato
+ *  antigo do plano inteiro, pré-abas) — lido direto. Um rascunho v2 gravado
+ *  ANTES desta mudança os guardava na primeira aba: sem o campo na raiz,
+ *  cai para lá em vez de perder o valor em silêncio (mesma disciplina da
+ *  RN11 para o v1). */
+function extrairFabricanteEstoqueRaiz(
+  o: Record<string, unknown>,
+  tabsBrutas: unknown[]
+): { selectedManufacturerId: number | null; useStockOnly: boolean } {
+  if ('selectedManufacturerId' in o || 'useStockOnly' in o) {
+    return {
+      selectedManufacturerId: idValido(o.selectedManufacturerId),
+      useStockOnly: normalizarBooleano(o.useStockOnly),
+    };
+  }
+  const primeira = tabsBrutas[0];
+  if (typeof primeira === 'object' && primeira !== null) {
+    const p = primeira as Record<string, unknown>;
+    return {
+      selectedManufacturerId: idValido(p.selectedManufacturerId),
+      useStockOnly: normalizarBooleano(p.useStockOnly),
+    };
+  }
+  return { selectedManufacturerId: null, useStockOnly: false };
+}
+
+/** Normalização defensiva de um rascunho lido do disco: JSON inválido ou
+ *  formato inesperado nunca quebra a tela (CAN6). RN11: payload sem `v` e
+ *  com `regions` na raiz é o formato v1 (rf-07) — migra para uma aba única
+ *  `Figura 1`, sem descartar nada. */
+function normalizar(bruto: unknown): { rascunho: Rascunho; truncado: boolean } | null {
+  if (typeof bruto !== 'object' || bruto === null) return null;
+  const o = bruto as Record<string, unknown>;
+
+  const ehV1 = o.v !== 2 && Array.isArray(o.regions);
+
+  const tabsBrutas: unknown[] = ehV1
+    ? [{ name: 'Figura 1', imageData: o.imageData, regions: o.regions }]
+    : Array.isArray(o.tabs)
+      ? o.tabs
+      : [];
+
+  const { selectedManufacturerId, useStockOnly } = extrairFabricanteEstoqueRaiz(o, tabsBrutas);
+
+  const abasNormalizadas = tabsBrutas
+    .map(normalizarAba)
+    .filter((a): a is { aba: AbaRascunho; truncado: boolean } => a !== null);
+
+  const truncadoAbas = abasNormalizadas.length > MAX_ABAS;
+  const abasFinal = truncadoAbas ? abasNormalizadas.slice(0, MAX_ABAS) : abasNormalizadas;
+  const truncadoRegioes = abasFinal.some(a => a.truncado);
+
+  // Plano/rascunho sem aba é impossível (mesma invariante do servidor,
+  // RN1) — um payload vazio ou irreconhecível ainda vira uma aba em branco.
+  const tabs = abasFinal.length > 0 ? abasFinal.map(a => a.aba) : [
+    { name: '', imageData: '', regions: [] },
+  ];
+
+  const abaAtivaBruta = Number.isInteger(o.abaAtiva) ? (o.abaAtiva as number) : 0;
+  const abaAtiva = Math.min(Math.max(abaAtivaBruta, 0), tabs.length - 1);
+
+  const rascunho: Rascunho = {
+    v: 2,
+    planId: idValido(o.planId),
+    name: typeof o.name === 'string' ? o.name : '',
+    selectedManufacturerId,
+    useStockOnly,
+    abaAtiva,
+    tabs,
+    salvoEm: typeof o.salvoEm === 'string' ? o.salvoEm : new Date().toISOString(),
+  };
+  return { rascunho, truncado: truncadoAbas || truncadoRegioes };
+}
+
+/** rf-22 RN21: a mesma normalização defensiva do rascunho, oferecida ao
+ *  arquivo de plano. `truncado` = mais de 10 abas ou de 50 regiões numa aba. */
+export function normalizarRascunhoBruto(bruto: unknown): { rascunho: Rascunho; truncado: boolean } | null {
+  return normalizar(bruto);
+}
+
+export const LIMITE_ABAS = MAX_ABAS;
+export const LIMITE_REGIOES = MAX_REGIOES;
+
+/** Lê o rascunho gravado. JSON inválido apaga a chave e devolve `corrompido:
+ *  true` (CAN6); mais de 10 abas ou mais de 50 regiões numa aba corta e
+ *  devolve `truncado: true` (CAN5). Rascunho v1 nunca é descartado em
+ *  silêncio — é migrado (RN11, CA17). */
+export function lerRascunho(): { rascunho: Rascunho | null; corrompido: boolean; truncado: boolean } {
+  let raw: string | null;
+  try {
+    raw = localStorage.getItem(RASCUNHO_KEY);
+  } catch {
+    return { rascunho: null, corrompido: false, truncado: false };
+  }
+  if (!raw) return { rascunho: null, corrompido: false, truncado: false };
+
+  let bruto: unknown;
+  try {
+    bruto = JSON.parse(raw);
+  } catch {
+    apagarRascunho();
+    return { rascunho: null, corrompido: true, truncado: false };
+  }
+
+  const normalizado = normalizar(bruto);
+  if (normalizado === null) {
+    apagarRascunho();
+    return { rascunho: null, corrompido: true, truncado: false };
+  }
+  return { rascunho: normalizado.rascunho, corrompido: false, truncado: normalizado.truncado };
+}
+
+function gravar(payload: Rascunho): void {
+  try {
+    localStorage.setItem(RASCUNHO_KEY, JSON.stringify(payload));
+    // D-005: a gravação cheia passou, então o degrau 'sem-foto' era da
+    // gravação anterior, não da sessão. Sem esta volta, uma única foto grande
+    // deixava 'sem-foto' colado e cortava também toda foto seguinte, mesmo
+    // pequena. 'desligado' continua colado na sessão — a RN8 diz isso.
+    if (estado === 'sem-foto') estado = 'ligado';
+  } catch {
+    if (estado === 'desligado') return;
+    // Degrau único da RN8 (estendida a N abas): cortar a foto de *todas* as
+    // abas. O rascunho sem imagem ainda salva o trabalho (nomes, regiões,
+    // cores), e só desliga quando nem ele cabe.
+    try {
+      const semFotos: Rascunho = {
+        ...payload,
+        tabs: payload.tabs.map(t => ({ ...t, imageData: '' })),
+      };
+      localStorage.setItem(RASCUNHO_KEY, JSON.stringify(semFotos));
+      estado = 'sem-foto';
+    } catch {
+      estado = 'desligado';
+    }
+  }
+}
+
+/** Agenda a gravação do rascunho após 1500 ms de silêncio (RN3 do rf-07);
+ *  chamadas seguidas dentro da janela resultam em uma única gravação. */
+export function agendarGravacao(payload: Rascunho): void {
+  if (estado === 'desligado') return;
+  if (timer !== null) clearTimeout(timer);
+  pendente = payload;
+  timer = setTimeout(() => {
+    timer = null;
+    pendente = null;
+    gravar(payload);
+  }, DEBOUNCE_MS);
+}
+
+/** rf-16 RN4: grava na hora o que está no debounce. Voltar do editor para a
+ *  lista lê o rascunho logo em seguida; sem isto, a última alteração ainda
+ *  estaria esperando o timer e o card "Alterações não salvas" não apareceria. */
+export function gravarPendente(): void {
+  if (timer === null || pendente === null) return;
+  clearTimeout(timer);
+  timer = null;
+  const payload = pendente;
+  pendente = null;
+  gravar(payload);
+}
+
+export function cancelarGravacao(): void {
+  pendente = null;
+  if (timer !== null) {
+    clearTimeout(timer);
+    timer = null;
+  }
+}
+
+export function apagarRascunho(): void {
+  cancelarGravacao();
+  try {
+    localStorage.removeItem(RASCUNHO_KEY);
+  } catch {
+    /* sem armazenamento, sem rascunho pra apagar mesmo */
+  }
+}
+
+export function lerPlanoAtivo(): number | null {
+  try {
+    const raw = localStorage.getItem(PLANO_ATIVO_KEY);
+    if (!raw) return null;
+    const id = Number(raw);
+    return Number.isFinite(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+export function gravarPlanoAtivo(id: number): void {
+  try {
+    localStorage.setItem(PLANO_ATIVO_KEY, String(id));
+  } catch {
+    /* sem persistência, sem drama */
+  }
+}
+
+export function limparPlanoAtivo(): void {
+  try {
+    localStorage.removeItem(PLANO_ATIVO_KEY);
+  } catch {
+    /* sem persistência, sem drama */
+  }
+}
+
+/** Reflete a escada de cota da RN8: 'ligado' → 'sem-foto' → 'desligado'. */
+export function estadoAutoSave(): EstadoAutoSave {
+  return estado;
+}

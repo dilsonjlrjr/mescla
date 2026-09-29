@@ -1,4 +1,4 @@
-// Store mínimo de toasts — feedback imediato de ações (copiar, erros de backend).
+// Store mínimo de toasts — copiado de frontend/src/lib/toast.svelte.ts.
 // Runes ($state) exigem extensão .svelte.ts.
 
 export interface Toast {

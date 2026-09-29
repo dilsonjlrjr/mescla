@@ -56,12 +56,9 @@ func main() {
 		Height:           800,
 		MinWidth:         1024,
 		MinHeight:        700,
-		BackgroundColour: application.NewRGB(10, 10, 15),
-		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 50,
-			Backdrop:                application.MacBackdropTranslucent,
-			TitleBar:                application.MacTitleBarHiddenInset,
-		},
+		BackgroundColour: application.NewRGB(22, 24, 38), // #161826, fundo da interface
+		// Barra de título nativa também no macOS: a interface é a da web, que
+		// não reserva espaço para os semáforos nem marca área de arrastar.
 		URL: "/",
 	})
 
