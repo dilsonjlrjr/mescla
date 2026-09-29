@@ -12,10 +12,10 @@
   // POTE ÚNICO disponível no pool (via nearest-neighbour sobre o catálogo) e
   // avisa a limitação (stockOnlyNoFormula), em vez de fingir uma fórmula.
   import { onMount } from 'svelte';
-  import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
+  import * as PaintService from '../../../bindings/paint-match-ai/api/service/paintservice';
   import type {
     PaintDTO, ManufacturerDTO, UserPaintDTO, EquivalentRecipeDTO,
-  } from '../../../bindings/paint-match-ai/models';
+  } from '../../../bindings/paint-match-ai/api/service/models';
   import FormulaRibbon from './FormulaRibbon.svelte';
   import PaintBottle from './PaintBottle.svelte';
   import { toast } from '../toast.svelte';
@@ -192,7 +192,7 @@
   }
 
   async function suggestForBrand(mfrId: number): Promise<EquivalentRecipeDTO> {
-    if (target?.paintId) return PaintService.SuggestEquivalentRecipe(target.paintId, mfrId);
+    if (target?.paintId) return PaintService.SuggestEquivalentRecipe(target.paintId, mfrId, 0);
     return PaintService.SuggestRecipeForColor(target!.r, target!.g, target!.b, mfrId);
   }
 
@@ -315,7 +315,7 @@
       if (existing) {
         await PaintService.DeleteUserPaint(existing.id);
       } else if (mfrId) {
-        await PaintService.AddUserPaint({ id: 0, manufacturerId: mfrId, manufacturer: '', name: ing.name, code: ing.code || '', r: ing.r, g: ing.g, b: ing.b, volume: '', notes: '' });
+        await PaintService.AddUserPaint({ id: 0, manufacturerId: mfrId, manufacturer: '', name: ing.name, code: ing.code || '', r: ing.r, g: ing.g, b: ing.b, volume: '', notes: '', quantity: null, paintTypeId: null, catalogId: null, ignoreInMix: null });
       }
       userPaints = (await PaintService.GetUserPaints()) || [];
     } catch (e) {

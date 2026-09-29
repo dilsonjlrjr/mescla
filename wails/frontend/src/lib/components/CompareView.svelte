@@ -7,12 +7,12 @@
   import PaintBottle from './PaintBottle.svelte';
   import { contrastOn, hexOf, deltaIsGood } from '../ui';
   import { rgbToHsl } from '../color/theory';
-  import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
+  import * as PaintService from '../../../bindings/paint-match-ai/api/service/paintservice';
 
   interface Paint {
     id: number;
     name: string;
-    code: string;
+    code?: string;
     manufacturer: string;
     productLine?: string;
     r: number;
@@ -52,7 +52,7 @@
     }
     comparing = true;
     try {
-      const raw = (await PaintService.CompareColors([anchor.id, ...candidateIds])) || [];
+      const raw = (await PaintService.CompareToAnchor(anchor.id, candidateIds)) || [];
       results = raw
         .filter((r: any) => r.paintId !== anchor!.id)
         .sort((a: any, b: any) => a.deltaE - b.deltaE);

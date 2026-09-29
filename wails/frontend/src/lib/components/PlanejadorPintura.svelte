@@ -1,7 +1,7 @@
 <script lang="ts">
-  import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
-  import * as DialogService from '../../../bindings/paint-match-ai/dialogservice';
-  import type { PickColorResponse, ColorMatchDTO, ManufacturerDTO } from '../../../bindings/paint-match-ai/models';
+  import * as PaintService from '../../../bindings/paint-match-ai/api/service/paintservice';
+  import * as DialogService from '../../../bindings/paint-match-ai/wails/dialogservice';
+  import type { PickColorResponse, ColorMatchDTO, ManufacturerDTO, PaintingPlanDTO, PaintingPlanSummaryDTO, PaintingRegionDTO } from '../../../bindings/paint-match-ai/api/service/models';
   import Icon from './Icon.svelte';
   import FloatingToolbar from './FloatingToolbar.svelte';
   import PrecisionLoupe from './PrecisionLoupe.svelte';
@@ -49,6 +49,9 @@
   let planName = $state('');
   let imageDataUrl = $state('');
   let currentPlanId = $state(0);
+  // Plano carregado do banco: guarda o que o desktop não edita (fabricante base, modo estoque,
+  // demais figuras da web) para reenviar no SavePlan, que é replace-all.
+  let loadedPlan: PaintingPlanDTO | null = null;
 
   // ── UI state ──
   let hasImage = $state(false);
@@ -59,7 +62,7 @@
   let savedIndicator = $state(false);
   let showPlanGrid = $state(false);
   let planGridLoading = $state(false);
-  let planGridData: any[] = $state([]);
+  let planGridData: PaintingPlanSummaryDTO[] = $state([]);
 
   // ── Undo/Redo ──
   interface UndoAction {
@@ -104,6 +107,8 @@
     allMatches: ColorMatchDTO[];
     recipe: any;
     picking?: boolean;
+    // Região como veio do banco: campos que o desktop não conhece voltam intactos no save.
+    raw?: PaintingRegionDTO;
   }
 
   // ── Zoom ──
@@ -743,15 +748,24 @@
     }
   }
 
-  function buildPlanDTO() {
-    const now = new Date().toISOString();
+  function regiaoPadrao(): PaintingRegionDTO {
     return {
-      id: currentPlanId,
-      name: planName || `Plano ${new Date().toLocaleDateString('pt-BR')}`,
-      imageData: imageDataUrl,
-      regions: regions.map((r, i) => ({
+      id: 0, x: 0, y: 0, r: 0, g: 0, b: 0, hex: '', regionName: '', note: '',
+      paintBrand: '', paintName: '', paintCode: '', deltaE: 0, painted: 0,
+      foraDoUniverso: 0, regionOverride: 0, regionManufacturerId: null, regionUseStockOnly: 0,
+      resultR: null, resultG: null, resultB: null, faixa: '', method: '',
+      regionManual: 0, sampleHex: '', ingredients: null,
+    };
+  }
+
+  function buildPlanDTO(): PaintingPlanDTO {
+    const now = new Date().toISOString();
+    const base = loadedPlan;
+    const tab0 = base?.tabs?.[0];
+    const tabRegions: PaintingRegionDTO[] = regions.map(r => {
+      const dto: PaintingRegionDTO = {
+        ...(r.raw ?? regiaoPadrao()),
         id: 0,
-        planId: 0,
         x: r.x,
         y: r.y,
         r: r.r,
@@ -760,14 +774,37 @@
         hex: r.hex,
         regionName: r.regionName,
         note: r.note,
-        paintId: r.match?.paintId ?? 0,
-        paintBrand: r.match?.manufacturer ?? '',
-        paintName: r.match?.name ?? '',
-        paintCode: r.match?.code ?? '',
-        deltaE: r.match?.deltaE ?? 0,
-        sortOrder: i,
-      })),
-      createdAt: now,
+      };
+      // Cor ou posição mudou no desktop: a mistura salva da web ficou velha. Zera para a web
+      // recalcular ao abrir (sem faixa = sem mistura salva); painted, nota e nome seguem.
+      if (r.raw && (r.raw.r !== r.r || r.raw.g !== r.g || r.raw.b !== r.b || r.raw.x !== r.x || r.raw.y !== r.y)) {
+        dto.ingredients = [];
+        dto.resultR = null; dto.resultG = null; dto.resultB = null;
+        dto.faixa = ''; dto.method = '';
+        dto.sampleHex = '';
+        dto.regionManual = 0;
+        dto.foraDoUniverso = 0;
+      }
+      if (r.match || !r.raw) {
+        dto.paintId = r.match?.paintId ?? 0;
+        dto.paintBrand = r.match?.manufacturer ?? '';
+        dto.paintName = r.match?.name ?? '';
+        dto.paintCode = r.match?.code ?? '';
+        dto.deltaE = r.match?.deltaE ?? 0;
+      }
+      return dto;
+    });
+    return {
+      id: currentPlanId,
+      name: planName || `Plano ${new Date().toLocaleDateString('pt-BR')}`,
+      selectedManufacturerId: base?.selectedManufacturerId ?? null,
+      useStockOnly: base?.useStockOnly ?? 0,
+      tabs: [
+        { id: tab0?.id ?? 0, name: tab0?.name ?? 'Figura 1', imageData: imageDataUrl, regions: tabRegions },
+        // Figuras extras (só na web por enquanto) seguem intactas: SavePlan apaga e reinsere tudo.
+        ...(base?.tabs ?? []).slice(1),
+      ],
+      createdAt: base?.createdAt ?? now,
       updatedAt: now,
     };
   }
@@ -777,9 +814,9 @@
     showPlanGrid = true;
     planGridLoading = true;
     try {
-      planGridData = (await PaintService.ListPlans()) ?? [];
+      planGridData = (await PaintService.ListPlanSummaries()) ?? [];
     } catch (e) {
-      console.error('ListPlans:', e);
+      console.error('ListPlanSummaries:', e);
       toast('Erro ao carregar planos', 'error');
     }
     planGridLoading = false;
@@ -789,6 +826,8 @@
     try {
       const plan = await PaintService.LoadPlan(id);
       if (!plan) { toast('Plano não encontrado', 'error'); return; }
+      const tab = plan.tabs?.[0];
+      if (!tab) { toast('Plano sem figura', 'error'); return; }
 
       const img = new Image();
       img.onload = () => {
@@ -796,10 +835,11 @@
         hasImage = true;
         zoom = 1; panX = 0; panY = 0;
         planName = plan.name || '';
-        imageDataUrl = plan.imageData || '';
+        imageDataUrl = tab.imageData || '';
         currentPlanId = Number(plan.id);
+        loadedPlan = plan;
         nextId = 1;
-        regions = (plan.regions || []).map((r: any) => ({
+        regions = (tab.regions || []).map((r: PaintingRegionDTO): PaintingRegion => ({
           id: nextId++,
           x: r.x, y: r.y,
           r: r.r, g: r.g, b: r.b,
@@ -818,12 +858,17 @@
           } : null,
           allMatches: [],
           recipe: null,
+          raw: r,
         }));
         showPlanGrid = false;
-        toast(`Plano carregado: ${regions.length} regiões`);
+        if ((plan.tabs?.length ?? 0) > 1) {
+          toast(`Plano carregado: ${regions.length} regiões. As outras figuras do plano só aparecem na web por enquanto e serão mantidas ao salvar.`);
+        } else {
+          toast(`Plano carregado: ${regions.length} regiões`);
+        }
         requestAnimationFrame(() => zoomFit());
       };
-      img.src = plan.imageData || '';
+      img.src = tab.imageData || '';
     } catch (e) {
       console.error('LoadPlan:', e);
       toast('Erro ao carregar plano', 'error');
@@ -860,6 +905,7 @@
       planName = '';
       imageDataUrl = src;
       currentPlanId = 0;
+      loadedPlan = null;
       undoStack = [];
       redoStack = [];
     };
@@ -1691,6 +1737,7 @@
           planName = data.name || '';
           imageDataUrl = imgSrc;
           currentPlanId = 0;
+          loadedPlan = null;
           nextId = 1;
           regions = (data.regions as any[]).map(r => ({
             id: nextId++,

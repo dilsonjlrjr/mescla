@@ -6,9 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sqweek/dialog"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
+// DialogService abre os diálogos nativos de arquivo pelo próprio Wails.
+// Antes usava github.com/sqweek/dialog, que no Linux liga GTK3; o Wails v3
+// liga GTK4, e as duas versões não convivem no mesmo processo (E9-PBI1).
+// Cancelar devolve caminho vazio, sem erro — o front já trata `!filepath`.
 type DialogService struct{}
 
 func NewDialogService() *DialogService {
@@ -16,15 +20,19 @@ func NewDialogService() *DialogService {
 }
 
 func (d *DialogService) SaveFile(title string, filterName string, filterPattern string) (string, error) {
-	return dialog.File().Title(title).
-		Filter(filterName, filterPattern).
-		Save()
+	return application.Get().Dialog.SaveFile().
+		SetMessage(title).
+		AddFilter(filterName, filterPattern).
+		CanCreateDirectories(true).
+		PromptForSingleSelection()
 }
 
 func (d *DialogService) OpenFile(title string, filterName string, filterPattern string) (string, error) {
-	return dialog.File().Title(title).
-		Filter(filterName, filterPattern).
-		Load()
+	return application.Get().Dialog.OpenFile().
+		SetTitle(title).
+		AddFilter(filterName, filterPattern).
+		CanChooseFiles(true).
+		PromptForSingleSelection()
 }
 
 func (d *DialogService) SavePNG() (string, error) {

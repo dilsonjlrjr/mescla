@@ -3,7 +3,7 @@
   // tintas do catálogo + ações sobre a tinta escolhida + navegação.
   // Query em hex (#8A1518) busca por cor e mostra o ΔE de cada resultado.
   import PaintBottle from './PaintBottle.svelte';
-  import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
+  import * as PaintService from '../../../bindings/paint-match-ai/api/service/paintservice';
   import { t } from '../i18n.svelte';
 
   type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock' | 'planner' | 'receitas';

@@ -9,8 +9,8 @@
   import { toast } from '../toast.svelte';
   import { saveRecipe } from '../recipes.svelte';
   import { contrastOn, hexOf, deltaVerdict, deltaIsGood } from '../ui';
-  import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
-  import type { UserPaintDTO } from '../../../bindings/paint-match-ai/models';
+  import * as PaintService from '../../../bindings/paint-match-ai/api/service/paintservice';
+  import type { UserPaintDTO } from '../../../bindings/paint-match-ai/api/service/models';
 
   interface Paint {
     id: number;
@@ -172,11 +172,11 @@
           result = fromStockRes;
           fromStock = true;
         } else {
-          result = await PaintService.SuggestEquivalentRecipe(sourcePaint.id, Number(targetManufacturerId));
+          result = await PaintService.SuggestEquivalentRecipe(sourcePaint.id, Number(targetManufacturerId), 0);
           stockFellBack = true;
         }
       } else {
-        result = await PaintService.SuggestEquivalentRecipe(sourcePaint.id, Number(targetManufacturerId));
+        result = await PaintService.SuggestEquivalentRecipe(sourcePaint.id, Number(targetManufacturerId), 0);
       }
     } catch (e) {
       console.error('Erro sugerindo receita equivalente:', e);

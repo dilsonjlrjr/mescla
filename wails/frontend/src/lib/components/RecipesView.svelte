@@ -6,8 +6,8 @@
   // de um pote do catálogo (T1) ou de um pixel do plano da peça (T2), porque
   // usa sempre a cor (hex), nunca o paintId de origem.
   import { onMount } from 'svelte';
-  import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
-  import type { ManufacturerDTO, EquivalentRecipeDTO } from '../../../bindings/paint-match-ai/models';
+  import * as PaintService from '../../../bindings/paint-match-ai/api/service/paintservice';
+  import type { ManufacturerDTO, EquivalentRecipeDTO } from '../../../bindings/paint-match-ai/api/service/models';
   import FormulaRibbon from './FormulaRibbon.svelte';
   import PaintBottle from './PaintBottle.svelte';
   import { toast } from '../toast.svelte';

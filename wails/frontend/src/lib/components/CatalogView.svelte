@@ -7,7 +7,7 @@
   import PaintBottle from './PaintBottle.svelte';
   import { toast } from '../toast.svelte';
   import { hueOf, hexOf, contrastOn, paintMatches } from '../ui';
-  import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
+  import * as PaintService from '../../../bindings/paint-match-ai/api/service/paintservice';
 
   type View = 'home' | 'catalog' | 'manufacturers' | 'color-search' | 'compare' | 'mix' | 'wheel' | 'stock';
 

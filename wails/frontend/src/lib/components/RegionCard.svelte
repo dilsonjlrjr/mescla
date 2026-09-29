@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { ColorMatchDTO } from '../../../bindings/paint-match-ai/models';
-  import type { ManufacturerDTO } from '../../../bindings/paint-match-ai/models';
+  import type { ColorMatchDTO } from '../../../bindings/paint-match-ai/api/service/models';
+  import type { ManufacturerDTO } from '../../../bindings/paint-match-ai/api/service/models';
   import Icon from './Icon.svelte';
   import DeltaBadge from './DeltaBadge.svelte';
 

@@ -9,8 +9,8 @@
   import { recipesWithIngredient } from '../recipes.svelte';
   import { hexOf, paintMatches } from '../ui';
   import { t } from '../i18n.svelte';
-  import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
-  import type { UserPaintDTO, CSVImportResultDTO, ManufacturerDTO, PaintDTO } from '../../../bindings/paint-match-ai/models';
+  import * as PaintService from '../../../bindings/paint-match-ai/api/service/paintservice';
+  import type { UserPaintDTO, CSVImportResultDTO, ManufacturerDTO, PaintDTO } from '../../../bindings/paint-match-ai/api/service/models';
 
   interface Props {
     // vindo da busca global: "Adicionar {tinta} ao meu estoque"
@@ -46,6 +46,8 @@
   // Form (add/editar)
   let formOpen = $state(false);
   let editingId: number | null = $state(null);
+  // Campos sem campo no formulário (quantidade, tipo, catálogo, ignorar na mistura) voltam como vieram no PUT.
+  let editingOrig: UserPaintDTO | null = null;
   let fMfr: number | '' = $state('');
   let fName = $state('');
   let fCode = $state('');
@@ -201,6 +203,7 @@
 
   function openEdit(p: UserPaintDTO) {
     editingId = p.id;
+    editingOrig = p;
     fMfr = p.manufacturerId;
     fName = p.name;
     fCode = p.code;
@@ -233,6 +236,10 @@
       b,
       volume: fVolume.trim(),
       notes: fNotes.trim(),
+      quantity: (editingId === null ? null : editingOrig?.quantity) ?? null,
+      paintTypeId: (editingId === null ? null : editingOrig?.paintTypeId) ?? null,
+      catalogId: (editingId === null ? null : editingOrig?.catalogId) ?? null,
+      ignoreInMix: (editingId === null ? null : editingOrig?.ignoreInMix) ?? null,
     };
     try {
       if (editingId === null) {

@@ -4,7 +4,7 @@
   import DeltaBadge from './DeltaBadge.svelte';
   import PaintBottle from './PaintBottle.svelte';
   import WheelGuide from './WheelGuide.svelte';
-  import * as PaintService from '../../../bindings/paint-match-ai/paintservice';
+  import * as PaintService from '../../../bindings/paint-match-ai/api/service/paintservice';
   import {
     rgbToHsl,
     hslToRgb,
