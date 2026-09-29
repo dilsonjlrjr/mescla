@@ -171,9 +171,17 @@ build_linux() {
         set -e
         apt-get update -qq >/dev/null
         apt-get install -y -qq libgtk-4-dev libwebkitgtk-6.0-dev >/dev/null
-        CGO_ENABLED=1 go build -ldflags '-s -w' -o 'dist/${APP}-linux-${arch}' ./wails
+        CGO_ENABLED=1 go build -ldflags '-s -w' -o '${DIST}/${APP}-linux-${arch}' ./wails
       "
-    ok "Linux: ${APP}-linux-${arch}"
+    # Pacote com ícone: no GTK4 o ícone só vem do .desktop (ver install.sh).
+    local tmp; tmp="$(mktemp -d)"
+    local pkg="$tmp/${APP}"
+    mkdir -p "$pkg"
+    cp "$DIST/${APP}-linux-${arch}" "$pkg/mescla"
+    cp wails/build/linux/{install.sh,org.wails.Mescla.desktop,mescla-256.png,mescla-512.png} "$pkg/"
+    tar -C "$tmp" -czf "$DIST/${APP}-linux-${arch}.tar.gz" "${APP}"
+    rm -rf "$tmp"
+    ok "Linux: ${APP}-linux-${arch} (+ .tar.gz com ícone e install.sh)"
   done
 }
 

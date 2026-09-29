@@ -16,6 +16,14 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// Ícone do Mescla (a gema da marca, o mesmo do PWA). No macOS e no Windows
+// o ícone do executável vem de build/darwin/icons.icns e build/windows/icon.ico;
+// este aqui vale para a caixa "Sobre". No Linux (GTK4) o ícone vem do
+// build/linux/org.wails.Mescla.desktop.
+//
+//go:embed build/appicon.png
+var appIcon []byte
+
 func main() {
 	seed := apidb.EmbeddedSeed()
 	paintService, err := service.NewPaintService(seed)
@@ -29,6 +37,7 @@ func main() {
 	app := application.New(application.Options{
 		Name:        "Mescla",
 		Description: "Ferramenta profissional para pintores de miniaturas",
+		Icon:        appIcon,
 		Services: []application.Service{
 			application.NewService(paintService),
 			application.NewService(dialogService),

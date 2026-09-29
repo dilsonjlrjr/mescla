@@ -1,11 +1,11 @@
 version: '3'
 
 info:
-  companyName: "Paint Match AI"
-  productName: "Paint Match AI"
+  companyName: "Mescla"
+  productName: "Mescla"
   productIdentifier: "com.paintmatchai.app"
   description: "Ferramenta profissional para pintores de miniaturas"
-  copyright: "(c) 2025 Paint Match AI"
+  copyright: "(c) 2025 Mescla"
   comments: "Base de conhecimento de tintas para modelismo"
   version: "1.0.0"
 

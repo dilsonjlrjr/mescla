@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Mescla
+GenericName=Equivalência de tintas
+Comment=Cor certa, qualquer marca: equivalência de tintas para pintores de miniaturas
+Exec=mescla
+Icon=org.wails.Mescla
+Terminal=false
+Categories=Graphics;Utility;
+StartupWMClass=org.wails.Mescla
