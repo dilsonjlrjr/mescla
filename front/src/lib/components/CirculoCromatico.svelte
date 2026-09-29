@@ -19,6 +19,8 @@
     GRAY_DARK,
     GRAY_LIGHT,
     grayAt,
+    hexToRgb,
+    inkOn,
     monoBands,
     nearestIndex,
     norm360,
@@ -307,6 +309,12 @@
   const NAME_FIT = 205;
   const CHAR_EM = 0.72; // largura média de uma letra em caixa alta no Archivo 800, com o espaçamento
 
+  // Gomo claro (amarelo, verde-claro…) some com letra branca: pede contorno forte.
+  const lightHue = WHEEL.map(h => {
+    const rgb = hexToRgb(h.hex);
+    return rgb != null && inkOn(rgb) === 'dark';
+  });
+
   function nameSize(label: string): number {
     return Math.min(NAME_MAX, NAME_FIT / (label.length * CHAR_EM));
   }
@@ -396,14 +404,27 @@
           onclick={() => onpick?.(i * STEP)}
           onkeydown={() => {}}
         />
-        <g transform="rotate({i * STEP})" pointer-events="none">
-          <text class="ring-name" style="font-size: {nameSize(ringLabels[i])}px;">
+      </g>
+    {/each}
+    <circle r={R_OUT} fill="url(#cw-sheen)" pointer-events="none" />
+    <!-- Nomes numa camada própria, acima do brilho e fora do filtro do gomo:
+         o brilho branco e o blur do realce deixavam a letra turva. -->
+    {#each WHEEL as h, i (h.id)}
+      {@const lifted = members.has(i)}
+      {@const [lx, ly] = polar(lifted ? 12 : 0, i * STEP)}
+      <g
+        class="seg seg-name"
+        class:dim={active != null && !lifted}
+        style="--d: {i * 38}ms; transform: translate({f(lx)}px, {f(ly)}px);"
+        pointer-events="none"
+      >
+        <g transform="rotate({i * STEP})">
+          <text class="ring-name" class:on-light={lightHue[i]} style="font-size: {nameSize(ringLabels[i])}px;">
             <textPath href="#cw-arc-name" xlink:href="#cw-arc-name" startOffset="50%" text-anchor="middle">{ringLabels[i]}</textPath>
           </text>
         </g>
       </g>
     {/each}
-    <circle r={R_OUT} fill="url(#cw-sheen)" pointer-events="none" />
     <!-- Quentes | frias: fronteiras em 45° e 225°, setas para longe da fronteira -->
     <g pointer-events="none" class="warmcool">
       <g transform="rotate(26)"><text><textPath href="#cw-arc-warm" xlink:href="#cw-arc-warm" startOffset="50%" text-anchor="middle">← {t('warmColors')}</textPath></text></g>
@@ -642,8 +663,21 @@
     letter-spacing: 0.035em;
     fill: var(--wheel-ring-text);
     paint-order: stroke;
-    stroke: rgba(0, 0, 0, 0.12);
-    stroke-width: 1px;
+    stroke: rgba(20, 20, 30, 0.38);
+    stroke-width: 2.5px;
+    stroke-linejoin: round;
+    text-rendering: geometricPrecision;
+  }
+
+  .ring-name.on-light {
+    stroke: rgba(20, 20, 30, 0.78);
+    stroke-width: 3.5px;
+  }
+
+  /* camada dos nomes: nunca herda blur/saturação do gomo */
+  .seg-name,
+  .seg-name.dim {
+    filter: none;
   }
 
   .warmcool text {
@@ -652,7 +686,11 @@
     font-size: 13px;
     letter-spacing: 0.1em;
     fill: var(--wheel-ring-text);
-    opacity: 0.92;
+    paint-order: stroke;
+    stroke: rgba(20, 20, 30, 0.6);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+    text-rendering: geometricPrecision;
   }
 
   .marker {
