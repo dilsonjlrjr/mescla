@@ -300,6 +300,17 @@
     return WHEEL.map(h => t(hueKey(h.id)));
   });
 
+  // O gomo tem ~233px de arco no raio do nome. Em 27px, "AZUL VIOLETADO"
+  // (14 letras) passava disso e o gomo vizinho, pintado depois, cortava a
+  // sobra. Nome longo encolhe até caber em ~205px, com folga para a borda.
+  const NAME_MAX = 27;
+  const NAME_FIT = 205;
+  const CHAR_EM = 0.72; // largura média de uma letra em caixa alta no Archivo 800, com o espaçamento
+
+  function nameSize(label: string): number {
+    return Math.min(NAME_MAX, NAME_FIT / (label.length * CHAR_EM));
+  }
+
   function schemeLabel(id: SchemeId): string {
     void i18n.lang;
     return t(schemeKey(id));
@@ -386,7 +397,7 @@
           onkeydown={() => {}}
         />
         <g transform="rotate({i * STEP})" pointer-events="none">
-          <text class="ring-name">
+          <text class="ring-name" style="font-size: {nameSize(ringLabels[i])}px;">
             <textPath href="#cw-arc-name" xlink:href="#cw-arc-name" startOffset="50%" text-anchor="middle">{ringLabels[i]}</textPath>
           </text>
         </g>
@@ -628,7 +639,6 @@
   .ring-name {
     font-family: 'Archivo Variable', 'Inter', sans-serif;
     font-weight: 800;
-    font-size: 27px;
     letter-spacing: 0.035em;
     fill: var(--wheel-ring-text);
     paint-order: stroke;
