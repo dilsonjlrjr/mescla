@@ -33,6 +33,16 @@ ok()   { printf '\033[1;32m✓ %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33m! %s\033[0m\n' "$*"; }
 
 build_frontend() {
+  # Os bindings TS (wails/frontend/bindings) ficam fora do git: gerados aqui a
+  # cada build, para nunca sobrar pasta de um nome de módulo antigo.
+  command -v wails3 >/dev/null || { echo "✗ wails3 não encontrado no PATH (go install github.com/wailsapp/wails/v3/cmd/wails3@latest)"; exit 1; }
+  say "Bindings Wails…"
+  (cd wails && wails3 generate bindings -clean=true -ts -i >/dev/null)
+  ok "wails/frontend/bindings pronto"
+
+  say "Dependências do frontend (npm install)…"
+  (cd wails/frontend && npm install --no-audit --no-fund >/dev/null)
+
   say "Frontend (vite build)…"
   (cd wails/frontend && npm run build >/dev/null)
   ok "wails/frontend/dist pronto"
