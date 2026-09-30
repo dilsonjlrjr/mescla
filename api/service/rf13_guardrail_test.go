@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"paint-match-ai/api/domain/stock"
+	"mescla-ai/api/domain/stock"
 )
 
 // Regressão do guardrail do rf-13 (2026-09-08): SuggestEquivalentFromPool e

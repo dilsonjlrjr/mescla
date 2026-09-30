@@ -4,7 +4,7 @@ import (
 	"github.com/fasthttp/router"
 	"github.com/valyala/fasthttp"
 
-	"paint-match-ai/api/service"
+	"mescla-ai/api/service"
 )
 
 // NewRouter registra todas as rotas do PaintService. front/ consome isto pela

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"paint-match-ai/api/domain/similarity"
+	"mescla-ai/api/domain/similarity"
 
 	_ "modernc.org/sqlite"
 )

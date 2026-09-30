@@ -1,4 +1,4 @@
-# ── Mescla — interface de build ──────────────────────────────────────────────
+# ── Mescla AI — interface de build ──────────────────────────────────────────────
 # Alvos no padrão do painel-chamados, adaptados ao fluxo do Mescla (Wails v3):
 # a lógica pesada vive em wails/scripts/build-all.sh (desktop) e
 # front/scripts/build-mobile.sh (PWA Android) — este Makefile é só a porta de entrada.
@@ -15,8 +15,8 @@
 #     houver no keychain, senão ad-hoc); reassinar ad-hoc aqui destruiria
 #     uma assinatura Developer ID.
 
-APP    := mescla
-BUNDLE := Mescla.app
+APP    := mescla-ai
+BUNDLE := Mescla AI.app
 OUTDIR := wails/dist
 
 .PHONY: all macos windows linux mobile api clean generate-icns install run

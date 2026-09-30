@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"paint-match-ai/api/domain/mix"
+	"mescla-ai/api/domain/mix"
 )
 
 func TestSuggestExcludesSourcePaint(t *testing.T) {

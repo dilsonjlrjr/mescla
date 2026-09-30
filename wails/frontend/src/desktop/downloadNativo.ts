@@ -6,7 +6,7 @@
 // O planejador revoga a URL logo depois do clique, no mesmo tique. Por isso o
 // Blob é guardado quando a URL nasce e lido de forma síncrona no clique.
 
-import { SaveFileAs, SaveFileWithData } from '../../bindings/paint-match-ai/wails/dialogservice';
+import { SaveFileAs, SaveFileWithData } from '../../bindings/mescla-ai/wails/dialogservice';
 import { toast } from '../lib/toast.svelte';
 import { i18n, type Lang } from '../lib/i18n.svelte';
 

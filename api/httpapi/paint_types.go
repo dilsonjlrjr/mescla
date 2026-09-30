@@ -6,7 +6,7 @@ import (
 
 	"github.com/valyala/fasthttp"
 
-	"paint-match-ai/api/service"
+	"mescla-ai/api/service"
 )
 
 // Rotas de tipo de tinta (rf-15), com o mesmo contrato das de fabricante: o

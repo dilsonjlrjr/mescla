@@ -12,9 +12,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"paint-match-ai/api/domain/equivalence"
-	"paint-match-ai/api/domain/mix"
-	"paint-match-ai/api/domain/stock"
+	"mescla-ai/api/domain/equivalence"
+	"mescla-ai/api/domain/mix"
+	"mescla-ai/api/domain/stock"
 )
 
 // ensureUserSchema cria a tabela do estoque do usuário se ela ainda não existe.

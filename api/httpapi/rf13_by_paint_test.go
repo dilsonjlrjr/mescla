@@ -8,7 +8,7 @@ import (
 
 	"github.com/valyala/fasthttp"
 
-	"paint-match-ai/api/service"
+	"mescla-ai/api/service"
 )
 
 func ctxByPaint(q string) *fasthttp.RequestCtx {

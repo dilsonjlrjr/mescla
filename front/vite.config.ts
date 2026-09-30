@@ -20,8 +20,8 @@ export default defineConfig({
         globIgnores: ['**/Phosphor*.svg', '**/Phosphor*.ttf', '**/Phosphor*.eot'],
       },
       manifest: {
-        name: 'Mescla',
-        short_name: 'Mescla',
+        name: 'Mescla AI',
+        short_name: 'Mescla AI',
         description: 'Cor certa, qualquer marca: equivalência de tintas para pintores de miniaturas',
         lang: 'pt-BR',
         display: 'standalone',

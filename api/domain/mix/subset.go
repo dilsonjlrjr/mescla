@@ -3,7 +3,7 @@ package mix
 import (
 	"sort"
 
-	"paint-match-ai/api/domain/color"
+	"mescla-ai/api/domain/color"
 )
 
 // SuggestBestSubset escolhe as tintas e as proporções que mais aproximam o

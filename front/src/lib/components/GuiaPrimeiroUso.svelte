@@ -11,7 +11,7 @@
   // Android o fecha, e uma ação que troca de tela espera a camada sair.
   import { onDestroy, onMount, tick, untrack } from 'svelte';
   import BrandMark from './BrandMark.svelte';
-  import { switchTab, pushLayer, type Tab } from '../nav.svelte';
+  import { switchTab, pushLayer, COMPARAR_VISIVEL, type Tab } from '../nav.svelte';
   import { appState } from '../appState.svelte';
   import { stock, estoqueAssentado } from '../services/stock.svelte';
   import { t, type DictKey } from '../i18n.svelte';
@@ -136,7 +136,7 @@
 
   const PASSOS: DictKey[] = ['guiaS1', 'guiaS2', 'guiaS3'];
 
-  const TELAS: Array<{ tab: Tab; n: string; chave: DictKey; icone: string }> = [
+  const TODAS_TELAS: Array<{ tab: Tab; n: string; chave: DictKey; icone: string }> = [
     { tab: 'pergunta', n: 'T1', chave: 'question', icone: 'ph-chat-circle-text' },
     { tab: 'plano', n: 'T2', chave: 'navPlano', icone: 'ph-crosshair' },
     { tab: 'receitas', n: 'T3', chave: 'navReceitas', icone: 'ph-flask' },
@@ -144,6 +144,7 @@
     { tab: 'circulo', n: 'T5', chave: 'navCirculo', icone: 'ph-circle-half-tilt' },
     { tab: 'comparar', n: 'T6', chave: 'navComparar', icone: 'ph-columns' },
   ];
+  const TELAS = TODAS_TELAS.filter(tela => COMPARAR_VISIVEL || tela.tab !== 'comparar');
 
   // Faixas do ΔE00 = as de `verdictKeys` (ui.ts): <1, <2, <4, <8, o resto.
   const FAIXAS: Array<{ faixa: string; chave: DictKey; cor: string }> = [

@@ -7,7 +7,7 @@
 // Espelha de api/httpapi/*.go: caminho, método, forma do corpo, código de
 // status e mensagem fixa de erro. Mudou uma rota lá, muda aqui também.
 
-import * as Svc from '../../bindings/paint-match-ai/api/service/paintservice';
+import * as Svc from '../../bindings/mescla-ai/api/service/paintservice';
 
 const PREFIXO = '/api';
 

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"paint-match-ai/api/domain/color"
-	"paint-match-ai/api/domain/mix"
-	"paint-match-ai/api/domain/similarity"
+	"mescla-ai/api/domain/color"
+	"mescla-ai/api/domain/mix"
+	"mescla-ai/api/domain/similarity"
 )
 
 // Retrieval engine principal de recuperação de conhecimento

@@ -14,7 +14,7 @@
   viewBox="0 0 48 48"
   xmlns="http://www.w3.org/2000/svg"
   role="img"
-  aria-label="Mescla"
+  aria-label="Mescla AI"
   style="display: block; flex-shrink: 0;"
 >
   <polygon points="24,2 43,13 43,35 24,46 5,35 5,13" fill="var(--brand-1)" />

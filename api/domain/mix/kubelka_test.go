@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"paint-match-ai/api/domain/color"
+	"mescla-ai/api/domain/color"
 )
 
 func tinta(nome string, r, g, b uint8) PaintInput {

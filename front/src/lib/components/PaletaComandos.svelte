@@ -10,7 +10,7 @@
   import { onDestroy, tick, untrack } from 'svelte';
   import { allPaints, searchPaints, type Paint } from '../services/catalog';
   import { deltaE00, hexToRgb } from '../color/circulo';
-  import { switchTab, pushLayer, type Tab } from '../nav.svelte';
+  import { switchTab, pushLayer, COMPARAR_VISIVEL, type Tab } from '../nav.svelte';
   import { appState } from '../appState.svelte';
   import { t, decimal } from '../i18n.svelte';
 
@@ -132,7 +132,7 @@
       { rotulo: t('makers'), icone: 'ph-factory', ir: irPara('estante', () => (appState.pendingCatalogTab = 'fabricantes')) },
       { rotulo: t('paintTypes'), icone: 'ph-tag', ir: irPara('estante', () => (appState.pendingCatalogTab = 'tipos')) },
       { rotulo: t('navCirculo'), icone: 'ph-circle-half-tilt', ir: irPara('circulo') },
-      { rotulo: t('navComparar'), icone: 'ph-columns', ir: irPara('comparar') },
+      ...(COMPARAR_VISIVEL ? [{ rotulo: t('navComparar'), icone: 'ph-columns', ir: irPara('comparar') }] : []),
       { rotulo: t('palActGuia'), icone: 'ph-question', ir: () => fechar(() => { appState.guiaAberta = true; }) },
     ];
     const q = dobrar(consultaAtiva.trim());
@@ -173,11 +173,13 @@
           tipo: 'acao', id: 'acao-estoque', rotulo: t('palActStock'), icone: 'ph-plus',
           executar: () => fechar(() => { appState.pendingStockPrefill = p; switchTab('estante'); }),
         },
-        {
+      );
+      if (COMPARAR_VISIVEL) {
+        out.push({
           tipo: 'acao', id: 'acao-comparar', rotulo: t('palActCmp'), icone: 'ph-columns',
           executar: () => fechar(() => { appState.pendingCompareAnchor = p.id; switchTab('comparar'); }),
-        },
-      );
+        });
+      }
     }
     return out;
   });

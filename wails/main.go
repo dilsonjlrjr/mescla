@@ -9,16 +9,16 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 
-	"paint-match-ai/api/service"
+	"mescla-ai/api/service"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
-// Ícone do Mescla (a gema da marca, o mesmo do PWA). No macOS e no Windows
+// Ícone do Mescla AI (a gema da marca, o mesmo do PWA). No macOS e no Windows
 // o ícone do executável vem de build/darwin/icons.icns e build/windows/icon.ico;
 // este aqui vale para a caixa "Sobre". No Linux (GTK4) o ícone vem do
-// build/linux/org.wails.Mescla.desktop.
+// build/linux/org.wails.mescla_ai.desktop.
 //
 //go:embed build/appicon.png
 var appIcon []byte
@@ -40,7 +40,7 @@ func main() {
 	dialogService := NewDialogService()
 
 	app := application.New(application.Options{
-		Name:        "Mescla",
+		Name:        "Mescla AI",
 		Description: "Ferramenta profissional para pintores de miniaturas",
 		Icon:        appIcon,
 		Services: []application.Service{
@@ -56,7 +56,7 @@ func main() {
 	})
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:            "Mescla",
+		Title:            "Mescla AI",
 		Width:            1280,
 		Height:           800,
 		MinWidth:         1024,

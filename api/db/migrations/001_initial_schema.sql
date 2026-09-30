@@ -1,4 +1,4 @@
--- Paint Match AI — Initial Database Schema
+-- Mescla AI — Initial Database Schema
 -- paint_knowledge.db
 
 PRAGMA foreign_keys = ON;

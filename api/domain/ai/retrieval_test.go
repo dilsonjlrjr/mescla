@@ -3,8 +3,8 @@ package ai
 import (
 	"testing"
 
-	"paint-match-ai/api/domain/color"
-	"paint-match-ai/api/domain/mix"
+	"mescla-ai/api/domain/color"
+	"mescla-ai/api/domain/mix"
 )
 
 func TestQueryIntentConstants(t *testing.T) {

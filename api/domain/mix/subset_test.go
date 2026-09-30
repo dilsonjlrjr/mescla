@@ -3,7 +3,7 @@ package mix
 import (
 	"testing"
 
-	"paint-match-ai/api/domain/color"
+	"mescla-ai/api/domain/color"
 )
 
 func TestSuggestBestSubsetSingleCandidate(t *testing.T) {

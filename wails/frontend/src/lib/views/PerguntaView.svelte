@@ -99,7 +99,7 @@
   import { shelf, inShelf, toggleShelf } from '../services/shelf.svelte';
   import { stock, estoqueAssentado } from '../services/stock.svelte';
   import { saveRecipe } from '../services/recipes.svelte';
-  import { switchTab, pushLayer } from '../nav.svelte';
+  import { switchTab, pushLayer, COMPARAR_VISIVEL } from '../nav.svelte';
   import { appState } from '../appState.svelte';
   import { recents, rememberPaint, rememberMescla } from '../recents.svelte';
   import { toast } from '../toast.svelte';
@@ -1242,12 +1242,14 @@
         style="display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 14px; border: none; border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
         ><i class="ph ph-circle-half-tilt" style="font-size: 18px;"></i>{t('navCirculo')}</button
       >
+      {#if COMPARAR_VISIVEL}
       <button
         class="pressable t1h-nav"
         onclick={() => switchTab('comparar')}
         style="display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 14px; border: none; border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; cursor: pointer; flex-shrink: 0; white-space: nowrap;"
         ><i class="ph ph-columns" style="font-size: 18px;"></i>{t('navComparar')}</button
       >
+      {/if}
     </div>
     <div style="height: 108px; min-height: 108px; padding: 0 20px; display: flex; align-items: center; gap: 18px;">
       <span style="flex-shrink: 0; width: 84px; font-size: 12px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-neutral-500); line-height: 1.4;">{t('onTable')}</span>

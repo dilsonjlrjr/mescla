@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"sort"
 
-	"paint-match-ai/api/domain/color"
-	"paint-match-ai/api/domain/mix"
+	"mescla-ai/api/domain/color"
+	"mescla-ai/api/domain/mix"
 )
 
 type SearchResult struct {

@@ -2,7 +2,7 @@ package mix
 
 import (
 	"math"
-	"paint-match-ai/api/domain/color"
+	"mescla-ai/api/domain/color"
 	"sort"
 	"time"
 )

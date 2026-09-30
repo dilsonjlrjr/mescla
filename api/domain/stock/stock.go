@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"strings"
 
-	"paint-match-ai/api/domain/color"
-	"paint-match-ai/api/domain/mix"
+	"mescla-ai/api/domain/color"
+	"mescla-ai/api/domain/mix"
 )
 
 // Paint é uma tinta do estoque do usuário. ID é opcional (o desktop usa o

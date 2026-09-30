@@ -7,7 +7,7 @@ import (
 
 	"github.com/valyala/fasthttp"
 
-	"paint-match-ai/api/service"
+	"mescla-ai/api/service"
 )
 
 // Rotas de escrita de fabricante (rf-14). O corpo aceita só "name": o id vem

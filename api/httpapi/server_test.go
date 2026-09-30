@@ -5,7 +5,7 @@ import (
 
 	"github.com/valyala/fasthttp"
 
-	"paint-match-ai/api/service"
+	"mescla-ai/api/service"
 )
 
 // rf-09 CA18 — o plano viaja com as fotos das abas em base64 (até 10 × 2 MB).

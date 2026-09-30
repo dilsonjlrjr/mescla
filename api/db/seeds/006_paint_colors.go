@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"paint-match-ai/api/domain/color"
+	"mescla-ai/api/domain/color"
 )
 
 // paintColorSeed associa uma tinta (fabricante + código) a uma cor RGB real.

@@ -45,7 +45,7 @@
   import VirtualList from '../components/VirtualList.svelte';
   import Combobox from '../components/Combobox.svelte';
   import Spinner from '../components/Spinner.svelte';
-  import { switchTab } from '../nav.svelte';
+  import { switchTab, COMPARAR_VISIVEL } from '../nav.svelte';
   import { baixarTexto } from '../services/download';
   import { onMount, tick } from 'svelte';
   import {
@@ -1479,7 +1479,7 @@
 
       <div style="display: flex; gap: 10px; margin-top: 6px;">
         <button class="t4-hover-accent" onclick={saveForm} disabled={saving} style="flex: 1; height: 58px; border: 1px solid var(--color-accent); border-radius: 8px; background: transparent; color: var(--color-accent-400); font-family: inherit; font-size: 16px; font-weight: 500; cursor: pointer;">{editing ? t('saveChanges') : t('addPaintBtn')}</button>
-        {#if compareCatalogId !== null}
+        {#if COMPARAR_VISIVEL && compareCatalogId !== null}
           <button class="t4-hover-ghost" onclick={compararComOutra} style="height: 58px; padding: 0 18px; border: 1px solid var(--color-neutral-800); border-radius: 8px; background: transparent; color: var(--color-neutral-400); font-family: inherit; font-size: 15px; font-weight: 500; cursor: pointer; flex-shrink: 0;">{t('navComparar')}</button>
         {/if}
         {#if editingId !== null}

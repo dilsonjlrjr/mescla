@@ -13,6 +13,10 @@
 // rf-21: T5 círculo cromático. rf-23: T6 comparar.
 export type Tab = 'pergunta' | 'plano' | 'receitas' | 'estante' | 'circulo' | 'comparar';
 
+/** A tela Comparar (T6) fica oculta por decisão do dono (29/09/2026): o
+ *  código continua, mas nenhum menu, atalho ou botão leva até ela. */
+export const COMPARAR_VISIVEL = false;
+
 const HOME: Tab = 'pergunta';
 
 export const nav = $state({ tab: HOME as Tab });

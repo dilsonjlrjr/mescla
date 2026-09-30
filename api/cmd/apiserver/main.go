@@ -7,9 +7,9 @@ import (
 	"log"
 	"os"
 
-	apidb "paint-match-ai/api/db"
-	"paint-match-ai/api/httpapi"
-	"paint-match-ai/api/service"
+	apidb "mescla-ai/api/db"
+	"mescla-ai/api/httpapi"
+	"mescla-ai/api/service"
 )
 
 func main() {

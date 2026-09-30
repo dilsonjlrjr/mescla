@@ -1,4 +1,4 @@
-module paint-match-ai
+module mescla-ai
 
 go 1.25.0
 

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"sort"
 
-	"paint-match-ai/api/domain/color"
-	"paint-match-ai/api/domain/equivalence"
-	"paint-match-ai/api/domain/mix"
-	"paint-match-ai/api/domain/stock"
+	"mescla-ai/api/domain/color"
+	"mescla-ai/api/domain/equivalence"
+	"mescla-ai/api/domain/mix"
+	"mescla-ai/api/domain/stock"
 )
 
 // BrandBestDTO é a tinta mais próxima de uma cor-alvo dentro de UMA marca —

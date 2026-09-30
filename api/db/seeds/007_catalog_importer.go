@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"paint-match-ai/api/domain/color"
+	"mescla-ai/api/domain/color"
 )
 
 // DefaultCatalogDir é o diretório com os arquivos de catálogo (um .md por

@@ -3,7 +3,7 @@ package httpapi
 import (
 	"github.com/valyala/fasthttp"
 
-	"paint-match-ai/api/service"
+	"mescla-ai/api/service"
 )
 
 // maxRequestBodySize é o teto do corpo de requisição (rf-09, RN2): um plano

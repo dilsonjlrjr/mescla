@@ -3,10 +3,10 @@ package service
 import (
 	"fmt"
 
-	"paint-match-ai/api/domain/color"
-	"paint-match-ai/api/domain/equivalence"
-	"paint-match-ai/api/domain/mix"
-	"paint-match-ai/api/domain/stock"
+	"mescla-ai/api/domain/color"
+	"mescla-ai/api/domain/equivalence"
+	"mescla-ai/api/domain/mix"
+	"mescla-ai/api/domain/stock"
 )
 
 // Universo de busca de cor (rf-11).

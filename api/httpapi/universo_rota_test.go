@@ -7,8 +7,8 @@ import (
 
 	"github.com/valyala/fasthttp"
 
-	apidb "paint-match-ai/api/db"
-	"paint-match-ai/api/service"
+	apidb "mescla-ai/api/db"
+	"mescla-ai/api/service"
 )
 
 func ctxComQuery(q string) *fasthttp.RequestCtx {

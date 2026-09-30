@@ -1,5 +1,5 @@
 #!/bin/bash
-# Paint Match AI — Database Setup Script
+# Mescla AI — Database Setup Script
 # Uses RTK for token-optimized output
 
 set -e
@@ -7,7 +7,7 @@ set -e
 DB_PATH="data/paint_knowledge.db"
 MIGRATION="api/db/migrations/001_initial_schema.sql"
 
-echo "=== Paint Match AI — Database Setup ==="
+echo "=== Mescla AI — Database Setup ==="
 
 # 0. Clean start
 echo "[0/5] Cleaning database..."

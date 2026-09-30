@@ -1,4 +1,4 @@
-# Mescla
+# Mescla AI
 
 Equivalência de tintas para pintores de miniaturas: dada uma cor ou um pote,
 o Mescla encontra a tinta mais próxima em qualquer marca e monta a receita de
@@ -15,7 +15,7 @@ A web é a referência de interface. O desktop mostra exatamente as mesmas telas
 ## Estrutura
 
 ```
-api/        Motor e dados em Go (módulo paint-match-ai)
+api/        Motor e dados em Go (módulo mescla-ai)
   service/    PaintService: catálogo, receitas, estoque, projetos, relatórios
   domain/     color, similarity, mix, equivalence, stock, ai
   db/         migrações e seeds

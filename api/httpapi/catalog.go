@@ -8,7 +8,7 @@ import (
 
 	"github.com/valyala/fasthttp"
 
-	"paint-match-ai/api/service"
+	"mescla-ai/api/service"
 )
 
 func handleStats(svc *service.PaintService) fasthttp.RequestHandler {

@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"paint-match-ai/api/db/seeds"
+	"mescla-ai/api/db/seeds"
 
 	_ "modernc.org/sqlite"
 )

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────
-# Mescla — build multiplataforma (rodar num macOS)
+# Mescla AI — build multiplataforma (rodar num macOS)
 #
 #   ./wails/scripts/build-all.sh            # mac + windows + linux (se houver docker)
 #   ./wails/scripts/build-all.sh mac        # só macOS (arm64 + amd64 + universal + .app)
@@ -23,7 +23,7 @@ set -euo pipefail
 # Docker (build_linux) monta um diretório sem go.mod.
 cd "$(dirname "$0")/../.."
 
-APP="mescla"
+APP="mescla-ai"
 DIST="wails/dist"
 VERSION="$(git describe --tags --always 2>/dev/null || echo dev)"
 LDFLAGS="-s -w"
@@ -60,9 +60,9 @@ build_mac() {
     "$DIST/${APP}-darwin-arm64" "$DIST/${APP}-darwin-amd64"
 
   # Bundle .app mínimo — ícone no dock, nome certo, clicável no Finder
-  say "Bundle Mescla.app…"
-  local app_dir="$DIST/Mescla.app/Contents"
-  rm -rf "$DIST/Mescla.app"
+  say "Bundle Mescla AI.app…"
+  local app_dir="$DIST/Mescla AI.app/Contents"
+  rm -rf "$DIST/Mescla AI.app"
   mkdir -p "$app_dir/MacOS" "$app_dir/Resources"
   cp "$DIST/${APP}-darwin-universal" "$app_dir/MacOS/$APP"
   if [ -f wails/build/darwin/icons.icns ]; then
@@ -81,8 +81,8 @@ build_mac() {
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>CFBundleName</key><string>Mescla</string>
-  <key>CFBundleDisplayName</key><string>Mescla</string>
+  <key>CFBundleName</key><string>Mescla AI</string>
+  <key>CFBundleDisplayName</key><string>Mescla AI</string>
   <key>CFBundleIdentifier</key><string>br.com.mescla.app</string>
   <key>CFBundleVersion</key><string>${VERSION}</string>
   <key>CFBundleShortVersionString</key><string>${VERSION}</string>
@@ -93,7 +93,7 @@ build_mac() {
   <key>LSMinimumSystemVersion</key><string>11.0</string>
 </dict></plist>
 PLIST
-  ok "macOS: ${APP}-darwin-{arm64,amd64,universal} + Mescla.app"
+  ok "macOS: ${APP}-darwin-{arm64,amd64,universal} + Mescla AI.app"
 
   # Assinatura: usa Developer ID se houver um no keychain; senão ad-hoc.
   # Ad-hoc não passa no Gatekeeper (botão direito → Abrir na 1ª vez), mas
@@ -103,24 +103,24 @@ PLIST
     | { grep -o '"Developer ID Application[^"]*"' || true; } | head -1 | tr -d '"')"
   if [ -n "$identity" ]; then
     say "Assinando com: $identity"
-    codesign --force --deep --options runtime --sign "$identity" "$DIST/Mescla.app"
+    codesign --force --deep --options runtime --sign "$identity" "$DIST/Mescla AI.app"
     warn "Pra distribuir sem aviso do Gatekeeper, falta notarizar (xcrun notarytool)."
   else
     say "Assinando ad-hoc (nenhum Developer ID no keychain)…"
-    codesign --force --deep --sign - "$DIST/Mescla.app"
+    codesign --force --deep --sign - "$DIST/Mescla AI.app"
     warn "Ad-hoc: em outro Mac, abrir com botão direito → Abrir na primeira vez."
   fi
-  codesign --verify --deep "$DIST/Mescla.app" && ok "assinatura válida"
+  codesign --verify --deep "$DIST/Mescla AI.app" && ok "assinatura válida"
 
   say "DMG…"
   local staging; staging="$(mktemp -d)"
-  cp -R "$DIST/Mescla.app" "$staging/"
+  cp -R "$DIST/Mescla AI.app" "$staging/"
   ln -s /Applications "$staging/Applications"
-  rm -f "$DIST/Mescla-${VERSION}.dmg"
-  hdiutil create -volname "Mescla" -srcfolder "$staging" -ov -format UDZO \
-    "$DIST/Mescla-${VERSION}.dmg" >/dev/null
+  rm -f "$DIST/Mescla-AI-${VERSION}.dmg"
+  hdiutil create -volname "Mescla AI" -srcfolder "$staging" -ov -format UDZO \
+    "$DIST/Mescla-AI-${VERSION}.dmg" >/dev/null
   rm -rf "$staging"
-  ok "DMG: Mescla-${VERSION}.dmg (arraste pro Applications)"
+  ok "DMG: Mescla-AI-${VERSION}.dmg (arraste pro Applications)"
 }
 
 build_windows() {
@@ -172,7 +172,7 @@ build_linux() {
     local pkg="$tmp/${APP}"
     mkdir -p "$pkg"
     cp "$DIST/${APP}-linux-${arch}" "$pkg/mescla"
-    cp wails/build/linux/{install.sh,org.wails.Mescla.desktop,mescla-256.png,mescla-512.png} "$pkg/"
+    cp wails/build/linux/{install.sh,org.wails.mescla_ai.desktop,mescla-256.png,mescla-512.png} "$pkg/"
     tar -C "$tmp" -czf "$DIST/${APP}-linux-${arch}.tar.gz" "${APP}"
     rm -rf "$tmp"
     ok "Linux: ${APP}-linux-${arch} (+ .tar.gz com ícone e install.sh)"
@@ -183,7 +183,7 @@ build_linux() {
 TARGET="${1:-all}"
 mkdir -p "$DIST"
 
-say "Mescla ${VERSION} → ${TARGET}"
+say "Mescla AI ${VERSION} → ${TARGET}"
 build_frontend
 check_catalogo
 

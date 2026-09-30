@@ -30,7 +30,7 @@ func DefaultConfig() AssetDownloaderConfig {
 		Timeout:     30 * time.Second,
 		MaxRetries:  3,
 		RetryDelay:  2 * time.Second,
-		UserAgent:   "PaintMatchAI/1.0",
+		UserAgent:   "MesclaAI/1.0",
 		Concurrency: 5,
 	}
 }

@@ -9,11 +9,11 @@ import (
 	"sort"
 	"strings"
 
-	"paint-match-ai/api/domain/ai"
-	"paint-match-ai/api/domain/color"
-	"paint-match-ai/api/domain/equivalence"
-	"paint-match-ai/api/domain/mix"
-	"paint-match-ai/api/domain/similarity"
+	"mescla-ai/api/domain/ai"
+	"mescla-ai/api/domain/color"
+	"mescla-ai/api/domain/equivalence"
+	"mescla-ai/api/domain/mix"
+	"mescla-ai/api/domain/similarity"
 
 	_ "modernc.org/sqlite"
 )

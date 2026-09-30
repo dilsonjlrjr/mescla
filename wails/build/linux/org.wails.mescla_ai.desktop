@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
-Name=Mescla
+Name=Mescla AI
 GenericName=Equivalência de tintas
 Comment=Cor certa, qualquer marca: equivalência de tintas para pintores de miniaturas
-Exec=mescla
-Icon=org.wails.Mescla
+Exec=mescla-ai
+Icon=org.wails.mescla_ai
 Terminal=false
 Categories=Graphics;Utility;
-StartupWMClass=org.wails.Mescla
+StartupWMClass=org.wails.mescla_ai

@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"paint-match-ai/api/domain/stock"
+	"mescla-ai/api/domain/stock"
 )
 
 // ensureSavedRecipesSchema cria a tabela de receitas salvas pelo usuário

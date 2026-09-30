@@ -7,8 +7,8 @@ import (
 
 	"github.com/valyala/fasthttp"
 
-	"paint-match-ai/api/domain/stock"
-	"paint-match-ai/api/service"
+	"mescla-ai/api/domain/stock"
+	"mescla-ai/api/service"
 )
 
 // --- Estoque ad-hoc (front/ manda uma lista arbitrária no corpo pra calcular
